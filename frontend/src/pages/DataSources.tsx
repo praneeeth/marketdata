@@ -8,6 +8,7 @@ import { Switch } from '@panwatch/base-ui/components/ui/switch'
 import { Badge } from '@panwatch/base-ui/components/ui/badge'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@panwatch/base-ui/components/ui/dialog'
 import { useToast } from '@panwatch/base-ui/components/ui/toast'
+import BrokerConnections from '@/components/BrokerConnections'
 
 interface TestLogItem {
   timestamp: string
@@ -387,6 +388,7 @@ export default function DataSourcesPage() {
       </div>
 
       <div className="space-y-6">
+        <BrokerConnections />
         {ALL_DATASOURCE_CATEGORIES.map(category => {
           const categoryCount = category.types.reduce((sum, t) => sum + (groupedSources[t]?.length || 0), 0)
           const isOpen = collapsedCategories[category.key] !== true

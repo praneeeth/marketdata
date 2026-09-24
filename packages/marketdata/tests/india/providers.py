@@ -7,11 +7,12 @@ import json
 from datetime import date, datetime
 
 import httpx
-from marketdata.india import IST, Exchange, InstrumentRef
+from marketdata.india import IST, Exchange, InstrumentRef, yfinance_dev
 from marketdata.india import angel as angel_mod
 from marketdata.india import kite as kite_mod
 from marketdata.india import upstox as upstox_mod
 
+from .fake_yfinance import FakeTicker
 from .harness import Harness, Router, fixture_json, fixture_text
 
 # --- Kite --------------------------------------------------------------------------------
@@ -168,4 +169,22 @@ ANGEL = Harness(
     expected_last_price="1412.95",
 )
 
-ALL = [KITE, UPSTOX, ANGEL]
+# --- yfinance (dev only) --------------------------------------------------------------
+
+DEV_ENV = {"ALLOW_UNOFFICIAL_DATA": "true", "APP_ENV": "development"}
+
+YFINANCE = Harness(
+    name="yfinance",
+    make=lambda _router: yfinance_dev.YFinanceProvider(DEV_ENV, ticker_factory=FakeTicker),
+    install_routes=lambda _router: None,
+    install_expired=None,
+    equity=InstrumentRef(Exchange.NSE, "INFY"),
+    unresolved=None,
+    underlying=InstrumentRef(Exchange.NSE, "NIFTY 50"),
+    expiry=date(2026, 10, 27),
+    start=datetime(2026, 9, 23, 9, 15, tzinfo=IST),
+    end=datetime(2026, 9, 23, 15, 30, tzinfo=IST),
+    expected_last_price="1412.95",
+)
+
+ALL = [KITE, UPSTOX, ANGEL, YFINANCE]

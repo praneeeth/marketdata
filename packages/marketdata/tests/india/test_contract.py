@@ -78,6 +78,8 @@ def test_candles_sorted_in_range_and_aware(h: Harness) -> None:
 
 
 def test_candles_need_resolved_instrument(h: Harness) -> None:
+    if h.unresolved is None:
+        pytest.skip("provider derives its IDs from the symbol")
     provider, router = h.build()
     with pytest.raises(InstrumentNotResolved):
         provider.candles(session_for(h.name), h.unresolved, Interval.DAY_1, h.start, h.end)
@@ -86,6 +88,10 @@ def test_candles_need_resolved_instrument(h: Harness) -> None:
 
 def test_instruments_carry_provider_ids(h: Harness) -> None:
     provider, _ = h.build()
+    if Capability.INSTRUMENTS not in provider.capabilities:
+        with pytest.raises(NotSupported):
+            list(provider.instruments(session_for(h.name), h.equity.exchange))
+        return
     items = list(provider.instruments(session_for(h.name), h.equity.exchange))
     assert items
     for inst in items:
@@ -106,7 +112,9 @@ def test_corporate_actions_match_capability(h: Harness) -> None:
 def test_option_chain(h: Harness) -> None:
     provider, _ = h.build()
     if Capability.OPTION_CHAIN not in provider.capabilities:
-        pytest.skip("provider has no option chain")
+        with pytest.raises(NotSupported):
+            provider.option_chain(session_for(h.name), h.underlying, h.expiry)
+        return
     chain = provider.option_chain(session_for(h.name), h.underlying, h.expiry)
     assert chain.expiry == h.expiry
     assert chain.source == h.name

@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 import httpx
+import pytest
 from marketdata.india import InstrumentRef, MarketDataProvider, ProviderSession, Secret
 from marketdata.india.transport import ErrorMapper, Transport
 
@@ -76,9 +77,9 @@ class Harness:
     name: str
     make: Callable[[Router], MarketDataProvider]
     install_routes: Callable[[Router], None]
-    install_expired: Callable[[Router], None]
+    install_expired: Callable[[Router], None] | None  # None: provider has no sessions
     equity: InstrumentRef  # carries this provider's ID
-    unresolved: InstrumentRef  # has no ID for this provider
+    unresolved: InstrumentRef | None  # has no ID for this provider; None: IDs are derived
     underlying: InstrumentRef
     expiry: date
     start: datetime
@@ -92,6 +93,8 @@ class Harness:
         return self.make(router), router
 
     def build_expired(self) -> tuple[MarketDataProvider, Router]:
+        if self.install_expired is None:
+            pytest.skip("provider has no broker session")
         router = Router()
         self.install_expired(router)
         return self.make(router), router

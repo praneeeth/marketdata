@@ -53,6 +53,13 @@ class GuardedText(str):
             raise TypeError("GuardedText can only be created by the compliance guard")
         return super().__new__(cls, value)
 
+    # Copies and pickles become plain ``str`` (fail-safe: sinks re-guard plain strings).
+    def __reduce_ex__(self, protocol: object) -> tuple[type[str], tuple[str]]:
+        return (str, (str(self),))
+
+    def __reduce__(self) -> tuple[type[str], tuple[str]]:
+        return (str, (str(self),))
+
 
 @dataclass(frozen=True)
 class GuardEvent:

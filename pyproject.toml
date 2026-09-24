@@ -51,9 +51,10 @@ warn_unused_ignores = false
 
 [tool.coverage.run]
 branch = true
-source = [
-    "src/platform/compliance",
-    "src/platform/security",
+# ``include`` (not ``source``) so single-file modules are measured too.
+include = [
+    "src/platform/compliance/*.py",
+    "src/platform/security/*.py",
     "src/modules/administration/api/compliance.py",
     "src/modules/automation/research_output.py",
     "src/modules/automation/tradingagents/research_graph.py",

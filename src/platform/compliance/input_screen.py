@@ -22,7 +22,7 @@ _ADVICE_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = tuple(
         ("buy_or_sell", r"\b(?:buy|sell|hold|exit)\s+or\s+(?:buy|sell|hold|exit|not)\b"),
         (
             "good_time",
-            r"\b(?:is\s+it|is\s+now|now)\s+(?:a\s+)?(?:good|right|best|ideal)\s+time\s+to\b",
+            r"\b(?:is\s+it|is\s+now|now|is\s+this)\s+(?:a\s+|the\s+)?(?:good|right|best|ideal)\s+time\s+to\b",
         ),
         (
             "ask_level",

@@ -9,6 +9,11 @@ from src.platform.compliance.normalize import normalize_for_detection
 from src.platform.compliance.rules import RULES, Category, Rule
 
 _VETO_WINDOW = 60
+# Abbreviations whose trailing dot does not end a sentence ("Rs. 1,250", "Mr. Shah").
+_ABBREVIATION_END = re.compile(
+    r"(?i)\b(?:rs|mr|mrs|ms|dr|no|nos|vs|e\.g|i\.e|ltd|inc|co|st|approx|avg|est|fig|jan|feb|mar"
+    r"|apr|jun|jul|aug|sep|sept|oct|nov|dec)\.$"
+)
 
 
 @dataclass(frozen=True)
@@ -26,6 +31,10 @@ def _hits(rule: Rule, normalized: str) -> list[str]:
     for match in rule.pattern.finditer(normalized):
         if rule.veto_before is not None:
             window = normalized[max(0, match.start() - _VETO_WINDOW) : match.start()]
+            # A veto only applies within the same sentence as the hit.
+            boundary = max(window.rfind(ch) for ch in ".!?;。！？；")
+            if boundary >= 0 and not _ABBREVIATION_END.search(window[: boundary + 1]):
+                window = window[boundary + 1 :]
             if rule.veto_before.search(window):
                 continue
         hits.append(match.group(0))
@@ -59,6 +68,8 @@ def split_segments(text: str) -> list[str]:
     for line in text.splitlines(keepends=True):
         start = 0
         for match in _SENTENCE_SPLIT.finditer(line):
+            if _ABBREVIATION_END.search(line[start : match.start()]):
+                continue
             end = match.end()
             segments.append(line[start:end])
             start = end

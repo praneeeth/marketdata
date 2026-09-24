@@ -109,14 +109,15 @@ RULES: tuple[Rule, ...] = (
         "D05_imperative",
         Category.DIRECTIVE,
         _rx(
-            r"^[\W\d]*(?:buy(?![\s-]*(?:side|back))|sell(?![\s-]*(?:off|side))|accumulate|trim"
-            r"|exit(?!\s+(?:polls?|load))|short\s+(?:the|this|it|on|at|above|below|near|around|if)\b"
+            r"^[\W\d]*(?:buy\b(?![\s-]*(?:side|back))|sell\b(?![\s-]*(?:off|side))|accumulate\b"
+            r"|trim\b|exit\b(?!\s+(?:polls?|load))"
+            r"|short\s+(?:the|this|it|on|at|above|below|near|around|if)\b"
             r"|add\s+(?:more|on|at|to|near|around|below|above)\b"
             r"|hold(?:\s*[.!]|\s*$|\s+(?:on|for|with|the|your|this|it|tight|firm)\b)"
-            r"|book\s+(?:partial\s+)?profits?|go\s+(?:long|short)|enter\b|avoid\b"
-            r"|stay\s+(?:away|invested)|average\s+(?:down|out)|square\s+off"
+            r"|book\s+(?:partial\s+)?profits?\b|go\s+(?:long|short)\b|enter\b|avoid\b"
+            r"|stay\s+(?:away|invested)\b|average\s+(?:down|out)\b|square\s+off\b"
             r"|(?:reduce|trim|cut|lighten|increase|raise|scale\s+(?:up|down))\s+"
-            r"(?:exposure|positions?|allocations?|holdings?|weight(?:age)?))"
+            r"(?:exposure|positions?|allocations?|holdings?|weight(?:age)?)\b)"
         ),
         sentence_start=True,
     ),
@@ -180,8 +181,9 @@ RULES: tuple[Rule, ...] = (
         "D12_hinglish",
         Category.DIRECTIVE,
         _rx(
-            r"\b(?:khareed(?:o|en|ein|lo|na|iye)?|kharid(?:o|en|ein|lo|na|iye)?|bech(?:o|en|ein|do|na|iye)"
-            r"|le\s+lo|nikal\s+(?:jao|lo)|hold\s+karo|profit\s+book\s+karo)\b"
+            r"\b(?:khareed|kharid)(?:o|en|ein|lo|na|iye)?\b|\b(?:khareed|kharid)\s+lo\b"
+            r"|\bbech(?:o|en|ein|na|iye)?\b|\bbech\s+do\b|\ble\s+lo\b|\bnikal\s+(?:jao|lo)\b"
+            r"|\bhold\s+karo\b|\bprofit\s+book\s+karo\b"
         ),
     ),
     Rule(
@@ -251,9 +253,8 @@ RULES: tuple[Rule, ...] = (
         "T03_upside_to",
         Category.PRICE_TARGET,
         _rx(
-            r"\b(?:upside|downside)\s+(?:target|potential|of|to|till|towards)\s+(?:"
-            + _CUR
-            + r"\s*)?\d"
+            r"\b(?:upside|downside)(?:\s+(?:target|potential))?\s+(?:of|to|till|towards|at|around)?\s*"
+            r"(?:" + _CUR + r"\s*)?\d"
         ),
     ),
     Rule(
@@ -288,22 +289,24 @@ RULES: tuple[Rule, ...] = (
         "T07_expect_price",
         Category.PRICE_TARGET,
         _rx(
-            r"\b(?:expect|expects|expecting|see|sees|seeing|project|projects|forecast|forecasts"
-            r"|estimate|estimates)\s+(?:the\s+)?(?:stock|share|shares|scrip|price|it|nifty|sensex"
-            r"|index)\s+(?:to\s+)?(?:at|reach|hit|touch|cross|rise\s+to|fall\s+to|trade\s+at|go\s+to"
-            r"|move\s+to)\s+" + _PRICE_NUM
+            r"\b(?:expect|expects|expecting|expected|see|sees|seeing|project|projects|forecast"
+            r"|forecasts|estimate|estimates)\s+(?:[\w&.'-]+\s+){1,4}?(?:to\s+|at\s+)?"
+            r"(?:reach|hit|touch|cross|test|rise\s+to|fall\s+to|climb\s+to|rally\s+to|trade\s+at"
+            r"|go\s+to|move\s+to|head\s+to|end\s+at|close\s+at)\s+(?:the\s+)?" + _PRICE_NUM
         ),
+        veto_before=_CORPORATE_TARGET_CONTEXT,
     ),
     # ---------------------------------------------------------------- stop-loss
     Rule(
         "S01_stop_loss",
         Category.STOP_LOSS,
         _rx(
-            r"\bstop[\s\-]*loss(?:es)?\b|\bstoploss\b|\btrailing\s+stop|\bstrict\s+stop\b"
+            r"\bstop[\s\-]*loss(?:es)?\b|\bstoploss\b|\btrailing\s+stops?\b|\bstrict\s+stops?\b"
+            r"|\bplace\s+(?:a\s+|your\s+)?stops?\b"
             r"|\bsl\s*(?:[:@\-]|at|of|below|above)?\s*(?:" + _CUR + r"\s*)?\d"
-            r"|\bstop\s+(?:at|below|above|near|around)\s+(?:" + _CUR + r"\s*)?\d"
+            r"|\bstops?\s+(?:at|below|above|near|around)\s+(?:" + _CUR + r"\s*)?\d"
             r"|\bexit\s+(?:if|below|above|on\s+a\s+close\s+(?:below|above))\s+(?:it\s+\w+\s+)?"
-            r"(?:" + _CUR + r"\s*)?\d"
+            r"(?:(?:below|above)\s+)?(?:" + _CUR + r"\s*)?\d"
         ),
     ),
     # ------------------------------------------------------------- entry levels
@@ -331,8 +334,9 @@ RULES: tuple[Rule, ...] = (
         "E04_take_position",
         Category.ENTRY_LEVEL,
         _rx(
-            r"\b(?:enter|initiate|take)\s+(?:a\s+|fresh\s+|new\s+)?(?:long|short|position|positions"
-            r"|trade|trades)\b|\bopen\s+(?:a|fresh|new)\s+(?:long|short|position|trade)\b"
+            r"\b(?:enter|initiate|take|build)\s+(?:(?:a|an|fresh|new|small|partial)\s+){0,3}"
+            r"(?:(?:long|short)(?![\s-]*(?:term|dated|view))\b|positions?\b|trades?\b)"
+            r"|\bopen\s+(?:a|fresh|new)\s+(?:long|short|position|trade)\b"
             r"|\bbuy\s+the\s+dip\b"
         ),
     ),
@@ -342,8 +346,11 @@ RULES: tuple[Rule, ...] = (
         Category.POSITION_SIZE,
         _rx(
             r"\b(?:allocate|allocating|invest|investing|put|putting|deploy|deploying|park|parking"
-            r"|keep|limit|cap|restrict)\s+(?:only\s+|about\s+|around\s+|up\s+to\s+|upto\s+"
-            r"|not\s+more\s+than\s+|no\s+more\s+than\s+|at\s+most\s+|a\s+maximum\s+of\s+|max\s+)?"
+            r"|keep|limit|cap|restrict)\s+"
+            r"(?:(?:your\s+|the\s+)?(?:exposure|allocation|position|positions|investment|holding"
+            r"|weight(?:age)?)\s+(?:to|at|below|under|within)\s+)?"
+            r"(?:only\s+|about\s+|around\s+|up\s+to\s+|upto\s+|not\s+more\s+than\s+"
+            r"|no\s+more\s+than\s+|at\s+most\s+|a\s+maximum\s+of\s+|max\s+)?"
             r"\d+(?:\.\d+)?\s*(?:%|percent)"
         ),
         veto_before=_CORPORATE_ACTOR,

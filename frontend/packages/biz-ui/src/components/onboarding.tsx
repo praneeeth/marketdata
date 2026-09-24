@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { TrendingUp, Bot, Bell, CheckCircle2, ChevronRight, Sparkles } from 'lucide-react'
 import { Dialog, DialogContent } from '@panwatch/base-ui/components/ui/dialog'
 import { Button } from '@panwatch/base-ui/components/ui/button'
+import { useCompliance } from '@/hooks/use-compliance'
 
 interface OnboardingProps {
   open: boolean
@@ -14,6 +15,7 @@ type Step = 'welcome' | 'ai' | 'notify' | 'complete'
 
 export function Onboarding({ open, onComplete, hasStocks }: OnboardingProps) {
   const navigate = useNavigate()
+  const { shortDisclaimer } = useCompliance()
   const [step, setStep] = useState<Step>('welcome')
 
   const handleNext = () => {
@@ -91,7 +93,7 @@ export function Onboarding({ open, onComplete, hasStocks }: OnboardingProps) {
                   </div>
                   <div>
                     <p className="text-[13px] font-medium text-foreground">AI 智能分析</p>
-                    <p className="text-[12px] text-muted-foreground">盘后日报、异动建议、技术分析</p>
+                    <p className="text-[12px] text-muted-foreground">盘后日报、异动观察、技术分析</p>
                   </div>
                 </div>
                 <div className="flex items-start gap-3 p-3 rounded-xl bg-accent/30">
@@ -138,7 +140,7 @@ export function Onboarding({ open, onComplete, hasStocks }: OnboardingProps) {
                 </div>
                 <div className="flex items-center gap-2 text-[13px]">
                   <Sparkles className="w-4 h-4 text-primary" />
-                  <span className="text-foreground">异动 AI 建议</span>
+                  <span className="text-foreground">异动 AI 观察</span>
                 </div>
                 <div className="flex items-center gap-2 text-[13px]">
                   <Sparkles className="w-4 h-4 text-primary" />
@@ -225,6 +227,13 @@ export function Onboarding({ open, onComplete, hasStocks }: OnboardingProps) {
               </div>
             </div>
           )}
+
+          <p
+            className="mt-5 border-t border-border/40 pt-3 text-[11px] leading-snug text-muted-foreground"
+            data-testid="onboarding-disclaimer"
+          >
+            {shortDisclaimer}
+          </p>
         </div>
       </DialogContent>
     </Dialog>

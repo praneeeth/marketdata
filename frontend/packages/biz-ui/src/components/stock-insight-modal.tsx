@@ -22,6 +22,7 @@ import { buildKlineSuggestion } from '@/lib/kline-scorer'
 import StockPriceAlertPanel from '@panwatch/biz-ui/components/stock-price-alert-panel'
 import { TechnicalBadge } from '@panwatch/biz-ui/components/technical-badge'
 import AddPositionCalculator from '@panwatch/biz-ui/components/add-position-calculator'
+import { useCompliance } from '@/hooks/use-compliance'
 
 interface QuoteResponse {
   symbol: string
@@ -302,7 +303,7 @@ function TechnicalIndicatorStrip(props: {
   return (
     <div className="space-y-2">
       <div className="flex items-center gap-2 flex-wrap">
-        <span className="text-[12px] text-muted-foreground">技术指标建议</span>
+        <span className="text-[12px] text-muted-foreground">{technicalSuggestion ? '技术指标建议' : '技术指标'}</span>
         <SuggestionBadge
           suggestion={technicalSuggestion}
           stockName={stockName}
@@ -311,7 +312,9 @@ function TechnicalIndicatorStrip(props: {
           kline={klineSummary}
           hasPosition={hasPosition}
         />
-        <TechnicalBadge label={`评分 ${Number(score ?? 0).toFixed(1)}`} tone="neutral" size="xs" className="text-foreground" />
+        {technicalSuggestion && (
+          <TechnicalBadge label={`评分 ${Number(score ?? 0).toFixed(1)}`} tone="neutral" size="xs" className="text-foreground" />
+        )}
       </div>
       {evidence.length > 0 && (
         <div className="flex flex-wrap gap-1.5 text-[10px]">
@@ -339,6 +342,9 @@ export default function StockInsightModal(props: {
   hasPosition?: boolean
 }) {
   const { toast } = useToast()
+  // Research-only mode: no AI or rule-based action suggestions in this modal (ADR-004).
+  const { isEnabled } = useCompliance()
+  const adviceEnabled = isEnabled('suggestion_pool')
   const symbol = String(props.symbol || '').trim()
   const market = String(props.market || 'CN').trim().toUpperCase()
   const [loading, setLoading] = useState(false)
@@ -425,6 +431,10 @@ export default function StockInsightModal(props: {
 
   const loadSuggestions = useCallback(async () => {
     if (!symbol) return
+    if (!adviceEnabled) {
+      setSuggestions([])
+      return
+    }
     const data = await insightApi.suggestions<any[]>(symbol, {
       market,
       limit: 20,
@@ -447,7 +457,7 @@ export default function StockInsightModal(props: {
       meta: item.meta,
     })) as SuggestionInfo[]
     setSuggestions(list)
-  }, [symbol, market, includeExpiredSuggestions])
+  }, [symbol, market, includeExpiredSuggestions, adviceEnabled])
 
   const loadNews = useCallback(async () => {
     if (!symbol) return
@@ -802,9 +812,9 @@ export default function StockInsightModal(props: {
 
   const hasHolding = !!props.hasPosition || !!holdingAgg
   const technicalScored = useMemo(() => {
-    if (!klineSummary) return null
+    if (!adviceEnabled || !klineSummary) return null
     return buildKlineSuggestion(klineSummary as any, hasHolding)
-  }, [klineSummary, hasHolding])
+  }, [adviceEnabled, klineSummary, hasHolding])
   const technicalFallbackSuggestion = useMemo<SuggestionInfo | null>(() => {
     if (!klineSummary || !technicalScored) return null
     const topEvidence = (technicalScored.evidence || []).filter(e => e.delta !== 0).slice(0, 3).map(e => e.text)
@@ -1221,7 +1231,7 @@ export default function StockInsightModal(props: {
 
   const triggerAutoAiSuggestion = useCallback(async () => {
     // 自动建议仅针对”确认未持仓”的股票，且不自动创建股票/绑定 Agent。
-    if (!symbol || !market || !holdingLoaded || holdingLoadError || hasHolding || autoSuggesting) return
+    if (!adviceEnabled || !symbol || !market || !holdingLoaded || holdingLoadError || hasHolding || autoSuggesting) return
     const key = `${market}:${symbol}`
     const lastTs = autoTriggeredRef.current[key] || 0
     if (Date.now() - lastTs < 5 * 60 * 1000) return
@@ -1253,7 +1263,7 @@ export default function StockInsightModal(props: {
       )
       setAutoSuggesting(false)
     }
-  }, [symbol, market, resolvedName, holdingLoaded, holdingLoadError, hasHolding, autoSuggesting, loadSuggestions, toast])
+  }, [adviceEnabled, symbol, market, resolvedName, holdingLoaded, holdingLoadError, hasHolding, autoSuggesting, loadSuggestions, toast])
 
   useEffect(() => {
     if (!props.open || !symbol) return
@@ -1380,7 +1390,7 @@ export default function StockInsightModal(props: {
             <div className="flex items-center gap-1 flex-wrap">
               {[
                 { id: 'overview', label: '概览' },
-                { id: 'suggestions', label: `建议 (${suggestions.length})` },
+                ...(adviceEnabled ? [{ id: 'suggestions', label: `建议 (${suggestions.length})` }] : []),
                 { id: 'reports', label: `报告 (${reports.length})` },
                 { id: 'deep', label: deepResult ? '深度 (1)' : '深度' },
                 { id: 'kline', label: 'K线' },
@@ -1558,6 +1568,7 @@ export default function StockInsightModal(props: {
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3 items-stretch">
+                  {adviceEnabled && (
                   <div className="card p-4 h-full flex flex-col">
                     <div className="flex items-center justify-between mb-2">
                       <div className="text-[12px] text-muted-foreground">AI建议</div>
@@ -1605,6 +1616,7 @@ export default function StockInsightModal(props: {
                       </div>
                     )}
                   </div>
+                  )}
 
                   <div className="card p-4 h-full flex flex-col">
                     <div className="flex items-center justify-between mb-2">
@@ -1696,7 +1708,7 @@ export default function StockInsightModal(props: {
                       {AGENT_LABELS[activeReport.agent_name] || activeReport.agent_name} · {activeReport.analysis_date}
                     </div>
                     <div className="text-[15px] font-medium">{activeReport.title || '报告摘要'}</div>
-                    {activeReport.suggestions && (activeReport.suggestions as any)?.[symbol]?.action_label && (
+                    {adviceEnabled && activeReport.suggestions && (activeReport.suggestions as any)?.[symbol]?.action_label && (
                       <div className="text-[11px] inline-flex px-2 py-0.5 rounded bg-primary/10 text-primary">
                         {(activeReport.suggestions as any)[symbol].action_label}
                       </div>
@@ -1774,7 +1786,7 @@ export default function StockInsightModal(props: {
               </div>
             )}
 
-            {tab === 'suggestions' && (
+            {tab === 'suggestions' && adviceEnabled && (
               <div className="space-y-3">
                 <div className="card p-3 flex items-center justify-between gap-3">
                   <div className="text-[12px] text-muted-foreground">显示过期建议</div>
@@ -1936,6 +1948,8 @@ function DeepAnalysisSection({
   setShowDebate: (v: boolean) => void
   onRefresh: () => void
 }) {
+  const { isEnabled } = useCompliance()
+  const ratingEnabled = isEnabled('tradingagents_rating')
   if (loading && !loaded) {
     return (
       <div className="card p-6 text-center text-[12px] text-muted-foreground">
@@ -1956,7 +1970,7 @@ function DeepAnalysisSection({
   }
 
   const rawData = (result?.raw_data || {}) as Partial<DeepAnalysisResult['raw_data']>
-  const sug = rawData.suggestion
+  const sug = ratingEnabled ? rawData.suggestion : undefined
   const reports = rawData.analyst_reports || { market: '', social: '', news: '', fundamentals: '' }
   const debate = rawData.debate_history
   const costUsd = rawData.cost_usd
@@ -1991,7 +2005,7 @@ function DeepAnalysisSection({
         </div>
       )}
 
-      <DeepHistoryComparison history={history} loading={historyLoading} />
+      {ratingEnabled && <DeepHistoryComparison history={history} loading={historyLoading} />}
 
       {result?.content && (
         <div className="rounded-lg border border-border/50 p-4">

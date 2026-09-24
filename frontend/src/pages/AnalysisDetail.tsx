@@ -16,6 +16,7 @@ import {
   Scale,
   ShieldAlert,
   History,
+  FileText,
   type LucideIcon,
 } from 'lucide-react'
 import {
@@ -26,6 +27,7 @@ import {
 import { Switch } from '@panwatch/base-ui/components/ui/switch'
 import { buildAnalysisSections } from '@panwatch/biz-ui/analysis-sections'
 import ShareCardModal from '../components/ShareCardModal'
+import { useCompliance } from '@/hooks/use-compliance'
 
 const DECISION_COLOR: Record<string, string> = {
   buy: 'text-rose-500',
@@ -35,6 +37,7 @@ const DECISION_COLOR: Record<string, string> = {
 
 /** 各 section 配图标(决策/技术/情绪/新闻/基本面/辩论/风控),与 buildAnalysisSections 的 id 对齐 */
 const SECTION_ICON: Record<string, LucideIcon> = {
+  summary: FileText,
   decision: Target,
   market: TrendingUp,
   social: MessageSquare,
@@ -103,6 +106,8 @@ function parseHeadings(markdown: string): { text: string; slug: string }[] {
 export default function AnalysisDetailPage() {
   const { symbol = '', date = '' } = useParams()
   const navigate = useNavigate()
+  const { isEnabled, shortDisclaimer } = useCompliance()
+  const ratingEnabled = isEnabled('tradingagents_rating')
   const [result, setResult] = useState<DeepAnalysisResult | null>(null)
   const [history, setHistory] = useState<HistoryComparisonResponse | null>(null)
   const [loading, setLoading] = useState(true)
@@ -153,13 +158,13 @@ export default function AnalysisDetailPage() {
   }, [showSub])
 
   const rawData = (result?.raw_data || {}) as Partial<DeepAnalysisResult['raw_data']>
-  const sug = rawData.suggestion
+  const sug = ratingEnabled ? rawData.suggestion : undefined
   const reviewRequired = sug?.review_required === true || sug?.rating_raw === 'review'
   const decisionLabel = reviewRequired ? '待人工复核' : sug?.action_label
   const decisionColor = reviewRequired ? 'text-orange-500' : (sug ? DECISION_COLOR[sug.action] || '' : '')
-  const sections = buildAnalysisSections(rawData)
-  const stats = history?.stats
-  const items = history?.items || []
+  const sections = buildAnalysisSections(rawData, { includeDecision: ratingEnabled })
+  const stats = ratingEnabled ? history?.stats : undefined
+  const items = ratingEnabled ? history?.items || [] : []
 
   // 完整目录:每个 section(一级) + 其 markdown 内 2~4 级标题(二级) + 历史决策对比
   const fullToc: { id: string; title: string; level: 0 | 1 }[] = []
@@ -169,7 +174,7 @@ export default function AnalysisDetailPage() {
       fullToc.push({ id: `h-${s.id}-${h.slug}`, title: h.text, level: 1 })
     }
   }
-  fullToc.push({ id: 'sec-history', title: '历史决策对比', level: 0 })
+  if (ratingEnabled) fullToc.push({ id: 'sec-history', title: '历史决策对比', level: 0 })
   // 开关决定是否展示/联动二级目录
   const toc = showSub ? fullToc : fullToc.filter((t) => t.level === 0)
 
@@ -363,6 +368,7 @@ export default function AnalysisDetailPage() {
           })}
 
           {/* 历史决策对比 */}
+          {ratingEnabled && (
           <section id="sec-history" className="mb-10 scroll-mt-24">
             <h2 className="flex items-center gap-2 text-[18px] font-bold mb-4 pb-2 border-b border-border/40">
               <History className="w-[18px] h-[18px] text-primary/70 shrink-0" />
@@ -421,10 +427,11 @@ export default function AnalysisDetailPage() {
               <div className="text-[13px] text-muted-foreground py-4">暂无历史决策记录</div>
             )}
           </section>
+          )}
 
           {/* 免责 */}
           <div className="text-[11px] text-muted-foreground/70 italic border-t border-border/30 pt-4">
-            本分析由 AI 多 Agent 框架生成,仅供学习研究参考,不构成任何投资建议。投资有风险,决策需自主判断。
+            {shortDisclaimer}
           </div>
           </article>
         </div>

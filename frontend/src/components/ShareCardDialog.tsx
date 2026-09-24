@@ -9,6 +9,7 @@ import {
   DialogDescription,
 } from '@panwatch/base-ui/components/ui/dialog'
 import { Button } from '@panwatch/base-ui/components/ui/button'
+import { useCompliance } from '@/hooks/use-compliance'
 
 interface ShareCardDialogProps {
   open: boolean
@@ -30,7 +31,7 @@ interface ShareCardDialogProps {
  * - 页脚(免责 + 盯盘侠 PanWatch · github 引流行)由外壳统一渲染,作为全体分享卡的一致性锚点。
  * - 「下载图片」用 html-to-image 的 toPng(pixelRatio:2, cacheBust:true)导出为 ${filename}.png。
  */
-export default function ShareCardDialog({
+function ShareCardDialogInner({
   open,
   onClose,
   filename,
@@ -145,4 +146,25 @@ export default function ShareCardDialog({
       </DialogContent>
     </Dialog>
   )
+}
+
+function SharingDisabledDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
+  return (
+    <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
+      <DialogContent className="max-w-sm" data-testid="sharing-disabled">
+        <DialogHeader>
+          <DialogTitle>Sharing unavailable</DialogTitle>
+          <DialogDescription>
+            Sharing images of AI analysis is not available in research-only mode.
+          </DialogDescription>
+        </DialogHeader>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+export default function ShareCardDialog(props: ShareCardDialogProps) {
+  const { isEnabled } = useCompliance()
+  if (!isEnabled('share_cards')) return <SharingDisabledDialog open={props.open} onClose={props.onClose} />
+  return <ShareCardDialogInner {...props} />
 }

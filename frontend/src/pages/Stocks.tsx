@@ -24,6 +24,7 @@ import { useToast } from '@panwatch/base-ui/components/ui/toast'
 import StockInsightModal from '@panwatch/biz-ui/components/stock-insight-modal'
 import { DeepAnalysisModal } from '@panwatch/biz-ui/components/deep-analysis-modal'
 import StockPriceAlertPanel from '@panwatch/biz-ui/components/stock-price-alert-panel'
+import { useCompliance } from '@/hooks/use-compliance'
 
 interface AgentResult {
   success?: boolean
@@ -378,6 +379,8 @@ const mergePortfolioQuotes = (
 }
 
 export default function StocksPage() {
+  const { isEnabled } = useCompliance()
+  const adviceEnabled = isEnabled('suggestion_pool')
   const [stocks, setStocks] = useState<Stock[]>([])
   const [accounts, setAccounts] = useState<Account[]>([])
   const [agents, setAgents] = useState<AgentConfig[]>([])
@@ -1433,6 +1436,8 @@ export default function StocksPage() {
   // 获取股票的建议信息（优先使用建议池，包含来源和时间信息）
   const getSuggestionForStock = (symbol: string, market: string, hasPosition?: boolean): { suggestion: SuggestionInfo | null; kline: KlineSummary | null } => {
     const key = `${market || 'CN'}:${symbol}`
+    // Research-only mode: no action badges, AI or rule-based; indicators only (ADR-004).
+    if (!adviceEnabled) return { suggestion: null, kline: klineSummaries[key] || null }
     // 优先使用建议池的建议（包含来源和时间信息）
     const poolSug =
       poolSuggestions[key] ||
@@ -2382,6 +2387,7 @@ export default function StocksPage() {
           <div className="flex items-center justify-between mb-3">
             <div className="text-[11px] text-muted-foreground">筛选</div>
             <div className="flex items-center gap-2">
+              {adviceEnabled && (
               <button
                 onClick={() => setWatchlistOnlyAlerts(!watchlistOnlyAlerts)}
                 className={`text-[11px] px-2.5 py-1 rounded-md border transition-colors ${
@@ -2393,6 +2399,7 @@ export default function StocksPage() {
               >
                 仅预警
               </button>
+              )}
             </div>
           </div>
           {stocks.length === 0 ? (
@@ -2406,7 +2413,7 @@ export default function StocksPage() {
                 .filter(s => !stockListFilter || s.market === stockListFilter)
                 .sort((a, b) => Number(a.sort_order || 0) - Number(b.sort_order || 0) || a.id - b.id)
                 .filter(stock => {
-                  if (!watchlistOnlyAlerts) return true
+                  if (!watchlistOnlyAlerts || !adviceEnabled) return true
                   const { suggestion } = getSuggestionForStock(stock.symbol, stock.market, false)
                   return !!suggestion?.should_alert
                 })

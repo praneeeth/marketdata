@@ -14,6 +14,7 @@ import { Button } from '@panwatch/base-ui/components/ui/button'
 import { Switch } from '@panwatch/base-ui/components/ui/switch'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@panwatch/base-ui/components/ui/dialog'
 import { useToast } from '@panwatch/base-ui/components/ui/toast'
+import { useCompliance } from '@/hooks/use-compliance'
 
 const EXIT_REASON_MAP: Record<string, string> = {
   stop_loss: '止损',
@@ -105,6 +106,8 @@ function EquityChart({ data }: { data: EquityCurvePoint[] }) {
 
 export default function PaperTradingPage() {
   const { toast } = useToast()
+  const { isEnabled, status: compliance } = useCompliance()
+  const aiTradingEnabled = isEnabled('ai_paper_trading')
   const [account, setAccount] = useState<PaperTradingAccountResponse | null>(null)
   const [positions, setPositions] = useState<PaperTradingPositionItem[]>([])
   const [trades, setTrades] = useState<PaperTradingTradeItem[]>([])
@@ -328,7 +331,13 @@ export default function PaperTradingPage() {
             <Activity className="w-4 h-4 text-white" />
           </div>
           <h1 className="text-lg font-bold">模拟盘</h1>
-          {account && (
+          <span
+            className="text-xs px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-600 font-semibold"
+            data-testid="simulation-label"
+          >
+            {compliance?.simulation.label || 'Simulation'}
+          </span>
+          {aiTradingEnabled && account && (
             <span className={`text-xs px-2 py-0.5 rounded-full ${account.enabled ? 'bg-success/10 text-success' : 'bg-muted text-muted-foreground'}`}>
               {account.enabled ? '运行中' : '已暂停'}
             </span>
@@ -342,28 +351,44 @@ export default function PaperTradingPage() {
               <span className="sm:hidden ml-1">{tradesTotal}</span>
             </Button>
           )}
-          <Button variant="outline" size="sm" className="h-8" onClick={handleOpenNotify}>
-            <Bell className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline ml-1">通知</span>
-          </Button>
-          <Button variant="outline" size="sm" className="h-8" onClick={handleScan} disabled={scanning}>
-            <Play className="w-3.5 h-3.5 mr-1" />
-            <span className="hidden sm:inline">{scanning ? '扫描中...' : '立即扫描'}</span>
-            <span className="sm:hidden">{scanning ? '扫描中' : '扫描'}</span>
-          </Button>
+          {aiTradingEnabled && (
+            <Button variant="outline" size="sm" className="h-8" onClick={handleOpenNotify}>
+              <Bell className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline ml-1">通知</span>
+            </Button>
+          )}
+          {aiTradingEnabled && (
+            <Button variant="outline" size="sm" className="h-8" onClick={handleScan} disabled={scanning}>
+              <Play className="w-3.5 h-3.5 mr-1" />
+              <span className="hidden sm:inline">{scanning ? '扫描中...' : '立即扫描'}</span>
+              <span className="sm:hidden">{scanning ? '扫描中' : '扫描'}</span>
+            </Button>
+          )}
           <Button variant="outline" size="sm" className="h-8" onClick={loadData} disabled={loading}>
             <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
             <span className="hidden sm:inline ml-1">刷新</span>
           </Button>
-          <Button variant="outline" size="sm" className="h-8" onClick={handleToggle}>
-            <Power className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline ml-1">{account?.enabled ? '暂停' : '启动'}</span>
-          </Button>
+          {aiTradingEnabled && (
+            <Button variant="outline" size="sm" className="h-8" onClick={handleToggle}>
+              <Power className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline ml-1">{account?.enabled ? '暂停' : '启动'}</span>
+            </Button>
+          )}
           <Button variant="outline" size="sm" className="h-8 text-destructive hover:text-destructive" onClick={handleReset}>
             <RotateCcw className="w-3.5 h-3.5" />
             <span className="hidden sm:inline ml-1">重置</span>
           </Button>
         </div>
+      </div>
+
+      <div
+        className="rounded-xl border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-[12px] text-foreground"
+        data-testid="simulation-notice"
+      >
+        {compliance?.simulation.notice ||
+          'Simulated trades only. No real orders are placed and no money is at risk.'}
+        {!aiTradingEnabled &&
+          ' AI-generated simulated trades are turned off in research-only mode; past simulation history remains visible.'}
       </div>
 
       {/* Market View Filter + 资金配置 */}

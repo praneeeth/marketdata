@@ -32,6 +32,7 @@ import BenchChart from '@/components/BenchChart'
 import BenchmarkShareCard from '@/components/BenchmarkShareCard'
 import DiagnosticsShareCard from '@/components/DiagnosticsShareCard'
 import DigestShareCard from '@/components/DigestShareCard'
+import { useCompliance } from '@/hooks/use-compliance'
 
 function pct(v?: number | null, digits = 2): string {
   if (v == null || !isFinite(v)) return '--'
@@ -100,6 +101,9 @@ const MARKET_BAR_CLS: Record<string, string> = {
 
 export default function DashboardPage() {
   const navigate = useNavigate()
+  // Ranked "opportunities" are strategy signals: hidden in research-only mode (ADR-004).
+  const { isEnabled } = useCompliance()
+  const strategyEnabled = isEnabled('strategy_signals')
   const [loading, setLoading] = useState(true)
   const [indices, setIndices] = useState<DashboardMarketIndex[]>([])
   const [scan, setScan] = useState<DashboardMonitorStock[]>([])
@@ -224,9 +228,10 @@ export default function DashboardPage() {
   }, [scan])
 
   const opportunities = useMemo(() => {
+    if (!strategyEnabled) return []
     const list = overview?.action_center?.opportunities?.length ? overview.action_center.opportunities : oppFallback
     return list.slice(0, 5)
-  }, [overview, oppFallback])
+  }, [strategyEnabled, overview, oppFallback])
 
   // 今日必读候选(多源)→ 交 AI 策展(失败兜底原序)
   const candidates = useMemo<CurateCandidate[]>(() => {
@@ -647,6 +652,7 @@ export default function DashboardPage() {
         </div>
 
         {/* 机会精选 */}
+        {strategyEnabled && (
         <div className="card p-4 lg:col-span-5">
           <div className="mb-2 flex items-center justify-between">
             <h2 className="flex items-center gap-2 text-sm font-semibold">
@@ -693,6 +699,7 @@ export default function DashboardPage() {
             </div>
           )}
         </div>
+        )}
 
         {/* 盘前/盘后简报 */}
         {brief && (brief.title || brief.content) && (

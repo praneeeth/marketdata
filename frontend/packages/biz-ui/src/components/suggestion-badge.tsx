@@ -7,6 +7,7 @@ import { fetchAPI } from '@panwatch/api'
 import { useToast } from '@panwatch/base-ui/components/ui/toast'
 import { AiSuggestionBadge } from '@panwatch/biz-ui/components/ai-suggestion-badge'
 import { TechnicalBadge, technicalToneFromSuggestionAction } from '@panwatch/biz-ui/components/technical-badge'
+import { useCompliance } from '@/hooks/use-compliance'
 
 export interface SuggestionInfo {
   id?: number
@@ -131,7 +132,7 @@ function formatKlineMeta(meta?: Record<string, any>): string {
 }
 
 export function SuggestionBadge({
-  suggestion,
+  suggestion: suggestionProp,
   stockName,
   stockSymbol,
   kline,
@@ -140,6 +141,10 @@ export function SuggestionBadge({
   hasPosition = false,
   showTechnicalCompanion = true,
 }: SuggestionBadgeProps) {
+  // Action badges (AI or rule-based) are buy/sell/hold calls. In research-only mode
+  // only the neutral indicators badge remains (ADR-004).
+  const { isEnabled } = useCompliance()
+  const suggestion = isEnabled('suggestion_pool') ? suggestionProp : null
   const [dialogOpen, setDialogOpen] = useState(false)
   const [klineDialogOpen, setKlineDialogOpen] = useState(false)
   const [feedback, setFeedback] = useState<'useful' | 'useless' | null>(null)

@@ -48,6 +48,10 @@ export interface DeepAnalysisResult {
   title: string
   content: string
   raw_data: {
+    /** "research_only" when the decision nodes were not run (ADR-005). */
+    mode?: string
+    /** Neutral research summary; replaces the decision in research-only mode. */
+    research_summary?: string
     suggestion: DeepAnalysisSuggestion
     cost_usd: number
     should_alert: boolean

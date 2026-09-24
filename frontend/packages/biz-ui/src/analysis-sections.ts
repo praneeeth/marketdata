@@ -13,20 +13,30 @@ export interface AnalysisSection {
  */
 export function buildAnalysisSections(
   rawData: Partial<DeepAnalysisResult['raw_data']>,
+  options: { includeDecision?: boolean } = {},
 ): AnalysisSection[] {
+  // Fail closed: the decision, trader plan and risk debate are only shown when the
+  // caller says rating is enabled (ADR-005). Research-only runs never produce them.
+  const includeDecision = options.includeDecision === true
   const reports = rawData.analyst_reports || { market: '', social: '', news: '', fundamentals: '' }
   const debate = rawData.debate_history
-  const riskDebate = rawData.risk_debate
+  const riskDebate = includeDecision ? rawData.risk_debate : undefined
   const sections: AnalysisSection[] = []
+
+  if (rawData.research_summary) {
+    sections.push({ id: 'summary', title: 'Research summary', markdown: rawData.research_summary })
+  }
 
   // 决策书:section 标题直接用「PM 最终决策书」(去掉原先重复的前置「最终决策」标题);
   // 交易员执行计划作为子标题保留(与决策书区分)。
-  const decisionBody = [
-    rawData.final_decision || '',
-    rawData.trader_plan && `### 💼 交易员执行计划\n\n${rawData.trader_plan}`,
-  ]
-    .filter(Boolean)
-    .join('\n\n')
+  const decisionBody = includeDecision
+    ? [
+        rawData.final_decision || '',
+        rawData.trader_plan && `### 💼 交易员执行计划\n\n${rawData.trader_plan}`,
+      ]
+        .filter(Boolean)
+        .join('\n\n')
+    : ''
   if (decisionBody) sections.push({ id: 'decision', title: 'PM 最终决策书', markdown: decisionBody })
 
   // 四位分析师
@@ -44,7 +54,7 @@ export function buildAnalysisSections(
   // 看多看空辩论(研究团队:辩论历史 + 研究主管裁决)
   if (debate?.history) {
     let dc = debate.history
-    if (debate.judge_decision) dc += `\n\n### ⚖️ 研究主管裁决\n\n${debate.judge_decision}`
+    if (includeDecision && debate.judge_decision) dc += `\n\n### ⚖️ 研究主管裁决\n\n${debate.judge_decision}`
     sections.push({ id: 'debate', title: '看多看空辩论', markdown: dc })
   }
 

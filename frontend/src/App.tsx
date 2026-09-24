@@ -1,6 +1,6 @@
 import { Suspense, useState, useEffect, useRef } from 'react'
 import { Routes, Route, NavLink, useLocation, Navigate } from 'react-router-dom'
-import { TrendingUp, Bot, ScrollText, Settings, List, Database, Clock, LayoutDashboard, Github, BellRing, Sparkles, Activity, ClipboardCheck, MessageCircle } from 'lucide-react'
+import { TrendingUp, ScrollText, Github } from 'lucide-react'
 import { useTheme } from '@/hooks/use-theme'
 import { appApi } from '@panwatch/api/app'
 import { fetchAPI, isAuthenticated } from '@panwatch/api/client'
@@ -13,6 +13,10 @@ import { RouteErrorBoundary, RouteLoadingFallback } from '@/components/RouteBoun
 import { preloadRoute, routePages } from '@/router/page-loaders'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@panwatch/base-ui/components/ui/dialog'
 import { Button } from '@panwatch/base-ui/components/ui/button'
+import DisclaimerFooter from '@/components/DisclaimerFooter'
+import DisclaimerConsentDialog from '@/components/DisclaimerConsentDialog'
+import { useCompliance } from '@/hooks/use-compliance'
+import { visibleNavItems as filterNavItems } from '@/router/nav-items'
 
 const {
   LoginPage,
@@ -29,24 +33,6 @@ const {
   EvaluationsPage,
   AssistantPage,
 } = routePages
-
-const navItems = [
-  { to: '/', icon: LayoutDashboard, label: '首页' },
-  { to: '/portfolio', icon: List, label: '持仓' },
-  { to: '/opportunities', icon: Sparkles, label: '机会' },
-  { to: '/paper-trading', icon: Activity, label: '模拟盘' },
-  { to: '/assistant', icon: MessageCircle, label: '助手' },
-  { to: '/alerts', icon: BellRing, label: '提醒' },
-  { to: '/agents', icon: Bot, label: 'Agent' },
-  { to: '/evaluations', icon: ClipboardCheck, label: '验证中心' },
-  { to: '/history', icon: Clock, label: '历史' },
-  { to: '/datasources', icon: Database, label: '数据源' },
-  { to: '/settings', icon: Settings, label: '设置' },
-]
-const desktopPrimaryNavItems = navItems.slice(0, 5)
-const desktopMoreNavItems = navItems.slice(5)
-const mobilePrimaryNavItems = navItems.slice(0, 5)
-const mobileMoreNavItems = navItems.slice(5)
 
 // 认证守卫组件
 function RequireAuth({ children }: { children: React.ReactNode }) {
@@ -82,6 +68,12 @@ function RequireAuth({ children }: { children: React.ReactNode }) {
 function App() {
   const { mode, setMode } = useTheme()
   const location = useLocation()
+  const { isEnabled } = useCompliance()
+  const visibleNavItems = filterNavItems(isEnabled)
+  const desktopPrimaryNavItems = visibleNavItems.slice(0, 5)
+  const desktopMoreNavItems = visibleNavItems.slice(5)
+  const mobilePrimaryNavItems = visibleNavItems.slice(0, 5)
+  const mobileMoreNavItems = visibleNavItems.slice(5)
   const isAssistantRoute = location.pathname === '/assistant' || location.pathname.startsWith('/assistant/')
   const [version, setVersion] = useState('')
   const [logsOpen, setLogsOpen] = useState(false)
@@ -126,6 +118,7 @@ function App() {
             <Route path="/login" element={<LoginPage />} />
           </Routes>
         </Suspense>
+        <DisclaimerFooter />
       </RouteErrorBoundary>
     )
   }
@@ -284,10 +277,16 @@ function App() {
           <Suspense fallback={<RouteLoadingFallback />}>
             <Routes>
               <Route path="/" element={<DashboardPage />} />
-              <Route path="/opportunities" element={<OpportunitiesPage />} />
+              <Route
+                path="/opportunities"
+                element={isEnabled('entry_candidates') ? <OpportunitiesPage /> : <Navigate to="/" replace />}
+              />
               <Route path="/portfolio" element={<StocksPage />} />
               <Route path="/agents" element={<AgentsPage />} />
-              <Route path="/evaluations" element={<EvaluationsPage />} />
+              <Route
+                path="/evaluations"
+                element={isEnabled('evaluations') ? <EvaluationsPage /> : <Navigate to="/" replace />}
+              />
               <Route path="/history" element={<HistoryPage />} />
               <Route path="/paper-trading" element={<PaperTradingPage />} />
               <Route path="/alerts" element={<PriceAlertsPage />} />
@@ -299,7 +298,10 @@ function App() {
             </Routes>
           </Suspense>
         </RouteErrorBoundary>
+        {!isAssistantRoute && <DisclaimerFooter />}
       </main>
+      {isAssistantRoute && <DisclaimerFooter className="py-1" />}
+      <DisclaimerConsentDialog />
       <LogsModal open={logsOpen} onOpenChange={setLogsOpen} />
       <SelfCheckModal open={selfCheckOpen} onClose={() => setSelfCheckOpen(false)} />
       <Dialog open={upgradeOpen} onOpenChange={setUpgradeOpen}>

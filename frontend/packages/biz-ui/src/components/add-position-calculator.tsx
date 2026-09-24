@@ -4,6 +4,7 @@ import { insightApi, type AddPositionEvalResult } from '@panwatch/api'
 import { Button } from '@panwatch/base-ui/components/ui/button'
 import { Input } from '@panwatch/base-ui/components/ui/input'
 import { useToast } from '@panwatch/base-ui/components/ui/toast'
+import { useCompliance } from '@/hooks/use-compliance'
 
 export interface AddPositionCalc {
   newQty: number
@@ -69,7 +70,14 @@ interface Props {
   currentPrice?: number | null
 }
 
-export default function AddPositionCalculator({
+/** Sizing an add-on position is position-size advice: hidden in research-only mode (ADR-004). */
+export default function AddPositionCalculator(props: Props) {
+  const { isEnabled } = useCompliance()
+  if (!isEnabled('position_calculator')) return null
+  return <AddPositionCalculatorInner {...props} />
+}
+
+function AddPositionCalculatorInner({
   symbol,
   market,
   currentQuantity,

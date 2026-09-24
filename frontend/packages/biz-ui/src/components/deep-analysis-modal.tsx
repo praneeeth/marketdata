@@ -10,6 +10,7 @@ import { useEffect, useState, useCallback, useRef } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { buildAnalysisSections, type AnalysisSection } from '../analysis-sections'
+import { useCompliance } from '@/hooks/use-compliance'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@panwatch/base-ui/components/ui/dialog'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@panwatch/base-ui/components/ui/tabs'
 import { Button } from '@panwatch/base-ui/components/ui/button'
@@ -706,21 +707,14 @@ function DoneView({
   stockSymbol: string
   onRerun: () => void
 }) {
-  // 防御性默认值:后端拉历史时可能 raw_data 缺失,这里给完整 fallback 避免白屏
+  const { isEnabled, shortDisclaimer } = useCompliance()
+  const ratingEnabled = isEnabled('tradingagents_rating')
   const rawData = (result?.raw_data || {}) as Partial<DeepAnalysisResult['raw_data']>
-  const sug = rawData.suggestion || {
-    action: 'hold' as const,
-    action_label: '持有',
-    signal: '',
-    reason: '',
-    should_alert: false,
-    agent_name: 'tradingagents',
-    agent_label: 'TradingAgents 深度',
-    confidence: 5.0,
-  }
+  // No default rating: a missing decision is shown as research, never as "hold" (ADR-005).
+  const sug = ratingEnabled ? rawData.suggestion : undefined
   const fromCache = rawData.from_cache
   const costUsd = rawData.cost_usd
-  const sections = buildAnalysisSections(rawData)
+  const sections = buildAnalysisSections(rawData, { includeDecision: ratingEnabled })
   const analysisDate = result.timestamp
     ? String(result.timestamp).slice(0, 10)
     : new Date().toISOString().slice(0, 10)
@@ -738,12 +732,20 @@ function DoneView({
 
       {/* 顶层摘要(精简成一行:决策 + 置信度 + 成本;完整理由在"最终决策" tab) */}
       <div className="rounded-lg bg-accent/30 px-4 py-2.5 flex items-center gap-3 flex-wrap">
-        <span className={`text-[18px] font-bold ${DECISION_COLOR[sug.action] || ''}`}>
-          {sug.action_label}
-        </span>
-        <span className="text-[12px] text-muted-foreground">
-          置信度 {sug.confidence?.toFixed(1) ?? '-'} / 10
-        </span>
+        {sug ? (
+          <>
+            <span className={`text-[18px] font-bold ${DECISION_COLOR[sug.action] || ''}`}>
+              {sug.action_label}
+            </span>
+            <span className="text-[12px] text-muted-foreground">
+              置信度 {sug.confidence?.toFixed(1) ?? '-'} / 10
+            </span>
+          </>
+        ) : (
+          <span className="text-[14px] font-semibold" data-testid="deep-research-label">
+            Research summary
+          </span>
+        )}
         <Button
           variant="outline"
           size="sm"
@@ -770,8 +772,7 @@ function DoneView({
 
       {/* 免责声明 */}
       <div className="text-[10px] text-muted-foreground/70 italic border-t border-border/30 pt-2">
-        本分析由 AI 多 Agent 框架生成,仅供学习研究参考,不构成任何投资建议。
-        投资有风险,决策需自主判断。
+        {shortDisclaimer}
       </div>
     </div>
   )

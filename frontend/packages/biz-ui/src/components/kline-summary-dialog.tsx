@@ -6,6 +6,7 @@ import { Button } from '@panwatch/base-ui/components/ui/button'
 import { buildKlineSuggestion } from '@/lib/kline-scorer'
 import { HoverPopover } from '@panwatch/base-ui/components/ui/hover-popover'
 import { TechnicalBadge, technicalToneFromSuggestionAction } from '@panwatch/biz-ui/components/technical-badge'
+import { useCompliance } from '@/hooks/use-compliance'
 
 export interface KlineSummaryData {
   // meta (from backend)
@@ -92,6 +93,10 @@ export function KlineSummaryDialog({
   const [loading, setLoading] = useState(false)
   const [summary, setSummary] = useState<KlineSummaryData | null>(null)
   const [error, setError] = useState<string | null>(null)
+  // The rule-based action label is advice computed in the browser, outside the backend
+  // output guard, so it only exists when recommendation features are enabled (ADR-004).
+  const { isEnabled } = useCompliance()
+  const scoringEnabled = isEnabled('suggestion_pool')
 
   const buildSuggestion = (s: KlineSummaryData, holding?: boolean) => {
     const scored = buildKlineSuggestion(s, holding)
@@ -150,7 +155,7 @@ export function KlineSummaryDialog({
   }, [open, symbol, market, initialSummary])
 
   const effectiveSummary = initialSummary || summary
-  const suggestion = effectiveSummary ? buildSuggestion(effectiveSummary, hasPosition) : null
+  const suggestion = scoringEnabled && effectiveSummary ? buildSuggestion(effectiveSummary, hasPosition) : null
 
   const handleAskAI = useCallback(() => {
     if (!effectiveSummary) return
@@ -720,6 +725,7 @@ export function KlineSummaryDialog({
               </div>
             )}
 
+            {scoringEnabled && (
             <details className="group">
               <summary className="text-[11px] text-muted-foreground cursor-pointer hover:text-foreground">
                 建议/评分规则说明 <span className="text-[10px]">(点击展开)</span>
@@ -742,6 +748,7 @@ export function KlineSummaryDialog({
                 </div>
               </div>
             </details>
+            )}
 
             <Button variant="secondary" size="sm" className="w-full mt-1" onClick={handleAskAI}>
               <Sparkles className="w-3.5 h-3.5 mr-1" /> 问 AI 分析这些指标

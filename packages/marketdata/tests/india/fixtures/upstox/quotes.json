@@ -1,0 +1,24 @@
+{
+  "status": "success",
+  "data": {
+    "NSE_EQ:INFY": {
+      "ohlc": {"open": 1396.0, "high": 1421.75, "low": 1395.55, "close": 1412.95},
+      "depth": {"buy": [], "sell": []},
+      "timestamp": "2026-09-23T15:45:56.467+05:30",
+      "instrument_token": "NSE_EQ|INE009A01021",
+      "symbol": "INFY",
+      "last_price": 1412.95,
+      "volume": 7360198,
+      "average_price": 1412.47,
+      "oi": 0.0,
+      "net_change": 23.3,
+      "total_buy_quantity": 0.0,
+      "total_sell_quantity": 5191.0,
+      "lower_circuit_limit": 1250.7,
+      "upper_circuit_limit": 1528.6,
+      "last_trade_time": "1790157599000",
+      "oi_day_high": 0.0,
+      "oi_day_low": 0.0
+    }
+  }
+}

@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import gzip
 from datetime import date, datetime
 
 import httpx
 from marketdata.india import IST, Exchange, InstrumentRef
 from marketdata.india import kite as kite_mod
+from marketdata.india import upstox as upstox_mod
 
 from .harness import Harness, Router, fixture_json, fixture_text
 
@@ -56,4 +58,56 @@ KITE = Harness(
     expected_last_price="1412.95",
 )
 
-ALL = [KITE]
+# --- Upstox ------------------------------------------------------------------------------
+
+UPSTOX_INFY = "NSE_EQ|INE009A01021"
+UPSTOX_NIFTY = "NSE_INDEX|Nifty 50"
+UPSTOX_NOW = datetime(2026, 9, 23, 16, 0, tzinfo=IST)
+
+
+def upstox_routes(router: Router) -> None:
+    router.json("GET", "/v2/market-quote/quotes", fixture_json("upstox", "quotes.json"))
+    router.json(
+        "GET",
+        "/v3/historical-candle/NSE_EQ|INE009A01021/minutes/5/2026-09-23/2026-09-22",
+        fixture_json("upstox", "historical.json"),
+    )
+    router.json(
+        "GET",
+        "/v3/historical-candle/intraday/NSE_EQ|INE009A01021/minutes/5",
+        fixture_json("upstox", "intraday.json"),
+    )
+    router.json("GET", "/v2/option/chain", fixture_json("upstox", "option_chain.json"))
+    gz = gzip.compress(fixture_text("upstox", "instruments_NSE.json").encode())
+    router.add(
+        "GET",
+        "/market-quote/instruments/exchange/NSE.json.gz",
+        lambda _r: httpx.Response(200, content=gz),
+    )
+    router.json("POST", "/v2/login/authorization/token", fixture_json("upstox", "login_token.json"))
+
+
+def upstox_expired(router: Router) -> None:
+    router.fallback = lambda _r: httpx.Response(
+        401, json=fixture_json("upstox", "error_token.json")
+    )
+
+
+UPSTOX = Harness(
+    name="upstox",
+    make=lambda router: upstox_mod.UpstoxProvider(
+        router.transport("upstox", upstox_mod.API_BASE, upstox_mod._error_mapper),
+        now=lambda: UPSTOX_NOW,
+    ),
+    install_routes=upstox_routes,
+    install_expired=upstox_expired,
+    equity=InstrumentRef(Exchange.NSE, "INFY").with_id("upstox", UPSTOX_INFY),
+    unresolved=InstrumentRef(Exchange.NSE, "INFY"),
+    underlying=InstrumentRef(Exchange.NSE, "NIFTY 50").with_id("upstox", UPSTOX_NIFTY),
+    expiry=date(2026, 10, 27),
+    start=datetime(2026, 9, 22, 9, 15, tzinfo=IST),
+    end=datetime(2026, 9, 23, 15, 30, tzinfo=IST),
+    expected_last_price="1412.95",
+)
+
+ALL = [KITE, UPSTOX]

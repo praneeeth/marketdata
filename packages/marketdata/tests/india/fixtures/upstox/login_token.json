@@ -1,0 +1,14 @@
+{
+  "email": "user@example.test",
+  "exchanges": ["NSE", "NFO", "BSE"],
+  "products": ["D", "I"],
+  "broker": "UPSTOX",
+  "user_id": "AB1234",
+  "user_name": "Example User",
+  "order_types": ["MARKET", "LIMIT"],
+  "user_type": "individual",
+  "poa": false,
+  "is_active": true,
+  "access_token": "upstox_access_SECRET_value",
+  "extended_token": null
+}

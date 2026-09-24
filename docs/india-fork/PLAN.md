@@ -172,15 +172,16 @@ One entry per decision, written in the phase that makes it:
 - ADR-003 research-only output contract (`ResearchSummary`).
 - ADR-004 disposition of recommendation features.
 - ADR-005 TradingAgents neutralisation (patch vs replace).
-- ADR-006 provider interface and per-credential caching.
-- ADR-007 credential vault.
-- ADR-008 market calendar file format.
-- ADR-009 news/filings sourcing.
-- ADR-010 i18n library.
-- ADR-011 Postgres and migrations.
-- ADR-012 tenant isolation mechanism.
-- ADR-013 LLM billing model.
-- ADR-014 WhatsApp platform account model.
+- ADR-006 tooling and CI (Phase 1).
+- ADR-007 provider interface and per-credential caching.
+- ADR-008 credential vault.
+- ADR-009 market calendar file format.
+- ADR-010 news/filings sourcing.
+- ADR-011 i18n library.
+- ADR-012 Postgres and migrations.
+- ADR-013 tenant isolation mechanism.
+- ADR-014 LLM billing model.
+- ADR-015 WhatsApp platform account model.
 
 ### 4.4 Test strategy
 
@@ -819,6 +820,48 @@ remove? → **Remove share cards; keep PDF.**
   - Upstream behaviour under Postgres (it does not support Postgres).
 - **Open questions.** §7. The ones blocking Phase 1: **Q1**, **Q3**, **Q4**, **Q6**,
   **Q16**, **Q-sec**.
+
+### 8.1 Phase 1 report
+
+- **What changed.**
+  - The compliance guard and its layers (ADR-002).
+  - English research-only prompts and output contracts (ADR-003).
+  - Recommendation features gated in the backend and UI (ADR-004).
+  - A research-only TradingAgents graph (ADR-005).
+  - Tooling and CI (ADR-006).
+  - Security fixes (Q-sec).
+  - Disclaimer footer, onboarding disclaimer and versioned consent.
+  - Paper trading labelled "Simulation".
+- **Tests and lint:**
+
+  | Suite | Result |
+  | --- | --- |
+  | Backend | 1,068 passed, 3 skipped (the compliance suites are included) |
+  | Coverage on new code | 97.9% (gate 90%) |
+  | Packages | 188 + 39 + 3 + 8 passed |
+  | Frontend | vitest 64 passed (21 new); `tsc -b` clean; build OK |
+  | ruff, ruff format, mypy `--strict` | clean on new code |
+
+- **Found during Phase 1, not in ARCHITECTURE.md:**
+  - The frontend computed its own buy/sell/hold labels from K-line indicators
+    (`frontend/src/lib/kline-scorer.ts`). This advice never reached the backend guard.
+    It is now switched off when `suggestion_pool` is disabled.
+  - The deep-analysis modal showed "持有" (hold) whenever a run had no decision. It now
+    shows the research summary.
+  - `/api/agents/tradingagents/history-comparison` scored past buy/sell calls against
+    later returns. It is now gated with `tradingagents_rating`.
+- **Left for Phase 4:**
+  - The UI copy is still Chinese.
+  - Some static educational popovers in the K-line dialog describe how traders use
+    support/resistance for stops and position changes in general terms. They are not
+    stock-specific, but should be rewritten with the English copy.
+- **Not verified in the sandbox:**
+  - How live LLMs behave against the research-only prompts and the guard (stub models
+    only).
+  - Real delivery on each notification channel.
+  - Docker build.
+  - Node 24.
+  - Live data vendors.
 
 ---
 

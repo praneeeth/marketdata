@@ -31,3 +31,9 @@ CLAUDE.md
 docs/superpowers/
 .superpowers/
 .worktrees/
+
+# Coverage artefacts
+.coverage
+.coverage.*
+htmlcov/
+.hypothesis/

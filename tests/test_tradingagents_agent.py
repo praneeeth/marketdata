@@ -100,7 +100,7 @@ class TestLLMAdapter(unittest.TestCase):
 
         ai_client = MagicMock(base_url="https://api.example.com", model="test-model", api_key="sk-test")
         with TemporaryDirectory() as temp_dir:
-            runtime_dir = Path(temp_dir) / "tradingagents"
+            runtime_dir = Path(temp_dir).resolve() / "tradingagents"
             config = build_ta_llm_config(
                 ai_client,
                 market="US",

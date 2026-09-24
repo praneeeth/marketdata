@@ -23,6 +23,7 @@ include = [
     "src/modules/automation/research_output.py",
     "src/modules/automation/tradingagents/research_graph.py",
     "tests/compliance/**/*.py",
+    "tests/security/**/*.py",
     "packages/marketdata/src/marketdata/india/**/*.py",
     "packages/marketdata/tests/india/**/*.py",
 ]

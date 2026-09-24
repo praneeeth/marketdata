@@ -23,6 +23,8 @@ include = [
     "src/modules/automation/research_output.py",
     "src/modules/automation/tradingagents/research_graph.py",
     "tests/compliance/**/*.py",
+    "packages/marketdata/src/marketdata/india/**/*.py",
+    "packages/marketdata/tests/india/**/*.py",
 ]
 
 [tool.ruff.lint]
@@ -34,6 +36,7 @@ ignore = [
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**/*.py" = ["S101", "S105", "S106"]
+"packages/*/tests/**/*.py" = ["S101", "S105", "S106"]
 
 [tool.mypy]
 python_version = "3.11"
@@ -44,7 +47,9 @@ files = [
     "src/modules/administration/api/compliance.py",
     "src/modules/automation/research_output.py",
     "src/modules/automation/tradingagents/research_graph.py",
+    "packages/marketdata/src/marketdata/india",
 ]
+mypy_path = "packages/marketdata/src"
 follow_imports = "silent"
 ignore_missing_imports = true
 warn_unused_ignores = false

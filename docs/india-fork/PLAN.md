@@ -819,3 +819,47 @@ remove? → **Remove share cards; keep PDF.**
   - Upstream behaviour under Postgres (it does not support Postgres).
 - **Open questions.** §7. The ones blocking Phase 1: **Q1**, **Q3**, **Q4**, **Q6**,
   **Q16**, **Q-sec**.
+
+---
+
+## 9. Decision log
+
+**2026-09-24.** Owner reply to §7: *"Q1 option A pinned to 89bdf3f; go with your
+recommendations."* Where §7 gave a recommendation, it is now the decision. Where §7 asked
+the owner to decide, the question stays open.
+
+| Q | Decision | Status |
+| --- | --- | --- |
+| Q1 | Merge upstream history (option A), pinned to `89bdf3f` | decided (ADR-001) |
+| Q2 | India-only; HK/US code and FX removed in Phase 2/3 | decided |
+| Q3 | research_only: AI-driven paper-trading entries and plan/summary notifications disabled in Phase 1; user-entered simulated orders added in Phase 3; everything labelled "Simulation" | decided |
+| Q4 | Opportunities / entry candidates / strategy signals / AI scores disabled in research_only | decided |
+| Q5 | Evaluations restricted in research_only; an admin-only view returns with the Phase 5 admin panel | decided |
+| Q6 | (a) deterministic guard only (no LLM neutraliser) in Phase 1. (b) Phase 1 switches prompt output contracts to English research-only form | decided |
+| Q7 | (a) quoted third-party brokerage targets blocked in v1. (b) LLM billing model | (a) decided, (b) **open** (needed for Phase 5) |
+| Q8 | Market-level data sources (GIFT Nifty, FII/DII, filings, fundamentals) | **open** (needed for Phase 3/4) |
+| Q9 | Broker instrument master cached per user until legal sign-off | decided |
+| Q10 | Kite first; pre-market brief degrades without a broker session + login reminder; no stored TOTP seeds | decided |
+| Q11 | NSE 2026/2027 holiday and special-session circulars | **open** (owner to supply for Phase 3) |
+| Q12 | `react-i18next` (dependency approved for Phase 4) | decided |
+| Q13 | MCP server disabled by default for v1 | decided |
+| Q14 | TradingAgents: GraphSetup override if feasible, else discard trader/risk/PM output; keep-vs-replace evaluated in Phase 4 | decided |
+| Q15 | Keep Telegram, add WhatsApp + email, drop CN channels; Telegram platform bot with account linking | decided (Phase 6) |
+| Q16 | Dev dependencies `ruff`, `mypy`, `pytest-cov`, `hypothesis` approved; PR CI workflow added; upstream `release.yml` and `pullfrog.yml` removed | decided |
+| Q17 | Product name | **open** (needed for Phase 4) |
+| Q18 | `ADVISORY_MODE` is environment-only | decided |
+| Q19 | Retention: logs 30 d, agent runs 180 d, compliance events 180 d, chats until deletion | decided |
+| Q20 | Phase 4 split into 4a/4b, Phase 5 into 5a/5b | decided |
+| Q-sec | Path-traversal fix and API secret masking included in Phase 1. Disclosure to upstream maintainers | fix decided; disclosure **open** (not contacted) |
+| Q-share | Share cards removed in research_only; PDF export kept (guarded + disclaimer) | decided |
+| Q-legal | Legal review of scope, disclaimer, RA obligations, data sourcing | **open** (owner action) |
+
+### Delivery note: branches
+
+This session may push only to `claude/india-market-stock-research-wuzxp1`. The planned
+separate PRs (Phase 0 docs → upstream import → Phase 1) are therefore **separate commits
+stacked on one branch and one PR**, and the PR description links a compare view for each
+segment.
+
+**Merge that PR with "Create a merge commit", not squash.** A squash merge would collapse
+the imported upstream history that option A exists to preserve.

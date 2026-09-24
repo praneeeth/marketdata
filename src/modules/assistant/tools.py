@@ -27,6 +27,7 @@ from src.modules.market.price_alert_service import (
 )
 from src.modules.portfolio import build_portfolio_service
 from src.modules.strategy.strategy_engine import list_strategy_signals
+from src.platform.compliance import Feature, is_feature_enabled
 from src.platform.marketdata.collectors.discovery_collector import (
     EastMoneyDiscoveryCollector,
 )
@@ -913,51 +914,53 @@ def build_panwatch_tool_registry(session: Session) -> ToolRegistry:
         ),
         get_stock_quote,
     )
-    registry.register(
-        ToolSpec(
-            name="find_research_candidates",
-            title="发现研究候选",
-            description="查询 PanWatch 最新机会信号，返回适合进一步研究的候选标的及其评分、风险和入场计划。只读，不会刷新策略或执行交易。",
-            risk=ToolRisk.READ,
-            input_schema={
-                "type": "object",
-                "properties": {
-                    "market": {
-                        "type": "string",
-                        "enum": ["CN", "HK", "US"],
-                        "description": "可选市场代码；不填表示全部市场",
-                    },
-                    "holding": {
-                        "type": "string",
-                        "enum": ["all", "held", "unheld"],
-                        "default": "unheld",
-                        "description": "持仓过滤；默认只看未持仓标的",
-                    },
-                    "risk_level": {
-                        "type": "string",
-                        "enum": ["all", "low", "medium", "high"],
-                        "default": "all",
-                        "description": "可选风险等级过滤",
-                    },
-                    "min_score": {
-                        "type": "number",
-                        "minimum": 0,
-                        "maximum": 100,
-                        "default": 70,
-                        "description": "最低机会分数",
-                    },
-                    "limit": {
-                        "type": "integer",
-                        "minimum": 1,
-                        "maximum": 10,
-                        "default": 5,
-                        "description": "最多返回候选数量",
+    # Research-only: the entry-candidate engine (scores, entry plans) is not exposed.
+    if is_feature_enabled(Feature.ENTRY_CANDIDATES):
+        registry.register(
+            ToolSpec(
+                name="find_research_candidates",
+                title="发现研究候选",
+                description="查询 PanWatch 最新机会信号，返回适合进一步研究的候选标的及其评分、风险和入场计划。只读，不会刷新策略或执行交易。",
+                risk=ToolRisk.READ,
+                input_schema={
+                    "type": "object",
+                    "properties": {
+                        "market": {
+                            "type": "string",
+                            "enum": ["CN", "HK", "US"],
+                            "description": "可选市场代码；不填表示全部市场",
+                        },
+                        "holding": {
+                            "type": "string",
+                            "enum": ["all", "held", "unheld"],
+                            "default": "unheld",
+                            "description": "持仓过滤；默认只看未持仓标的",
+                        },
+                        "risk_level": {
+                            "type": "string",
+                            "enum": ["all", "low", "medium", "high"],
+                            "default": "all",
+                            "description": "可选风险等级过滤",
+                        },
+                        "min_score": {
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 100,
+                            "default": 70,
+                            "description": "最低机会分数",
+                        },
+                        "limit": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 10,
+                            "default": 5,
+                            "description": "最多返回候选数量",
+                        },
                     },
                 },
-            },
-        ),
-        find_research_candidates,
-    )
+            ),
+            find_research_candidates,
+        )
     registry.register(
         ToolSpec(
             name="get_kline_summary",
@@ -1334,6 +1337,7 @@ def build_panwatch_tool_registry(session: Session) -> ToolRegistry:
         ),
         create_price_alert,
     )
+    registered = {spec.name for spec in registry.registered_tools()}
     for name in (
         "find_research_candidates",
         "get_kline_summary",
@@ -1347,5 +1351,6 @@ def build_panwatch_tool_registry(session: Session) -> ToolRegistry:
         "delete_price_alert",
         "create_price_alert",
     ):
-        registry.set_exposure(name, ToolExposure.DEFERRED)
+        if name in registered:
+            registry.set_exposure(name, ToolExposure.DEFERRED)
     return registry

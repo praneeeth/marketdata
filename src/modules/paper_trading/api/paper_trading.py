@@ -8,6 +8,8 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from zoneinfo import ZoneInfo
 
+from src.platform.compliance import Feature
+from src.platform.compliance.http import feature_gate
 from src.platform.runtime.config import Settings
 from src.modules.paper_trading.paper_trading_engine import (
     ALL_MARKETS,
@@ -428,7 +430,10 @@ def get_backends():
     return available_backends()
 
 
-@router.post("/account/toggle")
+@router.post(
+    "/account/toggle",
+    dependencies=[Depends(feature_gate(Feature.AI_PAPER_TRADING))],
+)
 def toggle_account(body: ToggleBody, db: Session = Depends(get_db)):
     acc = db.query(PaperTradingAccount).first()
     if not acc:
@@ -485,7 +490,10 @@ def update_settings(body: UpdateSettingsBody, db: Session = Depends(get_db)):
     return _account_summary(db, acc, None)
 
 
-@router.post("/scan")
+@router.post(
+    "/scan",
+    dependencies=[Depends(feature_gate(Feature.AI_PAPER_TRADING))],
+)
 async def manual_scan():
     """手动触发一次模拟盘扫描（建仓 + 平仓检查）。"""
     result = await ENGINE.scan_once()
@@ -538,7 +546,10 @@ class NotifySettingsBody(BaseModel):
     pt_notify_summary: str | None = None
 
 
-@router.post("/notify-settings")
+@router.post(
+    "/notify-settings",
+    dependencies=[Depends(feature_gate(Feature.AI_PAPER_TRADING))],
+)
 def update_notify_settings(body: NotifySettingsBody, db: Session = Depends(get_db)):
     """更新通知配置。"""
     updates = {k: v for k, v in body.model_dump().items() if v is not None}
@@ -552,7 +563,10 @@ def update_notify_settings(body: NotifySettingsBody, db: Session = Depends(get_d
     return get_notify_settings(db)
 
 
-@router.post("/notify-test")
+@router.post(
+    "/notify-test",
+    dependencies=[Depends(feature_gate(Feature.AI_PAPER_TRADING))],
+)
 async def test_notify():
     """发送测试通知。"""
     from src.modules.paper_trading.paper_trading_notifier import send_test_notification
@@ -562,7 +576,10 @@ async def test_notify():
     return {"ok": True}
 
 
-@router.post("/premarket-plan")
+@router.post(
+    "/premarket-plan",
+    dependencies=[Depends(feature_gate(Feature.AI_PAPER_TRADING))],
+)
 async def trigger_premarket_plan():
     """手动触发盘前计划通知。"""
     from src.modules.paper_trading.paper_trading_notifier import send_premarket_plan
@@ -570,7 +587,10 @@ async def trigger_premarket_plan():
     return {"ok": True}
 
 
-@router.post("/daily-summary")
+@router.post(
+    "/daily-summary",
+    dependencies=[Depends(feature_gate(Feature.AI_PAPER_TRADING))],
+)
 async def trigger_daily_summary():
     """手动触发日终摘要通知。"""
     from src.modules.paper_trading.paper_trading_notifier import send_daily_summary

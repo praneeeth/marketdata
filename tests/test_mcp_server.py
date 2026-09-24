@@ -108,7 +108,7 @@ def test_initialize_handshake(client_and_session):
 
 
 def test_tools_list_discovery(client_and_session):
-    """tools/list 暴露 5 个只读工具,含 inputSchema"""
+    """tools/list 暴露 4 个只读工具(research-only 移除 AI 建议工具),含 inputSchema"""
     client, _ = client_and_session
     token = _create_pat(client)
     r = client.post(
@@ -123,7 +123,6 @@ def test_tools_list_discovery(client_and_session):
         "get_portfolio",
         "get_stock_quote",
         "get_technical_analysis",
-        "get_stock_suggestions",
         "get_watchlist",
     }
     assert all("inputSchema" in t for t in tools)

@@ -148,7 +148,7 @@ class TestPremarketDedup(unittest.TestCase):
         account = _make_account()
         title, body = _format_premarket_plan(signals, account)
 
-        self.assertIn("盘前计划", title)
+        self.assertIn("[SIMULATION] Pre-market plan", title)
         # 股票只出现 1 次（symbol 出现在 "002837.CN" 和 URL 中）
         lines_with_stock = [l for l in body.split("\n") if "002837" in l]
         self.assertEqual(len(lines_with_stock), 1)
@@ -187,7 +187,7 @@ class TestMessageFormat(unittest.TestCase):
             "rank_score": 100.0,
         }
         title, body = _format_entry_message(pos_data, sig_data)
-        self.assertIn("建仓", title)
+        self.assertIn("[SIMULATION] Simulated entry", title)
         self.assertIn("英维克", title)
         self.assertIn("113.00", body)
         self.assertIn("104.00", body)
@@ -209,7 +209,7 @@ class TestMessageFormat(unittest.TestCase):
             "strategy_code": "trend_follow",
         }
         title, body = _format_entry_message(pos_data, None)
-        self.assertIn("建仓", title)
+        self.assertIn("[SIMULATION] Simulated entry", title)
         self.assertIn("趋势延续", body)
 
     def test_exit_message_format(self):
@@ -228,7 +228,7 @@ class TestMessageFormat(unittest.TestCase):
             "holding_days": 3,
         }
         title, body = _format_exit_message(pos_data, trade_data)
-        self.assertIn("平仓", title)
+        self.assertIn("[SIMULATION] Simulated exit", title)
         self.assertIn("+700.00", title)
         self.assertIn("止盈", body)
         self.assertIn("113.00", body)
@@ -257,7 +257,7 @@ class TestMessageFormat(unittest.TestCase):
         positions = [_make_position()]
         account = _make_account()
         title, body = _format_daily_summary(trades, positions, account)
-        self.assertIn("日终摘要", title)
+        self.assertIn("[SIMULATION] Daily summary", title)
         self.assertIn("总资产", body)
         self.assertIn("当日平仓 1 笔", body)
         self.assertIn("持仓中 1 只", body)

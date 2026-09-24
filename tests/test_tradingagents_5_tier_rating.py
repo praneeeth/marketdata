@@ -279,13 +279,11 @@ def test_markdown_contains_decision_chain():
         ta_result={"decision": "Underweight", "final_state": _full_state(), "cost_usd": 0.05},
     )
     content = r.content
-    assert "PM 最终决策书" in content
-    assert "交易员执行计划" in content
-    assert "研究主管裁决" in content
-    assert "倾向谨慎持有" in content
-    assert "风控辩论裁决" in content
-    # 不再把分析师概览塞进主体(早先截 300 字会把财务表格截在表头)
-    assert "4 位分析师观点概览" not in content
+    # Research-only: the decision chain (PM/trader/research manager/risk verdict) never
+    # reaches user-facing content; the guard withholds it.
+    assert "PM 最终决策书" not in content
+    assert "交易员执行计划" not in content
+    assert "倾向谨慎持有" not in content
     # 完整分析师报告在 raw_data,前端 tab 渲染
     reports = r.raw_data["analyst_reports"]
     assert reports["market"] and reports["social"] and reports["news"] and reports["fundamentals"]

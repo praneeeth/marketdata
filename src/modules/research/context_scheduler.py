@@ -8,6 +8,7 @@ import logging
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
+from src.platform.compliance import Feature, is_feature_enabled
 from src.platform.marketdata.collectors.kline_collector import kline_source
 from src.modules.research.context_store import cleanup_context_data
 from src.modules.strategy.entry_candidates import evaluate_entry_candidate_outcomes
@@ -138,6 +139,13 @@ class ContextMaintenanceScheduler:
                 outcome_days=self.outcome_retention_days,
             )
             # deleted 是 dict,任一字段 >0 就是有清理动作
+            try:
+                from src.platform.compliance.audit import purge_old_events
+
+                if isinstance(deleted, dict):
+                    deleted["compliance_events"] = await asyncio.to_thread(purge_old_events)
+            except Exception:
+                logger.exception("[上下文维护] compliance_events 清理失败")
             has_work = bool(deleted and any(deleted.values()) if isinstance(deleted, dict) else deleted)
             level = logging.INFO if has_work else logging.DEBUG
             logger.log(level, "[上下文维护] 清理完成: %s", deleted)
@@ -288,7 +296,11 @@ class ContextMaintenanceScheduler:
         )
         # 机会自动刷新 —— 09:15 盘前 / 13:30 午盘 / 22:00 晚间。
         # 时间点按调度器时区(app_timezone,默认 Asia/Shanghai)解释,与 Agent cron 语义一致。
-        for job_hour, job_minute in ((9, 15), (13, 30), (22, 0)):
+        # Research-only: the opportunity (entry-candidate) engine does not run (ADR-004).
+        refresh_times = (
+            ((9, 15), (13, 30), (22, 0)) if is_feature_enabled(Feature.ENTRY_CANDIDATES) else ()
+        )
+        for job_hour, job_minute in refresh_times:
             self.scheduler.add_job(
                 self._refresh_opportunities_job,
                 "cron",

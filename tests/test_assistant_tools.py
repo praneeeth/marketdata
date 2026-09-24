@@ -1,6 +1,7 @@
 """PanWatch business tool adapters exposed to the generic agent runtime."""
 
 import asyncio
+from unittest.mock import MagicMock
 from types import SimpleNamespace
 
 from pan_agent import ModelMessage, ReadOnlyToolPolicy, RunRequest, ToolExposure
@@ -130,7 +131,9 @@ def test_quote_tool_returns_controlled_failure_without_quote(monkeypatch):
     engine.dispose()
 
 
-def test_research_candidates_tool_reuses_strategy_signals_and_returns_compact_candidates(monkeypatch):
+def test_research_candidates_tool_reuses_strategy_signals_and_returns_compact_candidates(
+    monkeypatch, recommendations_enabled
+):
     engine, session = _session()
     captured = {}
 
@@ -219,7 +222,7 @@ def test_research_candidates_tool_reuses_strategy_signals_and_returns_compact_ca
     engine.dispose()
 
 
-def test_research_candidates_tool_rejects_invalid_filters():
+def test_research_candidates_tool_rejects_invalid_filters(recommendations_enabled):
     engine, session = _session()
 
     result = asyncio.run(
@@ -673,3 +676,13 @@ def test_delete_price_alert_removes_rule_and_its_hits():
     assert session.query(PriceAlertHit).count() == 0
     session.close()
     engine.dispose()
+
+
+def test_research_candidates_tool_is_not_registered_in_research_only_mode():
+    """Research-only: the entry-candidate engine is not exposed to the assistant."""
+    from src.modules.assistant.tools import build_panwatch_tool_registry
+
+    registry = build_panwatch_tool_registry(MagicMock())
+    names = {spec.name for spec in registry.registered_tools()}
+    assert "find_research_candidates" not in names
+    assert "get_stock_quote" in names

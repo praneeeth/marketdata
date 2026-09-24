@@ -15,6 +15,8 @@ from html import escape
 
 import markdown as _markdown
 
+from src.platform.compliance import LONG_DISCLAIMER, ensure_guarded, guard_title
+
 logger = logging.getLogger(__name__)
 
 
@@ -23,7 +25,7 @@ logger = logging.getLogger(__name__)
 _REPORT_CSS = """
 @page {
   size: A4; margin: 1.7cm 1.5cm;
-  @bottom-center { content: "仅供参考,不构成投资建议 · 第 " counter(page) " / " counter(pages) " 页";
+  @bottom-center { content: "Educational/informational only. Not investment advice. Page " counter(page) " / " counter(pages);
                    font-size: 8pt; color: #9ca3af; }
 }
 body { font-family: "PingFang SC", "Noto Sans CJK SC", "Microsoft YaHei", "Hiragino Sans GB", sans-serif;
@@ -92,10 +94,11 @@ def _render_xhtml2pdf(title: str, body_html: str) -> bytes:
         pass
     doc = (
         '<html><head><meta charset="utf-8"><style>' + _FALLBACK_CSS + "</style></head><body>"
-        + f'<div class="doc-title">{escape((title or "深度分析").strip())}</div>'
+        + f'<div class="doc-title">{escape((title or "Deep research").strip())}</div>'
         + body_html
         + '<div style="margin-top:14pt;font-size:8.5pt;color:#9ca3af;">'
-        + "本报告由 AI 生成,仅供参考,不构成投资建议。</div></body></html>"
+        + escape(LONG_DISCLAIMER)
+        + "</div></body></html>"
     )
     buf = io.BytesIO()
     pisa.CreatePDF(src=doc, dest=buf, encoding="utf-8")
@@ -117,6 +120,8 @@ def assemble_report_markdown(raw_data: dict) -> str:
     → 风控辩论全文(+风控裁决)。比 `content` 字段更全(content 省略了 4 分析师与辩论全文)。
     """
     rd = raw_data or {}
+    if "suggestion" not in rd:
+        return _assemble_research_markdown(rd)
     sug = rd.get("suggestion") or {}
     reports = rd.get("analyst_reports") or {}
     debate = rd.get("debate_history") or {}
@@ -165,8 +170,36 @@ def assemble_report_markdown(raw_data: dict) -> str:
     return "\n".join(parts).strip()
 
 
+_RESEARCH_SECTIONS = [
+    ("market", "Market and technical analyst"),
+    ("social", "Sentiment analyst"),
+    ("news", "News analyst"),
+    ("fundamentals", "Fundamentals analyst"),
+]
+
+
+def _assemble_research_markdown(rd: dict) -> str:
+    """Research-only report: summary, analyst reports, bull/bear debate. No decision."""
+    parts: list[str] = []
+    summary = (rd.get("research_summary") or "").strip()
+    if summary:
+        parts.append(f"## Research summary\n\n{summary}\n")
+    reports = rd.get("analyst_reports") or {}
+    for key, title in _RESEARCH_SECTIONS:
+        txt = (reports.get(key) or "").strip()
+        if txt:
+            parts.append(f"## {title}\n\n{txt}\n")
+    debate = rd.get("debate_history") or {}
+    history = (debate.get("history") or "").strip()
+    if history:
+        parts.append(f"## Bull and bear debate\n\n{history}\n")
+    return "\n".join(parts).strip()
+
+
 def render_analysis_pdf(title: str, markdown_text: str) -> bytes:
     """分析报告 markdown → PDF 字节(中文矢量、可复制)。WeasyPrint 优先,失败回退 xhtml2pdf。"""
+    title = guard_title(title, surface="pdf_title", fallback="Deep research")
+    markdown_text = ensure_guarded(markdown_text, surface="pdf")
     body_html = _md_to_html(markdown_text)
     try:
         return _render_weasyprint(title, body_html)

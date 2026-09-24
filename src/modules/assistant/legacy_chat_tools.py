@@ -13,13 +13,14 @@ import logging
 
 from sqlalchemy.orm import Session
 
+from src.platform.compliance import Feature, is_feature_enabled
 from src.modules.portfolio import build_portfolio_service
 from src.platform.persistence.models import AnalysisHistory, Stock, StockSuggestion
 
 
 logger = logging.getLogger(__name__)
 
-CHAT_TOOLS = [
+_ALL_CHAT_TOOLS = [
     {
         "type": "function",
         "function": {
@@ -81,6 +82,14 @@ CHAT_TOOLS = [
             "parameters": {"type": "object", "properties": {}},
         },
     },
+]
+
+# Research-only: the AI suggestion tool is removed from chat and MCP (ADR-004).
+CHAT_TOOLS = [
+    tool
+    for tool in _ALL_CHAT_TOOLS
+    if tool["function"]["name"] != "get_stock_suggestions"
+    or is_feature_enabled(Feature.SUGGESTION_POOL)
 ]
 
 
@@ -185,6 +194,8 @@ async def execute_chat_tool(db: Session, name: str, arguments: dict) -> str:
             symbol, market = arguments.get("symbol", ""), arguments.get("market", "CN")
             return await fetch_technical_context(symbol, market) or f"未能获取 {market}:{symbol} 的技术面数据。"
         if name == "get_stock_suggestions":
+            if not is_feature_enabled(Feature.SUGGESTION_POOL):
+                return "AI buy/sell suggestions are not available in research-only mode."
             symbol, market = arguments.get("symbol", ""), arguments.get("market", "CN")
             return build_stock_context(db, symbol, market) or f"暂无 {market}:{symbol} 的 AI 建议。"
         if name == "get_watchlist":

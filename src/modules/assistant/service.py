@@ -374,7 +374,11 @@ class AssistantService:
                     ToolResearchPlugin(
                         ToolResearchService(
                             tools,
-                            descriptors=list(PANWATCH_TOOL_DESCRIPTORS),
+                            descriptors=[
+                                d
+                                for d in PANWATCH_TOOL_DESCRIPTORS
+                                if d.tool_name in {spec.name for spec in tools.registered_tools()}
+                            ],
                         ),
                         mode="active",
                     )

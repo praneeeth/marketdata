@@ -18,6 +18,7 @@ target-version = "py311"
 line-length = 100
 include = [
     "src/platform/compliance/**/*.py",
+    "src/platform/security/**/*.py",
     "src/modules/administration/api/compliance.py",
     "src/modules/automation/research_output.py",
     "src/modules/automation/tradingagents/research_graph.py",
@@ -39,6 +40,7 @@ python_version = "3.11"
 strict = true
 files = [
     "src/platform/compliance",
+    "src/platform/security",
     "src/modules/administration/api/compliance.py",
     "src/modules/automation/research_output.py",
     "src/modules/automation/tradingagents/research_graph.py",
@@ -51,6 +53,7 @@ warn_unused_ignores = false
 branch = true
 source = [
     "src/platform/compliance",
+    "src/platform/security",
     "src/modules/administration/api/compliance.py",
     "src/modules/automation/research_output.py",
     "src/modules/automation/tradingagents/research_graph.py",

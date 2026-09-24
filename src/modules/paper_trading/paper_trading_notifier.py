@@ -138,7 +138,7 @@ def _stock_display(symbol: str, market: str, name: str = "") -> str:
 def _format_entry_message(pos: dict, sig: dict | None) -> tuple[str, str]:
     """格式化建仓通知，返回 (title, body)。pos/sig 为序列化后的 dict。"""
     name = pos.get("stock_name") or pos["stock_symbol"]
-    title = f"【模拟盘建仓】{name}"
+    title = f"[SIMULATION] Simulated entry: {name}"
 
     # 盈亏比
     rr_str = ""
@@ -176,7 +176,7 @@ def _format_exit_message(pos: dict, trade: dict) -> tuple[str, str]:
     name = pos.get("stock_name") or pos["stock_symbol"]
     pnl = trade["pnl"]
     pnl_sign = "+" if pnl >= 0 else ""
-    title = f"【模拟盘平仓】{name} {pnl_sign}{pnl:.2f}"
+    title = f"[SIMULATION] Simulated exit: {name} {pnl_sign}{pnl:.2f}"
 
     stock_info = _stock_display(pos["stock_symbol"], pos["stock_market"], name)
     reason = EXIT_REASON_LABELS.get(trade["exit_reason"], trade["exit_reason"])
@@ -207,7 +207,7 @@ def _dedup_signals(signals: list[StrategySignalRun]) -> list[tuple[StrategySigna
 
 def _format_premarket_plan(signals: list[StrategySignalRun], account: PaperTradingAccount) -> tuple[str, str]:
     """格式化盘前计划，返回 (title, body)。信号会自动去重。"""
-    title = "【模拟盘盘前计划】"
+    title = "[SIMULATION] Pre-market plan"
     if not signals:
         return title, "今日无候选股票"
 
@@ -242,7 +242,7 @@ def _format_daily_summary(
     total_equity = account.current_capital + positions_value
     unrealized = sum(p.unrealized_pnl or 0 for p in positions)
 
-    title = "【模拟盘日终摘要】"
+    title = "[SIMULATION] Daily summary"
     lines = [f"总资产: {total_equity:,.2f}"]
 
     # 当日平仓
@@ -392,7 +392,7 @@ async def send_test_notification() -> dict:
     if not mgr:
         return {"success": False, "error": "通知未启用或无可用渠道"}
     result = await mgr.notify_with_result(
-        "【模拟盘测试】",
+        "[SIMULATION] Test notification",
         "这是一条测试通知，确认通知渠道配置正常。",
     )
     return result

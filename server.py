@@ -1459,8 +1459,15 @@ async def trigger_agent_for_stock(
 @asynccontextmanager
 async def lifespan(app):
     """应用生命周期: 初始化 + 启动调度器"""
+    # Compliance first: an invalid ADVISORY_MODE configuration stops startup (ADR-002).
+    from src.platform.compliance import get_compliance_settings
+    from src.platform.compliance.audit import install_audit_sink
+
+    compliance = get_compliance_settings()
     init_db()
+    install_audit_sink()
     setup_logging()
+    logger.info("Advisory mode: %s", compliance.mode.value)
     # OTel 导出(可选,默认关闭):仅当配置了 OTEL_EXPORTER_OTLP_ENDPOINT 且装了
     # opentelemetry SDK 时启用,否则静默 no-op,不影响现有部署。
     try:
@@ -1498,11 +1505,14 @@ async def lifespan(app):
     # 启动时回填历史 TradingAgents 决策到建议池(stock_suggestions)
     # 早期 TA 运行没写建议池,这次启动一次性补齐,让「AI 建议」面板能看到。
     # 幂等:已存在不重复写;每次启动重跑代价极低(只查最近 7 天 + dedupe)。
-    try:
-        from src.modules.automation.tradingagents.operations import backfill_tradingagents_suggestions
-        backfill_tradingagents_suggestions(days=7)
-    except Exception as e:
-        logger.warning(f"TradingAgents 建议回填失败,跳过: {e}")
+    from src.platform.compliance import Feature, is_feature_enabled
+
+    if is_feature_enabled(Feature.SUGGESTION_POOL):
+        try:
+            from src.modules.automation.tradingagents.operations import backfill_tradingagents_suggestions
+            backfill_tradingagents_suggestions(days=7)
+        except Exception as e:
+            logger.warning(f"TradingAgents 建议回填失败,跳过: {e}")
 
     # 后台刷新股票列表缓存
     import threading
@@ -1539,16 +1549,19 @@ async def lifespan(app):
         logger.info("价格提醒调度器已启动")
     except Exception as e:
         logger.error(f"价格提醒调度器启动失败: {e}")
-    try:
-        settings = Settings()
-        paper_trading_scheduler = PaperTradingScheduler(
-            timezone=settings.app_timezone,
-            interval_seconds=60,
-        )
-        paper_trading_scheduler.start()
-        logger.info("模拟盘调度器已启动")
-    except Exception as e:
-        logger.error(f"模拟盘调度器启动失败: {e}")
+    if not is_feature_enabled(Feature.AI_PAPER_TRADING):
+        logger.info("AI-driven paper trading is disabled in research-only mode")
+    else:
+        try:
+            settings = Settings()
+            paper_trading_scheduler = PaperTradingScheduler(
+                timezone=settings.app_timezone,
+                interval_seconds=60,
+            )
+            paper_trading_scheduler.start()
+            logger.info("模拟盘调度器已启动")
+        except Exception as e:
+            logger.error(f"模拟盘调度器启动失败: {e}")
     try:
         settings = Settings()
         context_maintenance_scheduler = ContextMaintenanceScheduler(

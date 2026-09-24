@@ -11,6 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from src.modules.administration.api import (
     auth,
     channels,
+    compliance,
     datasources,
     health,
     logs,
@@ -44,6 +45,8 @@ from src.modules.research.api import (
     recommendations,
 )
 from src.modules.strategy.api import factors
+from src.platform.compliance import Feature, is_feature_enabled
+from src.platform.compliance.http import feature_gate
 from src.web.response import ResponseWrapperMiddleware
 
 app = FastAPI(
@@ -65,6 +68,8 @@ app.add_middleware(
 app.include_router(auth.router, prefix="/api/auth", tags=["auth"])
 # 市场指数（公共数据，无需登录）
 app.include_router(market.router, prefix="/api/market", tags=["market"])
+# Compliance status and disclaimer (status is public; /ack checks login itself)
+app.include_router(compliance.router, prefix="/api/compliance", tags=["compliance"])
 
 # 需要登录的路由
 protected = [Depends(get_current_user)]
@@ -117,7 +122,7 @@ app.include_router(
     evaluations.router,
     prefix="/api/evaluations",
     tags=["evaluations"],
-    dependencies=protected,
+    dependencies=[*protected, Depends(feature_gate(Feature.EVALUATIONS))],
 )
 app.include_router(
     news.router, prefix="/api/news", tags=["news"], dependencies=protected
@@ -126,7 +131,7 @@ app.include_router(
     suggestions.router,
     prefix="/api/suggestions",
     tags=["suggestions"],
-    dependencies=protected,
+    dependencies=[*protected, Depends(feature_gate(Feature.SUGGESTION_POOL))],
 )
 app.include_router(
     templates.router,
@@ -138,7 +143,7 @@ app.include_router(
     feedback.router,
     prefix="/api/feedback",
     tags=["feedback"],
-    dependencies=protected,
+    dependencies=[*protected, Depends(feature_gate(Feature.SUGGESTION_POOL))],
 )
 
 app.include_router(
@@ -157,7 +162,7 @@ app.include_router(
     recommendations.router,
     prefix="/api/recommendations",
     tags=["recommendations"],
-    dependencies=protected,
+    dependencies=[*protected, Depends(feature_gate(Feature.ENTRY_CANDIDATES))],
 )
 app.include_router(
     dashboard.router,
@@ -169,7 +174,7 @@ app.include_router(
     factors.router,
     prefix="/api/factors",
     tags=["factors"],
-    dependencies=protected,
+    dependencies=[*protected, Depends(feature_gate(Feature.STRATEGY_SIGNALS))],
 )
 app.include_router(
     health.router,
@@ -198,20 +203,18 @@ app.include_router(
 
 
 app.router.on_startup.append(assistant_task_runner.recover_pending)
-# PAT 管理(需登录):创建/列出/吊销 MCP 用的个人访问令牌
-app.include_router(
-    pats.router, prefix="/api/pats", tags=["pats"], dependencies=protected
-)
-# MCP Server:挂在顶层 /mcp(不在 /api/ 下,绕开响应包装中间件保证 JSON-RPC 原样),
-# 自带 PAT 鉴权,不走登录 JWT
-app.include_router(mcp.router, prefix="/mcp", tags=["mcp"])
+MCP_ENABLED = is_feature_enabled(Feature.MCP_SERVER)
+
+if MCP_ENABLED:
+    # PAT 管理(需登录):创建/列出/吊销 MCP 用的个人访问令牌
+    app.include_router(
+        pats.router, prefix="/api/pats", tags=["pats"], dependencies=protected
+    )
+    # MCP Server:挂在顶层 /mcp(不在 /api/ 下,绕开响应包装中间件保证 JSON-RPC 原样),
+    # 自带 PAT 鉴权,不走登录 JWT。Disabled by default in the India fork (MCP_ENABLED).
+    app.include_router(mcp.router, prefix="/mcp", tags=["mcp"])
 
 
-@app.get("/.well-known/oauth-protected-resource", include_in_schema=False)
-@app.get(
-    "/.well-known/oauth-protected-resource/{_resource_path:path}",
-    include_in_schema=False,
-)
 def oauth_protected_resource_metadata(request: Request, _resource_path: str = ""):
     """RFC 9728 元数据:MCP 客户端握手前会探测此端点决定鉴权方式。
 
@@ -225,6 +228,16 @@ def oauth_protected_resource_metadata(request: Request, _resource_path: str = ""
         "authorization_servers": [],
         "bearer_methods_supported": ["header"],
     }
+
+
+if MCP_ENABLED:
+    app.get("/.well-known/oauth-protected-resource", include_in_schema=False)(
+        oauth_protected_resource_metadata
+    )
+    app.get(
+        "/.well-known/oauth-protected-resource/{_resource_path:path}",
+        include_in_schema=False,
+    )(oauth_protected_resource_metadata)
 
 
 @app.get("/api/health")

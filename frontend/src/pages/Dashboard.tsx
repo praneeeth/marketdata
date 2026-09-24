@@ -102,7 +102,7 @@ const MARKET_BAR_CLS: Record<string, string> = {
 export default function DashboardPage() {
   const navigate = useNavigate()
   // Ranked "opportunities" are strategy signals: hidden in research-only mode (ADR-004).
-  const { isEnabled } = useCompliance()
+  const { isEnabled, disclaimerAcknowledged } = useCompliance()
   const strategyEnabled = isEnabled('strategy_signals')
   const [loading, setLoading] = useState(true)
   const [indices, setIndices] = useState<DashboardMarketIndex[]>([])
@@ -197,8 +197,12 @@ export default function DashboardPage() {
 
   useEffect(() => {
     load()
-    if (!localStorage.getItem('panwatch_onboarding_completed')) setShowOnboarding(true)
   }, [load])
+
+  // Wait for the disclaimer: both are modal, and the guide would cover the consent checkbox.
+  useEffect(() => {
+    if (disclaimerAcknowledged && !localStorage.getItem('panwatch_onboarding_completed')) setShowOnboarding(true)
+  }, [disclaimerAcknowledged])
 
   const handleOnboardingComplete = () => {
     localStorage.setItem('panwatch_onboarding_completed', 'true')

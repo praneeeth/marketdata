@@ -1,5 +1,4 @@
-import { useEffect, useState } from 'react'
-import { complianceApi } from '@panwatch/api/compliance'
+import { useState } from 'react'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@panwatch/base-ui/components/ui/dialog'
 import { Button } from '@panwatch/base-ui/components/ui/button'
 import { useCompliance } from '@/hooks/use-compliance'
@@ -9,26 +8,11 @@ import { useCompliance } from '@/hooks/use-compliance'
  * Shown at onboarding and again whenever the disclaimer text changes.
  */
 export default function DisclaimerConsentDialog() {
-  const { status } = useCompliance()
-  const [open, setOpen] = useState(false)
+  const { status, disclaimerAcknowledged, ackLoaded, acknowledgeDisclaimer } = useCompliance()
+  const open = ackLoaded && !disclaimerAcknowledged
   const [checked, setChecked] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
-
-  useEffect(() => {
-    let active = true
-    complianceApi
-      .getAck()
-      .then((ack) => {
-        if (active) setOpen(ack.required)
-      })
-      .catch(() => {
-        if (active) setOpen(true)
-      })
-    return () => {
-      active = false
-    }
-  }, [])
 
   const version = status?.disclaimer.version
   const longText = status?.disclaimer.long
@@ -38,8 +22,7 @@ export default function DisclaimerConsentDialog() {
     setSaving(true)
     setError('')
     try {
-      await complianceApi.acknowledge(version)
-      setOpen(false)
+      await acknowledgeDisclaimer(version)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not save your acknowledgement. Please try again.')
     } finally {

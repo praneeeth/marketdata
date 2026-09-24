@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import gzip
+import json
 from datetime import date, datetime
 
 import httpx
 from marketdata.india import IST, Exchange, InstrumentRef
+from marketdata.india import angel as angel_mod
 from marketdata.india import kite as kite_mod
 from marketdata.india import upstox as upstox_mod
 
@@ -110,4 +112,60 @@ UPSTOX = Harness(
     expected_last_price="1412.95",
 )
 
-ALL = [KITE, UPSTOX]
+# --- Angel One ---------------------------------------------------------------------------
+
+
+def _angel_quote(request: httpx.Request) -> httpx.Response:
+    wanted = {
+        (ex, tok)
+        for ex, toks in json.loads(request.content)["exchangeTokens"].items()
+        for tok in toks
+    }
+    body = fixture_json("angel", "quote.json")
+    body["data"]["fetched"] = [
+        r for r in body["data"]["fetched"] if (r["exchange"], r["symbolToken"]) in wanted
+    ]
+    return httpx.Response(200, json=body)
+
+
+def angel_routes(router: Router) -> None:
+    router.add("POST", "/rest/secure/angelbroking/market/v1/quote/", _angel_quote)
+    router.json(
+        "POST",
+        "/rest/secure/angelbroking/historical/v1/getCandleData",
+        fixture_json("angel", "candles.json"),
+    )
+    router.json(
+        "GET",
+        "/OpenAPI_File/files/OpenAPIScripMaster.json",
+        fixture_json("angel", "scrip_master.json"),
+    )
+    router.json(
+        "POST",
+        "/rest/auth/angelbroking/user/v1/loginByPassword",
+        fixture_json("angel", "login.json"),
+    )
+
+
+def angel_expired(router: Router) -> None:
+    # SmartAPI reports token errors inside an HTTP 200 envelope.
+    router.fallback = lambda _r: httpx.Response(200, json=fixture_json("angel", "error_token.json"))
+
+
+ANGEL = Harness(
+    name="angel",
+    make=lambda router: angel_mod.AngelProvider(
+        router.transport("angel", angel_mod.API_BASE, angel_mod._error_mapper)
+    ),
+    install_routes=angel_routes,
+    install_expired=angel_expired,
+    equity=InstrumentRef(Exchange.NSE, "INFY").with_id("angel", "1594"),
+    unresolved=InstrumentRef(Exchange.NSE, "INFY"),
+    underlying=InstrumentRef(Exchange.NSE, "NIFTY 50").with_id("angel", "99926000"),
+    expiry=date(2026, 10, 27),
+    start=datetime(2026, 9, 23, 9, 15, tzinfo=IST),
+    end=datetime(2026, 9, 23, 15, 30, tzinfo=IST),
+    expected_last_price="1412.95",
+)
+
+ALL = [KITE, UPSTOX, ANGEL]

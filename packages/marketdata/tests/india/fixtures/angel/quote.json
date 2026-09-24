@@ -1,0 +1,38 @@
+{
+  "status": true,
+  "message": "SUCCESS",
+  "errorcode": "",
+  "data": {
+    "fetched": [
+      {
+        "exchange": "NSE",
+        "tradingSymbol": "INFY-EQ",
+        "symbolToken": "1594",
+        "ltp": 1412.95,
+        "open": 1396.0,
+        "high": 1421.75,
+        "low": 1395.55,
+        "close": 1389.65,
+        "lastTradeQty": 5,
+        "exchFeedTime": "23-Sep-2026 15:45:56",
+        "exchTradeTime": "23-Sep-2026 15:29:59",
+        "netChange": 23.3,
+        "percentChange": 1.68,
+        "avgPrice": 1412.47,
+        "tradeVolume": 7360198,
+        "opnInterest": 0,
+        "lowerCircuit": 1250.7,
+        "upperCircuit": 1528.6,
+        "totBuyQuan": 0,
+        "totSellQuan": 5191,
+        "52WeekLow": 1307.0,
+        "52WeekHigh": 2006.45,
+        "depth": {"buy": [], "sell": []}
+      },
+      {"exchange": "NSE", "tradingSymbol": "Nifty 50", "symbolToken": "99926000", "ltp": 25010.5, "close": 24980.0, "netChange": 30.5},
+      {"exchange": "NFO", "tradingSymbol": "NIFTY27OCT2625000CE", "symbolToken": "43510", "ltp": 310.25, "close": 305.0, "netChange": 5.25, "tradeVolume": 120000, "opnInterest": 450000},
+      {"exchange": "NFO", "tradingSymbol": "NIFTY27OCT2625000PE", "symbolToken": "43511", "ltp": 280.5, "close": 288.0, "netChange": -7.5, "tradeVolume": 98000, "opnInterest": 510000}
+    ],
+    "unfetched": []
+  }
+}

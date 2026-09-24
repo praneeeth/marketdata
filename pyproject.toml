@@ -3,9 +3,60 @@
 # 运行单个文件：        python -m pytest tests/test_notify_policy.py -v
 # 实际发送通知：        python -m pytest tests/ -v --notify （默认不发通知）
 # 安装 pre-push hook： bash scripts/install-hooks.sh
+#
+# India fork: lint, type and coverage checks apply to new code only (see
+# docs/india-fork/PLAN.md §4.1). Add new modules to the lists below as they are written.
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+include = [
+    "src/platform/compliance/**/*.py",
+    "src/modules/administration/api/compliance.py",
+    "src/modules/automation/research_output.py",
+    "src/modules/automation/tradingagents/research_graph.py",
+    "tests/compliance/**/*.py",
+]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "BLE", "S", "SIM", "RUF", "DTZ", "C4", "PT"]
+ignore = [
+    "RUF001",  # ambiguous unicode: the rules intentionally contain ₹ and CJK text
+    "RUF003",
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**/*.py" = ["S101", "S105", "S106"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+files = [
+    "src/platform/compliance",
+    "src/modules/administration/api/compliance.py",
+    "src/modules/automation/research_output.py",
+    "src/modules/automation/tradingagents/research_graph.py",
+]
+follow_imports = "silent"
+ignore_missing_imports = true
+warn_unused_ignores = false
+
+[tool.coverage.run]
+branch = true
+source = [
+    "src/platform/compliance",
+    "src/modules/administration/api/compliance.py",
+    "src/modules/automation/research_output.py",
+    "src/modules/automation/tradingagents/research_graph.py",
+]
+
+[tool.coverage.report]
+fail_under = 90
+show_missing = true
+skip_covered = true

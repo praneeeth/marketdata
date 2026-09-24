@@ -27,6 +27,7 @@ from src.modules.assistant import chat_api
 from src.modules.assistant.task_runner import assistant_task_runner
 from src.modules.automation.api import agents, suggestions, templates
 from src.modules.market.api import (
+    brokers,
     discovery,
     klines,
     market,
@@ -70,6 +71,8 @@ app.include_router(auth.router, prefix="/api/auth", tags=["auth"])
 app.include_router(market.router, prefix="/api/market", tags=["market"])
 # Compliance status and disclaimer (status is public; /ack checks login itself)
 app.include_router(compliance.router, prefix="/api/compliance", tags=["compliance"])
+# Broker login callbacks: the broker redirects the browser here, protected by the login state.
+app.include_router(brokers.callback_router, prefix="/api/brokers", tags=["brokers"])
 
 # 需要登录的路由
 protected = [Depends(get_current_user)]
@@ -78,6 +81,9 @@ app.include_router(
 )
 app.include_router(
     quotes.router, prefix="/api/quotes", tags=["quotes"], dependencies=protected
+)
+app.include_router(
+    brokers.router, prefix="/api/brokers", tags=["brokers"], dependencies=protected
 )
 app.include_router(
     klines.router, prefix="/api/klines", tags=["klines"], dependencies=protected

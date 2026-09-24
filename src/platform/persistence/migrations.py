@@ -2012,6 +2012,33 @@ def _m127_compliance_tables(conn: Connection) -> None:
     )
 
 
+def _m128_broker_connections(conn: Connection) -> None:
+    """Per-user broker connections with encrypted credentials (India fork, Phase 2)."""
+    conn.execute(text("""
+        CREATE TABLE IF NOT EXISTS broker_connections (
+            id VARCHAR(32) PRIMARY KEY,
+            user_id VARCHAR(64) NOT NULL DEFAULT 'local',
+            provider VARCHAR(32) NOT NULL,
+            priority INTEGER NOT NULL DEFAULT 0,
+            enabled BOOLEAN NOT NULL DEFAULT 1,
+            credentials_enc TEXT NOT NULL DEFAULT '',
+            session_enc TEXT,
+            session_expires_at DATETIME,
+            status VARCHAR(16) NOT NULL DEFAULT 'disconnected',
+            last_error VARCHAR(300) NOT NULL DEFAULT '',
+            key_hint VARCHAR(32) NOT NULL DEFAULT '',
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            CONSTRAINT uq_broker_connection_user_provider UNIQUE (user_id, provider)
+        )
+    """))
+    _create_index_if_missing(
+        conn,
+        "ix_broker_connection_user",
+        "CREATE INDEX ix_broker_connection_user ON broker_connections(user_id)",
+    )
+
+
 MIGRATIONS: tuple[Migration, ...] = (
     Migration(101, "agent_config_kind_and_visibility", _m101_agent_config_kind),
     Migration(102, "backfill_agent_kind_data", _m102_backfill_agent_kind),
@@ -2040,6 +2067,7 @@ MIGRATIONS: tuple[Migration, ...] = (
     Migration(125, "assistant_task_protocol", _m125_assistant_task_protocol),
     Migration(126, "assistant_task_events", _m126_assistant_task_events),
     Migration(127, "compliance_tables", _m127_compliance_tables),
+    Migration(128, "broker_connections", _m128_broker_connections),
 )
 
 

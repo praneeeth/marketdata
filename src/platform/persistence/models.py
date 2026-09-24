@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from sqlalchemy import (
     JSON,
     Boolean,
@@ -11,7 +13,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
 )
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
 
 from src.platform.persistence.database import Base
@@ -1377,3 +1379,37 @@ class RAReviewItem(Base):
     published_at = Column(DateTime, nullable=True)
     meta = Column(JSON, default=dict)
     created_at = Column(DateTime, server_default=func.now())
+
+
+class BrokerConnection(Base):
+    """One user's connection to one market data broker (India fork, Phase 2).
+
+    ``credentials_enc`` (API key/secret, client code, PIN) and ``session_enc`` (access
+    token) are CredentialVault tokens bound to ``user_id|id|field``; they are never
+    returned by the API. ``key_hint`` is a masked hint for the UI. ``session_expires_at``
+    is stored as naive UTC like the rest of this schema. ``user_id`` is "local" until
+    multi-user auth arrives in Phase 5. Typed with ``Mapped`` so mypy --strict can check
+    the code that uses it.
+    """
+
+    __tablename__ = "broker_connections"
+    __table_args__ = (
+        UniqueConstraint("user_id", "provider", name="uq_broker_connection_user_provider"),
+        Index("ix_broker_connection_user", "user_id"),
+    )
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True)
+    user_id: Mapped[str] = mapped_column(String(64), nullable=False, default="local")
+    provider: Mapped[str] = mapped_column(String(32), nullable=False)
+    priority: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    credentials_enc: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    session_enc: Mapped[str | None] = mapped_column(Text, nullable=True)
+    session_expires_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="disconnected")
+    last_error: Mapped[str] = mapped_column(String(300), nullable=False, default="")
+    key_hint: Mapped[str] = mapped_column(String(32), nullable=False, default="")
+    created_at: Mapped[datetime | None] = mapped_column(DateTime, server_default=func.now())
+    updated_at: Mapped[datetime | None] = mapped_column(
+        DateTime, server_default=func.now(), onupdate=func.now()
+    )

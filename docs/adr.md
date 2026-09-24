@@ -239,3 +239,49 @@ and open questions live in [`docs/india-fork/PLAN.md`](india-fork/PLAN.md).
   - The frontend has no lint step; adding ESLint needs approval.
   - Node 24 (upstream's pinned engine) and Docker builds were not exercised in the
     sandbox. CI is the first run on Node 24.
+
+---
+
+## ADR-007: India market data layer with bring-your-own-key brokers
+
+- **Status:** accepted (2026-09-25)
+- **Context:** Upstream fetches data by scraping Chinese sites, which is unauthenticated
+  and shared across users. The India fork uses the user's own broker account (Kite,
+  Upstox, Angel One), with no central redistribution (Q9, Q10). Broker APIs need a
+  per-user login, their sessions expire every day, and each broker spells instruments
+  differently.
+- **Decision:**
+  - **A new `marketdata.india` subpackage** sits beside the upstream vendors rather than
+    retrofitting them. It provides typed data (`Decimal` prices, timezone-aware
+    timestamps) and a read-only `MarketDataProvider` protocol with no order methods.
+  - **Adapters call REST over `httpx`, with no broker SDKs.** A shared transport handles
+    per-credential throttling, retries and typed errors (`SessionExpired`, `RateLimited`,
+    `ProviderUnavailable`, `BadResponse`, `NotSupported`, `InstrumentNotResolved`).
+    Exceptions never carry headers, bodies or credentials.
+  - **Sessions.** `ProviderSession` and `Secret` never render or pickle a secret.
+  - **Contract suite.** One suite runs every adapter against fixtures written by hand
+    from each provider's docs; they are not recordings of live traffic.
+  - **Cross-provider identity.** Derivatives are keyed by their contract terms
+    (`NFO:NIFTY:2026-10-27:25000:CE`), because brokers spell symbols differently.
+  - **Option chains.** For Kite and Angel they are built from the instrument master plus
+    quotes; Upstox has a native endpoint.
+  - **`IndiaMarketData` service.** It fails over only among one user's sessions and keys
+    every cache entry, including instrument masters, by credential ID. Expired sessions
+    are skipped and reported through `needs_reconnect`.
+  - **Credentials at rest.** `CredentialVault` uses AES-256-GCM with key IDs for
+    rotation. The associated data binds each value to `user|connection|field`.
+    `broker_connections` stores only vault tokens plus a masked hint.
+  - **Logins.** Kite (request token) and Upstox (OAuth code) use single-use, 10-minute
+    state tokens on public callbacks. Angel One takes a TOTP typed at login, and no seed
+    is stored.
+  - **yfinance** is development-only. It is enabled only by `ALLOW_UNOFFICIAL_DATA=true`
+    plus an explicitly non-production `APP_ENV`, and everything it returns is tagged
+    `UNOFFICIAL_DELAYED`.
+- **Consequences:**
+  - None of the adapters has been exercised against live broker APIs. Endpoints, field
+    names, limits and token expiry times are marked *(verify)* in code.
+  - Each user pays for their own broker data plan (Kite's is paid).
+  - A Kite or Upstox session lasts one day, so features must degrade and prompt
+    "reconnect".
+  - The upstream CN/HK/US vendors stay until the removal step. Host features still read
+    from them until they are switched to `IndiaMarketData`.

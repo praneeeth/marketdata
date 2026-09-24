@@ -863,6 +863,49 @@ remove? → **Remove share cards; keep PDF.**
   - Node 24.
   - Live data vendors.
 
+### 8.2 Phase 2 report (in progress)
+
+Branch `phase-2/india-market-data`, stacked on the Phase 1 branch.
+
+- **Done:**
+  - `marketdata.india` core: typed data, the read-only provider protocol,
+    secret-safe sessions, and a transport with per-credential throttling and
+    typed errors.
+  - Adapters for Kite Connect v3, Upstox and Angel One SmartAPI, plus the dev-only
+    yfinance adapter. All pass one contract suite.
+  - `IndiaMarketData`: per-user failover, credential-keyed caches and per-credential
+    instrument masters (Q9).
+  - `CredentialVault` (AES-256-GCM, key rotation, row-bound ciphertext).
+  - The `broker_connections` table (migration 128) and `/api/brokers`, with the Kite
+    and Upstox redirect logins and the Angel TOTP login.
+  - The English "Broker connections" panel on the Data Sources page.
+  - ADR-007, and new environment variables in `.env.example`.
+- **Tests:**
+
+  | Suite | Result |
+  | --- | --- |
+  | Backend | 1,127 passed, 3 skipped |
+  | Coverage on new code | 98% |
+  | `packages/marketdata` | 346 passed, 4 skipped |
+  | Frontend | vitest 75 passed; `tsc -b` and build clean |
+  | ruff, ruff format, mypy `--strict` | clean |
+
+- **Still to do in Phase 2:**
+  - Switch host features (quotes, K-lines, watchlist, agents, TradingAgents routing) from
+    the CN vendors to `IndiaMarketData`. Agents degrade with "broker session expired,
+    reconnect".
+  - Remove the Chinese vendors, akshare and efinance, and the China-only features, once
+    host features use the India layer.
+- **Found during Phase 2:**
+  - `tests/test_sse_endpoints.py` (log SSE tail) is flaky upstream. It failed 2 of 8
+    runs on the unchanged Phase 1 code.
+  - The contract suite caught Upstox listing indices with lot size 0. This is now
+    normalised to 1, as Kite does.
+- **Not verified in the sandbox:**
+  - Every live broker call: endpoints, field names and precision, rate limits,
+    instrument-master sizes, OAuth redirects and token expiry times. All are marked
+    *(verify)* in code.
+
 ---
 
 ## 9. Decision log
@@ -906,3 +949,12 @@ segment.
 
 **Merge that PR with "Create a merge commit", not squash.** A squash merge would collapse
 the imported upstream history that option A exists to preserve.
+
+**2026-09-24 (Phase 2 start).** Owner decisions:
+
+| Topic | Decision | Status |
+| --- | --- | --- |
+| `cryptography` dependency | Pinned directly for the credential vault | decided |
+| Phase 2 branch | `phase-2/india-market-data`, stacked on the Phase 1 branch; separate PR | decided |
+| English translation (Phase 4) | Starts right after Phase 2, UI first, because Phase 2 deletes much of the Chinese code | decided |
+| Q17 product name | Still undecided; the translation uses a placeholder | **open** |

@@ -1,0 +1,5 @@
+# Development and CI tooling (India fork, approved in docs/india-fork/PLAN.md §9, Q16).
+ruff==0.16.8
+mypy==2.3.1
+pytest-cov==7.1.0
+hypothesis==6.168.1

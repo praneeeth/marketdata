@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 
+from src.platform.security.secrets import mask_config, merge_config
 from src.platform.persistence.database import get_db
 from src.platform.persistence.models import NotifyChannel
 from src.platform.notifications.notifier import NotifierManager, CHANNEL_TYPES
@@ -37,9 +38,15 @@ class ChannelResponse(BaseModel):
         from_attributes = True
 
 
+def _channel_response(channel: NotifyChannel) -> ChannelResponse:
+    response = ChannelResponse.model_validate(channel)
+    response.config = mask_config(channel.config or {})
+    return response
+
+
 @router.get("", response_model=list[ChannelResponse])
 def list_channels(db: Session = Depends(get_db)):
-    return db.query(NotifyChannel).order_by(NotifyChannel.id).all()
+    return [_channel_response(c) for c in db.query(NotifyChannel).order_by(NotifyChannel.id).all()]
 
 
 @router.get("/types")
@@ -56,7 +63,7 @@ def create_channel(body: ChannelCreate, db: Session = Depends(get_db)):
     db.add(channel)
     db.commit()
     db.refresh(channel)
-    return channel
+    return _channel_response(channel)
 
 
 @router.put("/{channel_id}", response_model=ChannelResponse)
@@ -70,11 +77,13 @@ def update_channel(channel_id: int, body: ChannelUpdate, db: Session = Depends(g
         db.query(NotifyChannel).update({"is_default": False})
 
     for key, value in data.items():
+        if key == "config" and isinstance(value, dict):
+            value = merge_config(channel.config, value)
         setattr(channel, key, value)
 
     db.commit()
     db.refresh(channel)
-    return channel
+    return _channel_response(channel)
 
 
 @router.delete("/{channel_id}")

@@ -1592,13 +1592,12 @@ if os.path.exists(static_dir):
     from fastapi.staticfiles import StaticFiles
     from fastapi.responses import FileResponse
 
+    from src.platform.security.static_files import resolve_static_file
+
     # SPA 路由：所有非 API 请求返回 index.html
     @app.get("/{path:path}")
     async def serve_spa(path: str):
-        file_path = os.path.join(static_dir, path)
-        if os.path.isfile(file_path):
-            return FileResponse(file_path)
-        return FileResponse(os.path.join(static_dir, "index.html"))
+        return FileResponse(resolve_static_file(static_dir, path))
 
     logger.info(f"静态文件服务已启用: {static_dir}")
 

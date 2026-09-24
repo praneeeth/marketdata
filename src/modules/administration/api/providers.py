@@ -5,6 +5,7 @@ from pydantic import BaseModel
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
+from src.platform.security.secrets import keep_unless_masked, mask_secret
 from src.platform.ai.ai_client import AIClient
 from src.platform.persistence.database import get_db
 from src.platform.persistence.models import AIModel, AIService
@@ -60,7 +61,7 @@ def _service_to_response(service: AIService) -> dict:
         "id": service.id,
         "name": service.name,
         "base_url": service.base_url,
-        "api_key": service.api_key or "",
+        "api_key": mask_secret(service.api_key),
         "models": [
             {
                 "id": m.id,
@@ -90,6 +91,8 @@ def update_service(service_id: int, body: ServiceUpdate, db: Session = Depends(g
         raise HTTPException(404, "AI 服务商不存在")
 
     for key, value in body.model_dump(exclude_unset=True).items():
+        if key == "api_key":
+            value = keep_unless_masked(service.api_key, value)
         setattr(service, key, value)
 
     db.commit()

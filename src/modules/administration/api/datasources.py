@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 
+from src.platform.security.secrets import mask_config, merge_config
 from src.platform.persistence.database import get_db
 from src.platform.persistence.models import DataSource
 
@@ -107,7 +108,7 @@ def _to_response(source: DataSource, health_map: dict | None = None) -> dict:
         "type": source.type,
         "type_label": TYPE_LABELS.get(source.type, source.type),
         "provider": source.provider,
-        "config": source.config or {},
+        "config": mask_config(source.config or {}),
         "enabled": source.enabled,
         "priority": source.priority,
         "supports_batch": source.supports_batch or False,
@@ -185,6 +186,8 @@ def update_datasource(
         raise HTTPException(status_code=404, detail="数据源不存在")
 
     for key, value in data.model_dump(exclude_unset=True).items():
+        if key == "config" and isinstance(value, dict):
+            value = merge_config(source.config, value)
         setattr(source, key, value)
 
     db.commit()

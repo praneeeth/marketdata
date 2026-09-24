@@ -1,0 +1,55 @@
+{
+  "status": "success",
+  "data": {
+    "NSE:INFY": {
+      "instrument_token": 408065,
+      "timestamp": "2026-09-23 15:45:56",
+      "last_trade_time": "2026-09-23 15:29:59",
+      "last_price": 1412.95,
+      "last_quantity": 5,
+      "buy_quantity": 0,
+      "sell_quantity": 5191,
+      "volume": 7360198,
+      "average_price": 1412.47,
+      "oi": 0,
+      "oi_day_high": 0,
+      "oi_day_low": 0,
+      "net_change": 0,
+      "lower_circuit_limit": 1250.7,
+      "upper_circuit_limit": 1528.6,
+      "ohlc": {"open": 1396, "high": 1421.75, "low": 1395.55, "close": 1389.65},
+      "depth": {"buy": [], "sell": []}
+    },
+    "NSE:NIFTY 50": {
+      "instrument_token": 256265,
+      "timestamp": "2026-09-23 15:45:56",
+      "last_price": 25010.5,
+      "net_change": 0,
+      "ohlc": {"open": 24950, "high": 25050, "low": 24900, "close": 24980}
+    },
+    "NFO:NIFTY26OCT25000CE": {
+      "instrument_token": 9000001,
+      "timestamp": "2026-09-23 15:45:56",
+      "last_price": 310.25,
+      "volume": 120000,
+      "oi": 450000,
+      "ohlc": {"open": 300, "high": 320, "low": 295, "close": 305}
+    },
+    "NFO:NIFTY26OCT25000PE": {
+      "instrument_token": 9000002,
+      "timestamp": "2026-09-23 15:45:56",
+      "last_price": 280.5,
+      "volume": 98000,
+      "oi": 510000,
+      "ohlc": {"open": 290, "high": 300, "low": 270, "close": 288}
+    },
+    "NFO:NIFTY26OCT25100CE": {
+      "instrument_token": 9000003,
+      "timestamp": "2026-09-23 15:45:56",
+      "last_price": 255.0,
+      "volume": 70000,
+      "oi": 300000,
+      "ohlc": {"open": 250, "high": 260, "low": 240, "close": 249}
+    }
+  }
+}

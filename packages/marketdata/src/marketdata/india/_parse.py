@@ -31,6 +31,15 @@ def req_dec(provider: str, value: Any, field: str) -> Decimal:
     return result
 
 
+CENT = Decimal("0.01")
+
+
+def pct_change(change: Decimal | None, base: Decimal | None) -> Decimal | None:
+    if change is None or base is None or base == 0:
+        return None
+    return (change / base * 100).quantize(CENT)
+
+
 def integer(value: Any) -> int | None:
     d = dec(value)
     if d is None or d != d.to_integral_value():

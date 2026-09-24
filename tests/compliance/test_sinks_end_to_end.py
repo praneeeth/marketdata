@@ -224,6 +224,61 @@ def test_assistant_messages_are_guarded_when_persisted() -> None:
     assert user.content == "Should I buy?"
 
 
+def test_dashboard_overview_has_no_strategy_calls(monkeypatch: pytest.MonkeyPatch) -> None:
+    from fastapi.testclient import TestClient
+
+    from src.bootstrap.application import app
+    from src.modules.portfolio.api import dashboard
+
+    signal = {
+        "stock_symbol": "INFY",
+        "stock_market": "IN",
+        "action": "buy",
+        "action_label": "Buy",
+        "entry_low": 1450.0,
+        "entry_high": 1480.0,
+        "rank_score": 90.0,
+        "status": "active",
+        "risk_level": "high",
+        "strategy_code": "breakout",
+    }
+    monkeypatch.setattr(
+        dashboard,
+        "get_strategy_stats",
+        lambda **_: {
+            "coverage": {"snapshot_date": "2026-09-24"},
+            "by_strategy": [{"horizon_days": 3, "sample_size": 10, "wins": 7}],
+        },
+    )
+    monkeypatch.setattr(dashboard, "list_strategy_signals", lambda **_: {"items": [signal]})
+
+    data = TestClient(app).get("/api/dashboard/overview").json()["data"]
+    assert data["action_center"] == {"opportunities": [], "risk_items": []}
+    assert data["kpis"]["win_rate_3d"] is None
+    assert data["kpis"]["executable_opportunities"] == 0
+    assert data["strategy"]["top_by_strategy"] == []
+
+
+def test_dashboard_brief_is_guarded_on_read() -> None:
+    from src.modules.portfolio.api.dashboard import get_brief
+    from src.platform.persistence.models import AnalysisHistory
+
+    session = _memory_sessions()()
+    session.add(
+        AnalysisHistory(
+            agent_name="daily_report",
+            stock_symbol="*",
+            analysis_date="2026-09-24",
+            title="Buy these three stocks",
+            content=ADVICE,
+        )
+    )
+    session.commit()
+    brief = get_brief(type="eod", db=session)
+    assert "Buy" not in brief["title"]
+    _assert_clean(brief["content"])
+
+
 # ------------------------------------------------------------ TradingAgents
 
 

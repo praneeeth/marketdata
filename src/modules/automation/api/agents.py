@@ -18,6 +18,7 @@ from src.platform.compliance import (
     is_feature_enabled,
     sanitize_payload,
 )
+from src.platform.compliance.http import feature_gate
 from src.platform.persistence.database import get_db
 from src.platform.persistence.models import AgentConfig, AgentRun, LogEntry
 from src.platform.scheduling.schedule_parser import preview_schedule
@@ -608,7 +609,11 @@ def export_tradingagents_analysis_pdf(
     )
 
 
-@router.get("/tradingagents/history-comparison")
+@router.get(
+    "/tradingagents/history-comparison",
+    # Past buy/sell decisions scored against later returns are prediction tracking.
+    dependencies=[Depends(feature_gate(Feature.TRADINGAGENTS_RATING))],
+)
 def get_tradingagents_history_comparison(
     stock_symbol: str = Query(..., description="股票代码,如 300418"),
     market: str = Query("CN", description="市场:CN/US/HK"),

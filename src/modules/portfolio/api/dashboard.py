@@ -12,7 +12,7 @@ from pydantic import BaseModel
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from src.platform.compliance import ensure_guarded
+from src.platform.compliance import Feature, ensure_guarded, guard_title, is_feature_enabled
 from src.platform.runtime.config import Settings
 from src.modules.strategy.strategy_engine import get_strategy_stats, list_strategy_signals
 from src.platform.ai.ai_failover import get_configured_failover_client
@@ -136,7 +136,7 @@ def _load_latest_insights(db: Session) -> list[dict]:
                 "agent_name": agent_name,
                 "agent_label": label,
                 "analysis_date": row.analysis_date or "",
-                "title": row.title or "",
+                "title": guard_title(row.title or "", surface="insight_title"),
                 "updated_at": _format_datetime(row.updated_at),
             }
         )
@@ -331,6 +331,11 @@ def get_dashboard_overview(
         or 0
     )
 
+    if not is_feature_enabled(Feature.STRATEGY_SIGNALS):
+        # Research-only: no strategy signals, opportunities or hit-rate claims (ADR-004).
+        action_items, risk_items, win_rate_3d, sample_3d = [], [], None, 0
+        stats = {"coverage": {}, "factor_stats": {}, "by_market": [], "by_strategy": []}
+
     top_strategy_rows = sorted(
         list(stats.get("by_strategy") or []),
         key=lambda x: (
@@ -480,8 +485,8 @@ def get_brief(type: str = Query("eod", description="premarket | eod"), db: Sessi
     return {
         "type": type,
         "agent_label": label,
-        "title": row.title or "",
-        "content": row.content or "",
+        "title": guard_title(row.title or "", surface="brief_title"),
+        "content": ensure_guarded(row.content or "", surface="brief"),
         "date": row.analysis_date or "",
         "updated_at": _format_datetime(row.updated_at),
     }

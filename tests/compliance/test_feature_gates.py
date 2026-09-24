@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import re
+from pathlib import Path
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -46,12 +49,22 @@ def test_compliance_status_is_public_and_research_only() -> None:
         ("post", "/api/paper-trading/premarket-plan"),
         ("post", "/api/paper-trading/daily-summary"),
         ("post", "/api/insights/add-position-eval"),
+        ("get", "/api/agents/tradingagents/history-comparison?stock_symbol=INFY"),
     ],
 )
 def test_recommendation_routes_are_restricted(method: str, url: str) -> None:
     response = client.get(url) if method == "get" else client.post(url, json={})
     assert response.status_code == 403, url
     assert response.json()["message"].startswith(RESTRICTED_CODE)
+
+
+def test_frontend_fallback_disclaimer_matches_server() -> None:
+    """The text the UI shows before (or without) the status call is the server text."""
+    source = (
+        Path(__file__).resolve().parents[2] / "frontend/packages/api/src/compliance.ts"
+    ).read_text(encoding="utf-8")
+    block = source.split("FALLBACK_SHORT_DISCLAIMER =", 1)[1].split("\n\n", 1)[0]
+    assert "".join(re.findall(r"'([^']*)'", block)) == SHORT_DISCLAIMER
 
 
 def test_simulation_history_stays_readable() -> None:

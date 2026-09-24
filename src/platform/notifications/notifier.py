@@ -6,6 +6,8 @@ import apprise
 import asyncio
 import httpx
 
+from src.platform.compliance import ensure_guarded, guard_title, with_short_disclaimer
+
 logger = logging.getLogger(__name__)
 
 
@@ -122,6 +124,17 @@ _MARKDOWN_CHANNELS = {"wecom", "serverchan", "pushplus", "dingtalk", "lark", "di
 # 不支持 Markdown 的渠道（需要 sanitize）
 _PLAIN_TEXT_CHANNELS = {"telegram", "bark", "pushover"}
 
+# Per-channel body budgets (characters, including the disclaimer). Content is truncated
+# to fit before the disclaimer is appended, so channel-side truncation (e.g. Telegram's
+# 3,900-character cut in _send_telegram) can never remove the disclaimer.
+CHANNEL_TEXT_BUDGETS = {
+    "telegram": 3500,
+    "discord": 1800,
+    "pushover": 900,
+    "bark": 2000,
+}
+DEFAULT_TEXT_BUDGET = 4000
+
 
 def build_apprise_url(channel_type: str, config: dict) -> str | None:
     """
@@ -206,10 +219,12 @@ class NotifierManager:
         self._channel_count = 0
         # 钉钉关键字（可选）：若群机器人启用“关键字”安全校验，则自动附加
         self._dingtalk_keywords: set[str] = set()
+        self._channel_types: set[str] = set()
         self.policy = policy
 
     def add_channel(self, channel_type: str, config: dict):
         """添加通知渠道"""
+        self._channel_types.add(channel_type)
         try:
             if channel_type in _APPRISE_TYPES:
                 url = build_apprise_url(channel_type, config)
@@ -238,6 +253,10 @@ class NotifierManager:
         """向所有已注册渠道发送通知（忽略错误）"""
         await self.notify_with_result(title, content, images)
 
+    def _text_budget(self) -> int:
+        budgets = [CHANNEL_TEXT_BUDGETS.get(t, DEFAULT_TEXT_BUDGET) for t in self._channel_types]
+        return min(budgets) if budgets else DEFAULT_TEXT_BUDGET
+
     async def notify_with_result(
         self,
         title: str,
@@ -246,7 +265,31 @@ class NotifierManager:
         *,
         bypass_quiet_hours: bool = False,
     ) -> dict:
-        """向所有已注册渠道发送通知，返回结果"""
+        """Guard, append the disclaimer, then deliver to every channel.
+
+        This is the only public send path: every notification in the app passes the
+        compliance guard here and carries the short disclaimer (ADR-002).
+        """
+        safe_title = guard_title(title, surface="notification_title")
+        safe_content = ensure_guarded(content, surface="notification")
+        budget = self._text_budget() - len(safe_title)
+        final_content = with_short_disclaimer(safe_content, max_chars=max(budget, 400))
+        return await self._deliver(
+            safe_title,
+            final_content,
+            images,
+            bypass_quiet_hours=bypass_quiet_hours,
+        )
+
+    async def _deliver(
+        self,
+        title: str,
+        content: str,
+        images: list[str] | None = None,
+        *,
+        bypass_quiet_hours: bool = False,
+    ) -> dict:
+        """Transport only. Never call directly; use notify_with_result."""
         if self._channel_count == 0:
             logger.warning("没有可用的通知渠道")
             return {"success": False, "error": "没有可用的通知渠道"}

@@ -341,11 +341,21 @@ def test_assistant_messages_prepend_tool_first_instruction():
 
     assert messages[0].role == "system"
     assert messages[0].content == prompt.ASSISTANT_SYSTEM_PROMPT
-    assert "主动调用工具" in messages[0].content
-    assert "相同工具和参数最多调用一次" in messages[0].content
-    assert "没有成功工具结果时绝不能声称已创建、修改或删除" in messages[0].content
-    assert "历史助手文本可能只是计划或错误声明" in messages[0].content
+    assert "call the provided tools" in messages[0].content
+    assert "at most once per answer" in messages[0].content
+    assert "Never claim that an alert was created, changed or deleted" in messages[0].content
+    assert "Earlier assistant messages may contain plans or mistaken claims" in messages[0].content
+    assert "Never give ratings" in messages[0].content
     assert messages[1].content == "分析 600519"
+
+
+def test_assistant_messages_add_turn_notice_for_advice_requests():
+    prompt = importlib.import_module("src.modules.assistant.prompt")
+    messages = prompt.build_assistant_messages(
+        [assistant_api.ModelMessage(role="user", content="Should I buy Infosys now?")]
+    )
+    assert messages[0].content.startswith(prompt.ASSISTANT_SYSTEM_PROMPT)
+    assert "Compliance notice for this turn" in messages[0].content
 
 
 def test_assistant_stream_surfaces_runtime_timeout_instead_of_saving_empty_reply():

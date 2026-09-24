@@ -4,6 +4,8 @@ from typing import List
 
 from sqlalchemy.orm import Session
 
+from src.platform.compliance import Feature, ensure_guarded
+from src.platform.compliance.http import feature_gate
 from src.platform.marketdata.models import MarketCode
 from src.platform.marketdata.marketdata_client import md_quote_rows
 from src.platform.marketdata.collectors.kline_collector import KlineCollector
@@ -199,7 +201,10 @@ async def _fetch_message_context(db: Session, symbol: str, market: str) -> str:
     return "\n\n".join(parts)
 
 
-@router.post("/add-position-eval")
+@router.post(
+    "/add-position-eval",
+    dependencies=[Depends(feature_gate(Feature.POSITION_CALCULATOR))],
+)
 async def add_position_eval(req: AddPositionEvalRequest, db: Session = Depends(get_db)):
     """加仓快速评估:按服务端口径算摊薄成本 + 让 AI 给 适合/谨慎/不适合 结论。"""
     market = _parse_market(req.market).value
@@ -273,11 +278,18 @@ async def add_position_eval(req: AddPositionEvalRequest, db: Session = Depends(g
 _ANN_TONES = ("利好", "利空", "中性")
 
 
+_ENGLISH_TONES = {"positive": "利好", "negative": "利空", "neutral": "中性"}
+
+
 def _parse_tone(text: str) -> str:
     head = (text or "")[:60]
     for t in _ANN_TONES:
         if t in head:
             return t
+    lowered = head.strip().lower()
+    for english, label in _ENGLISH_TONES.items():
+        if lowered.startswith(english):
+            return label
     return "中性"
 
 
@@ -333,8 +345,12 @@ async def announcement_eval(req: AnnouncementEvalRequest, db: Session = Depends(
         for i, a in enumerate(top)
     )
     system_prompt = (
-        "你是 A股公告解读助手。对每条公告判断对股价的影响倾向(利好/利空/中性)并给一句话理由,"
-        "只依据给定信息、不臆造。严格逐条一行,格式: 序号|利好或利空或中性|一句话"
+        "You summarise company announcements for an educational research service. For each "
+        "announcement, say whether it is positive, negative or neutral for the company's "
+        "business (not for any investor's position) and give a one-sentence factual reason. "
+        "Use only the information given. Never suggest trading, price levels or quantities. "
+        "Write in English. Output exactly one line per announcement in the format: "
+        "number|positive or negative or neutral|one sentence"
     )
     user_content = f"标的 {name}({market}:{req.symbol}) 近期公告:\n{listing}"
     try:
@@ -354,7 +370,14 @@ async def announcement_eval(req: AnnouncementEvalRequest, db: Session = Depends(
     items = []
     for i, a in enumerate(top):
         tone, note = tone_map.get(i, ("中性", ""))
-        items.append({"title": a["title"], "time": a["time"], "tone": tone, "summary": note})
+        items.append(
+            {
+                "title": ensure_guarded(a["title"], surface="announcement_title"),
+                "time": a["time"],
+                "tone": tone,
+                "summary": ensure_guarded(note, surface="announcement_summary"),
+            }
+        )
     result = {"symbol": req.symbol, "market": market, "items": items}
     _ANN_CACHE.set(cache_key, result)
     return result

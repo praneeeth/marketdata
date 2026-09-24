@@ -1965,6 +1965,53 @@ def _m126_assistant_task_events(conn: Connection) -> None:
     )
 
 
+def _m127_compliance_tables(conn: Connection) -> None:
+    """Guard audit events and the RA review queue (India fork, Phase 1)."""
+    conn.execute(text("""
+        CREATE TABLE IF NOT EXISTS compliance_events (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            surface VARCHAR(64) NOT NULL DEFAULT '',
+            status VARCHAR(16) NOT NULL,
+            rule_ids JSON DEFAULT '[]',
+            original_sha256 VARCHAR(64) NOT NULL DEFAULT '',
+            original_text TEXT NOT NULL DEFAULT '',
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+    """))
+    _create_index_if_missing(
+        conn,
+        "ix_compliance_event_created",
+        "CREATE INDEX ix_compliance_event_created ON compliance_events(created_at)",
+    )
+    _create_index_if_missing(
+        conn,
+        "ix_compliance_event_surface",
+        "CREATE INDEX ix_compliance_event_surface ON compliance_events(surface)",
+    )
+    conn.execute(text("""
+        CREATE TABLE IF NOT EXISTS ra_review_items (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            surface VARCHAR(64) NOT NULL DEFAULT '',
+            subject VARCHAR NOT NULL DEFAULT '',
+            original_ai_output TEXT NOT NULL DEFAULT '',
+            edited_output TEXT,
+            status VARCHAR(16) NOT NULL DEFAULT 'pending',
+            reviewer VARCHAR,
+            reviewed_at DATETIME,
+            ra_registration_number VARCHAR(32) NOT NULL DEFAULT '',
+            disclosure_text TEXT NOT NULL DEFAULT '',
+            published_at DATETIME,
+            meta JSON DEFAULT '{}',
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+    """))
+    _create_index_if_missing(
+        conn,
+        "ix_ra_review_status",
+        "CREATE INDEX ix_ra_review_status ON ra_review_items(status)",
+    )
+
+
 MIGRATIONS: tuple[Migration, ...] = (
     Migration(101, "agent_config_kind_and_visibility", _m101_agent_config_kind),
     Migration(102, "backfill_agent_kind_data", _m102_backfill_agent_kind),
@@ -1992,6 +2039,7 @@ MIGRATIONS: tuple[Migration, ...] = (
     Migration(124, "assistant_context_snapshots", _m124_assistant_context_snapshots),
     Migration(125, "assistant_task_protocol", _m125_assistant_task_protocol),
     Migration(126, "assistant_task_events", _m126_assistant_task_events),
+    Migration(127, "compliance_tables", _m127_compliance_tables),
 )
 
 

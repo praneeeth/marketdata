@@ -5,6 +5,12 @@ from datetime import datetime
 from pathlib import Path
 
 from src.modules.automation.base import BaseAgent, AgentContext, AnalysisResult
+from src.modules.automation.research_output import (
+    load_research_prompt,
+    parse_research_items,
+    research_payload,
+)
+from src.platform.compliance import Feature, is_feature_enabled
 from src.modules.research.analysis_history import save_analysis
 from src.platform.marketdata.cn_symbol import get_cn_prefix
 from src.modules.automation.suggestion_pool import save_suggestion
@@ -133,7 +139,7 @@ class DailyReportAgent(BaseAgent):
 
     def build_prompt(self, data: dict, context: AgentContext) -> tuple[str, str]:
         """构建日报 Prompt"""
-        system_prompt = PROMPT_PATH.read_text(encoding="utf-8")
+        system_prompt = load_research_prompt("daily_report.txt")
 
         # 辅助函数：安全获取数值，None 转为默认值
         def safe_num(value, default=0):
@@ -605,7 +611,14 @@ class DailyReportAgent(BaseAgent):
         suggestions = self._parse_suggestions_json(structured, context.watchlist)
         if not suggestions:
             suggestions = self._parse_suggestions(result.content, context.watchlist)
+        if not is_feature_enabled(Feature.SUGGESTION_POOL):
+            # Research-only: no per-security actions are produced or stored (ADR-004).
+            suggestions = {}
         result.raw_data["suggestions"] = suggestions
+        research_items = parse_research_items(
+            structured, allowed_symbols=[s.symbol for s in context.watchlist]
+        )
+        result.raw_data["research"] = research_payload(research_items)
 
         # 保存各股票建议到建议池
         stock_map = {s.symbol: s for s in context.watchlist}
@@ -780,6 +793,7 @@ class DailyReportAgent(BaseAgent):
                 },
                 "news_debug": news_debug,
                 "suggestions": suggestions,
+                "research": result.raw_data.get("research", []),
             },
         )
         if history_saved:

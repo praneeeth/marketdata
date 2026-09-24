@@ -10,6 +10,14 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 
+from src.modules.automation.research_output import parse_intraday_observation
+from src.platform.compliance import (
+    Feature,
+    ensure_guarded,
+    guard_title,
+    is_feature_enabled,
+    sanitize_payload,
+)
 from src.platform.persistence.database import get_db
 from src.platform.persistence.models import AgentConfig, AgentRun, LogEntry
 from src.platform.scheduling.schedule_parser import preview_schedule
@@ -505,9 +513,11 @@ def get_tradingagents_latest(
         "agent_name": record.agent_name,
         "stock_symbol": record.stock_symbol,
         "analysis_date": record.analysis_date,
-        "title": record.title or "",
-        "content": record.content,
-        "raw_data": record.raw_data or {},
+        "title": guard_title(record.title or "", surface="ta_history_title"),
+        "content": ensure_guarded(record.content, surface="ta_history"),
+        "raw_data": sanitize_payload(
+            record.raw_data or {}, guard_strings=True, surface="ta_history_raw"
+        ),
         "created_at": _format_datetime(record.created_at),
         "updated_at": _format_datetime(record.updated_at),
     }
@@ -540,9 +550,11 @@ def get_tradingagents_analysis(
         "agent_name": record.agent_name,
         "stock_symbol": record.stock_symbol,
         "analysis_date": record.analysis_date,
-        "title": record.title or "",
-        "content": record.content,
-        "raw_data": record.raw_data or {},
+        "title": guard_title(record.title or "", surface="ta_history_title"),
+        "content": ensure_guarded(record.content, surface="ta_history"),
+        "raw_data": sanitize_payload(
+            record.raw_data or {}, guard_strings=True, surface="ta_history_raw"
+        ),
         "created_at": _format_datetime(record.created_at),
         "updated_at": _format_datetime(record.updated_at),
     }
@@ -580,8 +592,13 @@ def export_tradingagents_analysis_pdf(
         raise HTTPException(status_code=404, detail="未找到该深度分析记录")
 
     # 用 raw_data 拼详情页同款完整分节(含 4 分析师全文 + 辩论全文);raw_data 缺失时回退 content
-    report_md = assemble_report_markdown(record.raw_data or {}) or (record.content or "")
-    pdf_bytes = render_analysis_pdf(record.title or "深度分析", report_md)
+    safe_raw = sanitize_payload(record.raw_data or {}, guard_strings=True, surface="pdf_raw")
+    report_md = ensure_guarded(
+        assemble_report_markdown(safe_raw) or (record.content or ""), surface="pdf"
+    )
+    pdf_bytes = render_analysis_pdf(
+        guard_title(record.title or "Deep research", surface="pdf_title"), report_md
+    )
     base = (record.title or f"{stock_symbol} 深度分析").replace("/", "-").replace("\\", "-").strip()
     filename = f"{base}-{analysis_date}.pdf"
     return Response(
@@ -1167,6 +1184,18 @@ async def scan_intraday(analyze: bool = False, db: Session = Depends(get_db)):
                             system_prompt, user_content
                         )
 
+                        if not is_feature_enabled(Feature.SUGGESTION_POOL):
+                            # Research-only: a factual observation, never an action.
+                            observation = parse_intraday_observation(response)
+                            item["suggestion"] = None
+                            item["observation"] = {
+                                "notable": observation.notable,
+                                "headline": observation.headline,
+                                "observations": list(observation.observations),
+                                "key_risks": list(observation.key_risks),
+                            }
+                            return
+
                         # 解析结构化建议
                         suggestion = agent._parse_suggestion(response)
                         suggestion["raw"] = response.strip()[:200]
@@ -1208,13 +1237,23 @@ async def scan_intraday(analyze: bool = False, db: Session = Depends(get_db)):
                             },
                         )
                 except Exception as e:
-                    item["suggestion"] = {
-                        "action": "watch",
-                        "action_label": "观望",
-                        "signal": "",
-                        "reason": f"分析失败: {e}",
-                        "should_alert": False,
-                    }
+                    if is_feature_enabled(Feature.SUGGESTION_POOL):
+                        item["suggestion"] = {
+                            "action": "watch",
+                            "action_label": "观望",
+                            "signal": "",
+                            "reason": f"分析失败: {e}",
+                            "should_alert": False,
+                        }
+                    else:
+                        item["suggestion"] = None
+                        item["observation"] = {
+                            "notable": False,
+                            "headline": "",
+                            "observations": [],
+                            "key_risks": [],
+                            "error": "analysis failed",
+                        }
                     logger.error(f"AI 分析失败 {item['symbol']}: {e}")
 
             await asyncio.gather(*[_analyze_item(item) for item in results])

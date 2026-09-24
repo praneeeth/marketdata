@@ -19,9 +19,11 @@ from datetime import date
 from typing import Any
 
 from src.modules.automation.base import AnalysisResult
+from src.platform.compliance import ensure_guarded
 
 __all__ = [
     "DECISION_LABEL_MAP",
+    "map_state_to_research_result",
     "map_state_to_result",
     "maybe_emit_paper_trading_signal",
 ]
@@ -52,6 +54,77 @@ REVIEW_LABEL = "待人工复核"
 
 # 旧字段名兼容:某些下游代码可能 import DECISION_LABEL_MAP
 DECISION_LABEL_MAP = RATING_LABEL_MAP
+
+
+_REPORT_FIELDS = (
+    ("market", "market_report"),
+    ("social", "sentiment_report"),
+    ("news", "news_report"),
+    ("fundamentals", "fundamentals_report"),
+)
+
+
+def map_state_to_research_result(
+    *,
+    stock: Any,
+    ta_result: dict[str, Any],
+    model_label: str = "",
+) -> AnalysisResult:
+    """Research-only mapping (ADR-005): a neutral summary, analyst reports and the
+    bull/bear debate. No rating, action, trader plan, risk verdict or PM decision.
+    """
+    state = ta_result.get("final_state") or {}
+    cost_usd = float(ta_result.get("cost_usd", 0.0) or 0.0)
+    summary = ensure_guarded(
+        (state.get("final_trade_decision") or "").strip()
+        or "No research summary was produced for this run.",
+        surface="ta_summary",
+    )
+    reports = {
+        key: ensure_guarded(
+            state.get(field) or (state.get("social_report") if key == "social" else "") or "",
+            surface="ta_report",
+        )
+        for key, field in _REPORT_FIELDS
+    }
+    debate_state = state.get("investment_debate_state") or {}
+    if not isinstance(debate_state, dict):
+        debate_state = {}
+    debate = {
+        "history": ensure_guarded(debate_state.get("history") or "", surface="ta_debate"),
+        "bull_history": ensure_guarded(debate_state.get("bull_history") or "", surface="ta_debate"),
+        "bear_history": ensure_guarded(debate_state.get("bear_history") or "", surface="ta_debate"),
+    }
+
+    from datetime import date as _date
+    from src.modules.research.analysis_link import analysis_detail_markdown
+
+    link = analysis_detail_markdown(stock.symbol, _date.today().isoformat())
+    parts = [f"## Deep research: {stock.name} ({stock.symbol})", "", summary]
+    footer = "_Multi-agent research (analysts and bull/bear debate)"
+    if model_label:
+        footer += f" · AI: {model_label}"
+    parts += ["", "---", footer + f" · cost ${cost_usd:.4f}_"]
+    if link:
+        parts += ["", link]
+    content = "\n".join(parts)
+    notify_parts = [summary]
+    if link:
+        notify_parts += ["", link]
+
+    return AnalysisResult(
+        agent_name="tradingagents",
+        title=f"Deep research: {stock.name} ({stock.symbol})",
+        content=content,
+        notify_content="\n".join(notify_parts),
+        raw_data={
+            "mode": "research_only",
+            "research_summary": summary,
+            "cost_usd": cost_usd,
+            "analyst_reports": reports,
+            "debate_history": debate,
+        },
+    )
 
 
 def map_state_to_result(

@@ -6,6 +6,7 @@ from typing import Optional
 from datetime import timezone
 from sqlalchemy import and_, func, or_
 
+from src.platform.compliance import Feature, is_feature_enabled
 from src.platform.persistence.database import SessionLocal
 from src.platform.persistence.models import StockSuggestion
 from src.platform.scheduling.timezone import utc_now, to_iso_with_tz
@@ -78,6 +79,9 @@ def save_suggestion(
     Returns:
         是否保存成功
     """
+    # Research-only: AI buy/sell/hold suggestions are never stored or shown (ADR-004).
+    if not is_feature_enabled(Feature.SUGGESTION_POOL):
+        return False
     db = SessionLocal()
     try:
         market = (stock_market or "CN").strip().upper() or "CN"

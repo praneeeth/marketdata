@@ -219,9 +219,11 @@ def test_markdown_shows_5_tier_rating_in_header():
         stock=_stock(),
         ta_result=_result("Underweight", final_decision_text="Rating: Underweight\n\nReason: ..."),
     )
-    assert "减持" in r.content
-    # 既要有 action_label,也要有 rating note
-    assert r.content.count("减持") >= 1
+    # The 5-tier mapping is still computed internally (kept for a future reviewed mode)...
+    assert r.raw_data["rating"] == "underweight"
+    # ...but user-facing text passes the research-only guard, so no rating label survives.
+    assert "减持" not in r.content
+    assert "Underweight" not in r.content
 
 
 # ============================================================
@@ -362,17 +364,16 @@ def test_notify_content_only_final_decision():
     assert r.notify_content is not None
     nc = r.notify_content
     # 含最终决策核心(决策摘要 + PM 决策书正文)
-    assert "最终决策" in nc
-    assert "买入" in nc
-    assert "基本面拐点确认" in nc
+    # Research-only: the PM decision never reaches a notification.
+    assert "买入" not in nc
+    assert "基本面拐点确认" not in nc
     # 不含交易员计划 / 裁决 / 风控 / 分析师明细的具体内容
     assert "分三批建仓" not in nc
     assert "倾向看多" not in nc
     assert "仓位可控" not in nc
     assert state["market_report"] not in nc
     # content(完整)仍含决策链(供详情页/历史)
-    assert "PM 最终决策书" in r.content
-    assert "交易员执行计划" in r.content
+    assert "买入" not in r.content
 
 
 # ============================================================

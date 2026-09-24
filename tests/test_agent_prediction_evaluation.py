@@ -25,7 +25,7 @@ def test_friday_prediction_one_trading_day_uses_monday_close():
     assert _find_close_after_n_trading_days(bars, date(2026, 8, 28), 1) == 11
 
 
-def test_two_horizons_saved_for_one_suggestion_share_group_id(monkeypatch):
+def test_two_horizons_saved_for_one_suggestion_share_group_id(monkeypatch, recommendations_enabled):
     """同一次建议的 1/5 个交易日记录必须共用 group ID。"""
     from src.modules.research.context_store import save_agent_prediction_outcome
     from src.platform.persistence.database import Base
@@ -54,6 +54,29 @@ def test_two_horizons_saved_for_one_suggestion_share_group_id(monkeypatch):
         assert [row.horizon_unit for row in rows] == ["trading_days", "trading_days"]
     finally:
         session.close()
+
+
+
+def test_research_only_does_not_record_predictions(monkeypatch):
+    """Research-only mode never stores buy/sell/hold predictions."""
+    from src.modules.research.context_store import save_agent_prediction_outcome
+
+    def _fail():
+        raise AssertionError("database must not be touched in research-only mode")
+
+    monkeypatch.setattr("src.modules.research.context_store.SessionLocal", _fail)
+    assert (
+        save_agent_prediction_outcome(
+            agent_name="daily_report",
+            stock_symbol="600000",
+            stock_market="CN",
+            prediction_date="2026-08-28",
+            horizon_days=1,
+            action="buy",
+            action_label="买入",
+        )
+        is False
+    )
 
 
 def _outcome(

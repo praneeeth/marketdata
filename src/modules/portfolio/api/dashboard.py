@@ -12,6 +12,7 @@ from pydantic import BaseModel
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+from src.platform.compliance import ensure_guarded
 from src.platform.runtime.config import Settings
 from src.modules.strategy.strategy_engine import get_strategy_stats, list_strategy_signals
 from src.platform.ai.ai_failover import get_configured_failover_client
@@ -421,9 +422,12 @@ async def curate_today(req: CurateRequest, db: Session = Depends(get_db)):
         for i, c in enumerate(cands)
     )
     system_prompt = (
-        "你是盯盘助手。从用户今日候选事件里挑出最值得关注的,按重要度排序,"
-        "重点关照:已触发的提醒、持仓的大幅异动、组合风险。"
-        "只输出每条一行,格式: 序号|重要度(0-100整数)|一句话说明为什么值得看。不解释、不臆造。"
+        "You help a user triage today's events from their own holdings, watchlist and "
+        "alerts. Rank the events by how much attention they deserve, focusing on alerts that "
+        "fired, large moves in holdings, and portfolio-level risk. Describe why each matters "
+        "factually; never suggest trading, price levels or quantities. Write in English. "
+        "Output one line per event in the format: index|importance (integer 0-100)|one "
+        "sentence. No other text."
     )
     user_content = f"今日候选(均来自该用户的持仓/自选/提醒/机会):\n{listing}"
 
@@ -442,7 +446,8 @@ async def curate_today(req: CurateRequest, db: Session = Depends(get_db)):
                         imp = int(re.sub(r"[^0-9]", "", parts[1]) or 0)
                     except Exception:
                         imp = 0
-                    items.append({"index": i, "importance": imp, "why": parts[2].strip()})
+                    why = ensure_guarded(parts[2].strip(), surface="dashboard_curate")
+                    items.append({"index": i, "importance": imp, "why": why})
     except Exception as e:
         logger.debug(f"curate AI 失败,按原序兜底: {e}")
 

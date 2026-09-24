@@ -5,6 +5,7 @@ from datetime import date, datetime, timedelta
 
 from sqlalchemy import and_
 
+from src.platform.compliance import Feature, is_feature_enabled
 from src.platform.persistence.database import SessionLocal
 from src.platform.persistence.models import (
     AgentContextRun,
@@ -231,6 +232,9 @@ def save_agent_prediction_outcome(
     trigger_price: float | None = None,
     meta: dict | None = None,
 ) -> bool:
+    # Research-only: no buy/sell/hold predictions are tracked (ADR-004).
+    if not is_feature_enabled(Feature.PREDICTION_TRACKING):
+        return False
     db = SessionLocal()
     try:
         meta_safe = to_jsonable(meta or {})

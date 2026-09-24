@@ -47,7 +47,9 @@ def test_review_keeps_internal_distribution_separate_from_total_exposure(db, mon
     monkeypatch.setattr(ai_failover, 'get_configured_failover_client', lambda *a: client)
     result = asyncio.run(accounts.portfolio_ai_review(db=db))
     system, context = client.chat.call_args.args
-    assert '持仓内部集中度' in system and '总资产敞口' in system
+    assert 'Concentration within holdings' in system
+    assert 'Equity exposure relative to total assets' in system
+    assert 'Do not suggest any change to holdings' in system
     assert '总资产 550 CNY' in context and '45.5%' in context
     assert result['diagnostics']['by_market'] == {'CN':250}
     assert result['diagnostics']['max_weight'] == 1

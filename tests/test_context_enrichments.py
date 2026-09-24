@@ -38,7 +38,7 @@ def _make_history_row(*, analysis_date: str, suggestion: dict, content: str = ""
     )
 
 
-def test_ta_verdict_recent_row_injected(monkeypatch):
+def test_ta_verdict_recent_row_injected(monkeypatch, recommendations_enabled):
     """N 天内有 TA 深度记录时,抽取出紧凑结论(评级/一句话/日期/age)。"""
     today = date.today()
     row = _make_history_row(
@@ -66,6 +66,26 @@ def test_ta_verdict_recent_row_injected(monkeypatch):
     # 一句话需要被清洗 + 截断到约 120 字
     assert isinstance(verdict["one_liner"], str)
     assert 0 < len(verdict["one_liner"]) <= 130
+
+
+
+def test_ta_verdict_research_only_has_no_rating(monkeypatch):
+    """Research-only: the verdict passed to prompts carries a neutral summary, no rating."""
+    today = date.today()
+    row = _make_history_row(
+        analysis_date=today.strftime("%Y-%m-%d"),
+        suggestion={"action": "buy", "action_label": "买入", "rating_raw": "buy"},
+        content="Revenue grew 12% year on year while margins narrowed.",
+    )
+    monkeypatch.setattr(
+        analysis_history,
+        "get_latest_ta_verdict_row",
+        lambda symbol, within_days=14, today=None: row,
+    )
+    verdict = analysis_history.get_latest_ta_verdict("600519", within_days=14)
+    assert verdict is not None
+    assert set(verdict) == {"one_liner", "date", "age_days"}
+    assert verdict["one_liner"].startswith("Revenue grew 12%")
 
 
 def test_ta_verdict_includes_today(monkeypatch):

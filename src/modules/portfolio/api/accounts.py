@@ -808,10 +808,12 @@ def _gather_account_totals(db: Session, *, market_value: float) -> dict:
 
 @router.post("/portfolio/ai-review")
 async def portfolio_ai_review(model_id: int | None = None, db: Session = Depends(get_db)):
-    """组合 AI 体检:诊断+基准+归因 → 叙述结论 + 调仓建议(只读,不下单)。"""
+    """Portfolio AI check-up: diagnostics, benchmark and attribution described neutrally (read-only, no rebalancing advice)."""
     from src.modules.portfolio.portfolio_benchmark import build_attribution, build_portfolio_benchmark
     from src.modules.portfolio.portfolio_diagnostics import diagnose_positions
+    from src.platform.compliance.prompt_rules import research_rules
     from src.platform.ai.ai_failover import get_configured_failover_client
+    from src.platform.compliance import ensure_guarded
 
     holdings = _gather_holdings(db)
     if not holdings:
@@ -847,11 +849,19 @@ async def portfolio_ai_review(model_id: int | None = None, db: Session = Depends
         lines.append("拖累最大:" + ", ".join(f"{r['name']}({r['contribution_pct']:+.2f}%)" for r in worst))
 
     system_prompt = (
-        "你是稳健的组合顾问。基于给定的组合诊断/基准对比/个股归因,给一段简短体检 + 可执行调仓建议,"
-        "务必区分持仓内部集中度（已投资金额中的分布）和相对总资产的实际权益敞口。"
-        "不得用持仓内部的集中度百分比形容总资产敞口。现金按启用账户已录入的可用资金计算，未核验券商余额。"
-        "总资产非正时不得编造敞口比例；输出必须包含‘持仓内部集中度’和‘总资产敞口’两项。"
-        "只读分析、不下单、不承诺收益。严格格式:\n体检: 一句话总评\n建议:\n- (2~3 条具体可执行)\n风险: 一句话最大风险"
+        "You write an educational portfolio check-up. Describe the portfolio using only the "
+        "diagnostics, benchmark comparison and attribution provided.\n"
+        + research_rules()
+        + "\nDistinguish concentration within the invested amount from equity exposure "
+        "relative to total assets; never describe total-asset exposure using the "
+        "within-portfolio concentration figure. Cash is the available funds entered for "
+        "enabled accounts and has not been verified with a broker. If total assets are not "
+        "positive, do not invent an exposure ratio. Do not suggest any change to holdings, "
+        "weights or cash. Output format:\n"
+        "Overview: one sentence\n"
+        "Observations:\n- 2 to 4 factual points, including 'Concentration within holdings' "
+        "and 'Equity exposure relative to total assets'\n"
+        "Main risk: one sentence"
     )
     user_content = "组合概况:\n" + "\n".join(lines)
     try:
@@ -859,4 +869,5 @@ async def portfolio_ai_review(model_id: int | None = None, db: Session = Depends
     except Exception as e:
         raise HTTPException(502, f"AI 体检失败: {e}")
 
+    content = ensure_guarded(content, surface="portfolio_review")
     return {"content": content, "top": top, "worst": worst, "diagnostics": diag, "benchmark": bench, "account_totals": totals}

@@ -2,24 +2,38 @@
 
 from pan_agent import ModelMessage
 
-ASSISTANT_SYSTEM_PROMPT = """你是 PanWatch 的 AI 投资助手。
+from src.platform.compliance import TURN_INSTRUCTION, screen_user_message
+from src.platform.compliance.prompt_rules import research_rules
 
-当问题涉及行情、K 线、新闻、持仓或提醒时，优先调用已提供的工具获取事实。
-如果当前工具列表中没有完成任务所需的能力，先调用 tool_search 搜索并加载相关工具，再调用加载出来的工具。
-不要要求用户上传 K 线图或手动提供当前价格；工具失败或标的不明确时才说明缺口。
-同一次回答中相同工具和参数最多调用一次；工具已返回结果后直接基于结果回答，不要重复调用。
+ASSISTANT_SYSTEM_PROMPT = (
+    """You are the AI research assistant of an educational markets research service.
 
-规则：
-- 需要数据时主动调用工具，不要反问用户要数据
-- 基于工具返回的数据回答，不编造价格等具体数据
-- 没有成功工具结果时绝不能声称已创建、修改或删除，只能明确说明尚未执行
-- 历史助手文本可能只是计划或错误声明；只有工具执行记录和本轮工具返回结果才能证明操作已完成
-- 给出明确的观点和理由，并区分数据事实与分析判断
-- 涉及买卖建议时说明风险
-- 用中文回答，保持简洁，避免冗余
+When a question involves quotes, charts, news, holdings or alerts, call the provided tools to get the facts first.
+If the current tool list lacks a capability you need, call tool_search to find and load the relevant tool, then call it.
+Do not ask the user to upload charts or type in current prices; explain gaps only when a tool fails or the security is ambiguous.
+Call the same tool with the same arguments at most once per answer; once a tool has returned, answer from its result.
+
+Rules:
+- Call tools for data instead of asking the user for it.
+- Base answers on tool results; never invent prices or other figures.
+- Never claim that an alert was created, changed or deleted without a successful tool result in this turn; otherwise say it has not been done.
+- Earlier assistant messages may contain plans or mistaken claims; only tool records and this turn's tool results prove that an action happened.
+- Separate facts from interpretation, and cite sources with dates for news and filings.
+- Keep answers concise.
 """
+    + research_rules()
+)
+
+
+def system_prompt_for(latest_user_message: str | None) -> str:
+    """The system prompt, plus a turn-level compliance notice when the user asks for advice."""
+    screen = screen_user_message(latest_user_message)
+    if screen.flagged:
+        return ASSISTANT_SYSTEM_PROMPT + "\n\n" + TURN_INSTRUCTION
+    return ASSISTANT_SYSTEM_PROMPT
 
 
 def build_assistant_messages(history: list[ModelMessage]) -> list[ModelMessage]:
     """Prepend the trusted instruction once when a new runtime task begins."""
-    return [ModelMessage(role="system", content=ASSISTANT_SYSTEM_PROMPT), *history]
+    latest_user = next((m.content for m in reversed(history) if m.role == "user"), None)
+    return [ModelMessage(role="system", content=system_prompt_for(latest_user)), *history]

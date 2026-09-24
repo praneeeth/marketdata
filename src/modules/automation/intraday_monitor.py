@@ -8,6 +8,12 @@ from datetime import datetime, timedelta, date, timezone
 from pathlib import Path
 
 from src.modules.automation.base import BaseAgent, AgentContext, AnalysisResult
+from src.modules.automation.research_output import (
+    load_research_prompt,
+    parse_intraday_observation,
+    render_intraday_observation,
+)
+from src.platform.compliance import Feature, is_feature_enabled
 from src.platform.marketdata.collectors.kline_collector import KlineCollector
 from src.modules.research.analysis_history import get_latest_analysis, get_analysis
 from src.modules.research.context_builder import ContextBuilder
@@ -180,7 +186,7 @@ class IntradayMonitorAgent(BaseAgent):
 
     def build_prompt(self, data: dict, context: AgentContext) -> tuple[str, str]:
         """构建盘中分析 Prompt"""
-        system_prompt = PROMPT_PATH.read_text(encoding="utf-8")
+        system_prompt = load_research_prompt("intraday_monitor.txt")
 
         # 辅助函数：安全获取数值，None 转为默认值
         def safe_num(value, default=0):
@@ -254,8 +260,8 @@ class IntradayMonitorAgent(BaseAgent):
                 f"（ATR 不可用，回退固定阈值）"
             )
         lines.append(f"- 量能异动：量比 ≥ {self.volume_alert_ratio:.1f}")
-        lines.append(f"- 止损预警：浮亏 ≤ {self.stop_loss_warning:.1f}%")
-        lines.append(f"- 止盈提醒：浮盈 ≥ {self.take_profit_warning:.1f}%")
+        lines.append(f"- Loss alert threshold set by the user: P&L <= {self.stop_loss_warning:.1f}%")
+        lines.append(f"- Gain alert threshold set by the user: P&L >= {self.take_profit_warning:.1f}%")
         price_hit = (
             "触发"
             if is_abnormal_move(
@@ -481,9 +487,9 @@ class IntradayMonitorAgent(BaseAgent):
                 lines.append(f"- 持仓市值：{market_value:.0f} 元")
                 pnl_note = ""
                 if pnl_pct <= self.stop_loss_warning:
-                    pnl_note = "（触发止损预警）"
+                    pnl_note = " (at or below the user's loss alert threshold)"
                 elif pnl_pct >= self.take_profit_warning:
-                    pnl_note = "（触发止盈提醒）"
+                    pnl_note = " (at or above the user's gain alert threshold)"
                 lines.append(f"- 浮动盈亏：{pnl_pct:+.1f}%{pnl_note}")
                 lines.append(f"- 账户可用：{acc_funds:.0f} 元")
         else:
@@ -762,18 +768,39 @@ class IntradayMonitorAgent(BaseAgent):
         # 打印 AI 返回结果
         logger.info(f"=== AI Response for {stock.symbol} ===\n{raw_content}")
 
-        # 解析操作建议
-        suggestion = self._parse_suggestion(raw_content)
-        content = raw_content
         analysis_date = (data.get("timestamp") or "")[:10] or datetime.now().strftime(
             "%Y-%m-%d"
         )
         quality_score = (
             (data.get("symbol_context") or {}).get("data_quality", {}).get("score")
         )
-        # JSON/类 JSON 输出时，统一转换为可读通知文本，避免渠道直接推送原始 JSON
-        if try_parse_action_json(raw_content) or self._try_parse_loose_json(raw_content):
-            content = self._format_human_readable_content(stock, suggestion, raw_content)
+        if is_feature_enabled(Feature.SUGGESTION_POOL):
+            # 解析操作建议(recommendation mode only; unreachable while research-only)
+            suggestion = self._parse_suggestion(raw_content)
+            content = raw_content
+            # JSON/类 JSON 输出时，统一转换为可读通知文本，避免渠道直接推送原始 JSON
+            if try_parse_action_json(raw_content) or self._try_parse_loose_json(raw_content):
+                content = self._format_human_readable_content(stock, suggestion, raw_content)
+        else:
+            # Research-only: a factual "is something notable happening" observation.
+            observation = parse_intraday_observation(raw_content)
+            suggestion = {
+                "action": "watch",
+                "action_label": "",
+                "signal": observation.headline,
+                "reason": "",
+                "should_alert": observation.notable,
+                "triggers": [],
+                "invalidations": [],
+                "risks": list(observation.key_risks),
+            }
+            content = render_intraday_observation(
+                name=stock.name,
+                symbol=stock.symbol,
+                price=stock.current_price,
+                change_pct=stock.change_pct,
+                observation=observation,
+            )
 
         # 保存到建议池（包含 prompt 上下文）
         save_suggestion(

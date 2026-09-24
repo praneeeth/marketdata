@@ -1330,3 +1330,50 @@ class MCPCallLog(Base):
     duration_ms = Column(Integer, default=0)
     client_ip = Column(String, nullable=True)
     called_at = Column(DateTime, server_default=func.now())
+
+
+class ComplianceEvent(Base):
+    """A guard decision that was not ``passed`` (redacted or blocked). Admin-only data.
+
+    ``original_text`` is kept for tuning the guard and is purged after the retention
+    period (see ``src/platform/compliance/audit.py``).
+    """
+
+    __tablename__ = "compliance_events"
+    __table_args__ = (
+        Index("ix_compliance_event_created", "created_at"),
+        Index("ix_compliance_event_surface", "surface"),
+    )
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    surface = Column(String(64), nullable=False, default="")
+    status = Column(String(16), nullable=False)  # redacted / blocked
+    rule_ids = Column(JSON, default=list)
+    original_sha256 = Column(String(64), nullable=False, default="")
+    original_text = Column(Text, nullable=False, default="")
+    created_at = Column(DateTime, server_default=func.now())
+
+
+class RAReviewItem(Base):
+    """AI recommendation draft awaiting review by a SEBI-registered research analyst.
+
+    Only written in ``ra_registered`` mode. Nothing is published until a reviewer approves
+    it (review UI arrives in Phase 5).
+    """
+
+    __tablename__ = "ra_review_items"
+    __table_args__ = (Index("ix_ra_review_status", "status"),)
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    surface = Column(String(64), nullable=False, default="")
+    subject = Column(String, nullable=False, default="")
+    original_ai_output = Column(Text, nullable=False, default="")
+    edited_output = Column(Text, nullable=True)
+    status = Column(String(16), nullable=False, default="pending")  # pending/approved/rejected
+    reviewer = Column(String, nullable=True)
+    reviewed_at = Column(DateTime, nullable=True)
+    ra_registration_number = Column(String(32), nullable=False, default="")
+    disclosure_text = Column(Text, nullable=False, default="")
+    published_at = Column(DateTime, nullable=True)
+    meta = Column(JSON, default=dict)
+    created_at = Column(DateTime, server_default=func.now())

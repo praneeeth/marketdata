@@ -33,14 +33,10 @@ def _suppress_notifications(request, monkeypatch):
     if request.config.getoption("--notify"):
         return
 
-    # patch NotifierManager.notify / notify_with_result
+    # Patch only the transport so the compliance guard and disclaimer in
+    # NotifierManager.notify_with_result run in every test.
     monkeypatch.setattr(
-        "src.platform.notifications.notifier.NotifierManager.notify",
-        AsyncMock(return_value=None),
-        raising=False,
-    )
-    monkeypatch.setattr(
-        "src.platform.notifications.notifier.NotifierManager.notify_with_result",
+        "src.platform.notifications.notifier.NotifierManager._deliver",
         AsyncMock(return_value={"success": True, "suppressed": True}),
         raising=False,
     )
@@ -115,3 +111,17 @@ def mock_signal() -> dict:
         "confidence": 0.85,
         "reason": "趋势向上突破",
     }
+
+
+@pytest.fixture
+def recommendations_enabled(monkeypatch):
+    """Enable recommendation features, as a future registered-analyst mode might.
+
+    Used only by tests of retained recommendation mechanisms; research-only (the default)
+    keeps them disabled.
+    """
+    from src.platform.compliance.settings import ComplianceSettings
+
+    monkeypatch.setattr(
+        ComplianceSettings, "recommendations_publishable", property(lambda self: True)
+    )

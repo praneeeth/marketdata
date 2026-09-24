@@ -9,6 +9,12 @@ from sqlalchemy import and_, or_
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 
+from src.platform.compliance import (
+    Feature,
+    ensure_guarded,
+    guard_title,
+    is_feature_enabled,
+)
 from src.platform.persistence.database import get_db
 from src.platform.persistence.models import AnalysisHistory
 from src.platform.runtime.config import Settings
@@ -130,9 +136,13 @@ def list_history(
             agent_kind=(r.agent_kind_snapshot or infer_agent_kind(r.agent_name)),
             stock_symbol=r.stock_symbol,
             analysis_date=r.analysis_date,
-            title=r.title or "",
-            content=r.content,
-            suggestions=r.raw_data.get("suggestions") if r.raw_data else None,
+            title=guard_title(r.title or "", surface="history_title"),
+            content=ensure_guarded(r.content, surface="history"),
+            suggestions=(
+                r.raw_data.get("suggestions")
+                if r.raw_data and is_feature_enabled(Feature.SUGGESTION_POOL)
+                else None
+            ),
             news=r.raw_data.get("news") if r.raw_data else None,
             quality_overview=r.raw_data.get("quality_overview") if r.raw_data else None,
             context_summary=r.raw_data.get("context_summary") if r.raw_data else None,
@@ -164,9 +174,13 @@ def get_history_detail(
         agent_kind=(record.agent_kind_snapshot or infer_agent_kind(record.agent_name)),
         stock_symbol=record.stock_symbol,
         analysis_date=record.analysis_date,
-        title=record.title or "",
-        content=record.content,
-        suggestions=record.raw_data.get("suggestions") if record.raw_data else None,
+        title=guard_title(record.title or "", surface="history_title"),
+        content=ensure_guarded(record.content, surface="history"),
+        suggestions=(
+            record.raw_data.get("suggestions")
+            if record.raw_data and is_feature_enabled(Feature.SUGGESTION_POOL)
+            else None
+        ),
         news=record.raw_data.get("news") if record.raw_data else None,
         quality_overview=record.raw_data.get("quality_overview")
         if record.raw_data

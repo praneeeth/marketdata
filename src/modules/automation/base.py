@@ -4,6 +4,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 
 from src.platform.ai.ai_client import AIClient
+from src.platform.compliance import ensure_guarded, guard_title
 from src.platform.notifications.notifier import NotifierManager
 from src.platform.runtime.config import AppConfig, StockConfig
 from src.platform.marketdata.models import MarketCode
@@ -164,6 +165,15 @@ class AnalysisResult:
     raw_data: dict = field(default_factory=dict)
     images: list[str] = field(default_factory=list)
     timestamp: datetime = field(default_factory=datetime.now)
+
+    def __setattr__(self, name: str, value) -> None:
+        # Every user-facing text on a result passes the compliance guard, both at
+        # construction and on later reassignment (ADR-002).
+        if name == "title" and isinstance(value, str):
+            value = guard_title(value, surface="analysis_title")
+        elif name in ("content", "notify_content") and isinstance(value, str):
+            value = ensure_guarded(value, surface=f"analysis_{name}")
+        object.__setattr__(self, name, value)
 
 
 class BaseAgent(ABC):

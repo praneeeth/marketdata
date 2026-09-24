@@ -9,6 +9,12 @@ from datetime import datetime, date, timedelta
 from pathlib import Path
 
 from src.modules.automation.base import BaseAgent, AgentContext, AnalysisResult
+from src.modules.automation.research_output import (
+    load_research_prompt,
+    parse_research_items,
+    research_payload,
+)
+from src.platform.compliance import Feature, is_feature_enabled
 from src.modules.research.signals import SignalPackBuilder
 from src.modules.research.analysis_history import save_analysis, get_latest_analysis
 from src.platform.marketdata.cn_symbol import get_cn_prefix
@@ -215,7 +221,7 @@ class PremarketOutlookAgent(BaseAgent):
 
     def build_prompt(self, data: dict, context: AgentContext) -> tuple[str, str]:
         """构建盘前分析 Prompt"""
-        system_prompt = PROMPT_PATH.read_text(encoding="utf-8")
+        system_prompt = load_research_prompt("premarket_outlook.txt")
 
         # 辅助函数：安全获取数值，None 转为默认值
         def safe_num(value, default=0):
@@ -700,7 +706,14 @@ class PremarketOutlookAgent(BaseAgent):
         if not suggestions:
             suggestions = self._parse_suggestions(result.content, context.watchlist)
             suggestion_source = "text"
+        if not is_feature_enabled(Feature.SUGGESTION_POOL):
+            # Research-only: no per-security actions are produced or stored (ADR-004).
+            suggestions = {}
         result.raw_data["suggestions"] = suggestions
+        research_items = parse_research_items(
+            structured, allowed_symbols=[s.symbol for s in context.watchlist]
+        )
+        result.raw_data["research"] = research_payload(research_items)
         action_dist = Counter((s.get("action") or "unknown") for s in suggestions.values())
         logger.info(
             "[%s] 建议解析完成: source=%s count=%s action_dist=%s",
@@ -910,6 +923,7 @@ class PremarketOutlookAgent(BaseAgent):
                 },
                 "news_debug": news_debug,
                 "suggestions": suggestions,
+                "research": result.raw_data.get("research", []),
             },
         )
         if history_saved:

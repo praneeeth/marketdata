@@ -34,7 +34,12 @@ from src.modules.automation.tradingagents.data_context import (
     to_tradingagents_portfolio,
 )
 from src.modules.automation.tradingagents.observability import PanWatchProgressHandler
-from src.modules.automation.tradingagents.decision import map_state_to_result
+from src.modules.automation.tradingagents.decision import (
+    map_state_to_research_result,
+    map_state_to_result,
+)
+from src.modules.automation.tradingagents.research_graph import install_research_only_workflow
+from src.platform.compliance import Feature, is_feature_enabled
 from src.modules.automation.tradingagents.toolkit_adapter import (
     panwatch_data_context,
     patch_route_to_vendor,
@@ -92,7 +97,7 @@ class TradingAgentsAgent(BaseAgent):
         monthly_budget_usd: float = 10.0,
         over_budget_action: str = "reject",  # reject / warn / continue
         cache_ttl_hours: int = 12,
-        output_language: str = "Chinese",
+        output_language: str = "English",
         deep_model: str | None = None,    # 推理/辩论/PM 用的强模型 (留空走默认)
         quick_model: str | None = None,   # 分析师工具调用用的快模型 (留空 = deep_model)
         timeout_minutes: int = 30,        # 整个流程硬超时;0.3.0 工具链更重,默认提到 30 min
@@ -385,8 +390,13 @@ class TradingAgentsAgent(BaseAgent):
             cancel_event.set()
             raise
 
-        # 5) 映射成 AnalysisResult
-        result = map_state_to_result(
+        # 5) 映射成 AnalysisResult (research-only unless ratings are publishable)
+        mapper = (
+            map_state_to_result
+            if is_feature_enabled(Feature.TRADINGAGENTS_RATING)
+            else map_state_to_research_result
+        )
+        result = mapper(
             stock=stock,
             ta_result=ta_result,
             model_label=context.model_label,
@@ -456,28 +466,7 @@ class TradingAgentsAgent(BaseAgent):
         except Exception as e:
             logger.warning(f"[TA] save_suggestion 失败,不影响主流程: {e}")
 
-        # 7) 可选:把 BUY/SELL 决策写入 StrategySignalRun 驱动模拟盘
-        if self.emit_paper_trading_signal:
-            try:
-                from src.modules.automation.tradingagents.decision import (
-                    maybe_emit_paper_trading_signal,
-                )
-                quote = data.get("quote") or {}
-                current_price = quote.get("current_price")
-                sug = result.raw_data.get("suggestion") or {}
-                maybe_emit_paper_trading_signal(
-                    stock_symbol=stock.symbol,
-                    stock_market=stock.market.value,
-                    stock_name=stock.name,
-                    decision=str(sug.get("action") or ""),
-                    confidence=float(sug.get("confidence") or 5.0),
-                    signal_text=str(sug.get("signal") or ""),
-                    reason=str(sug.get("reason") or ""),
-                    current_price=current_price,
-                    enabled=True,
-                )
-            except Exception as e:
-                logger.warning(f"[TA] 写模拟盘信号失败,不影响主流程: {e}")
+        # Research-only fork: TradingAgents never emits paper-trading signals (ADR-004).
 
         return result
 
@@ -566,6 +555,10 @@ class TradingAgentsAgent(BaseAgent):
                 # callbacks 接受 langchain BaseCallbackHandler 列表;LLM 级别用
                 callbacks=[progress_handler] if progress_handler else None,
             )
+
+            # Research-only: never build the trader / risk / portfolio-manager nodes (ADR-005).
+            if not is_feature_enabled(Feature.TRADINGAGENTS_RATING):
+                install_research_only_workflow(graph, ta_config["selected_analysts"])
 
             # 注入 LangGraph 节点级 callbacks(propagator.get_graph_args 默认 callbacks=None,
             # 不会触发 on_chain_start/end → 进度条永远卡 pending)

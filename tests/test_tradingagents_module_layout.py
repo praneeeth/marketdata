@@ -17,6 +17,7 @@ def test_tradingagents_adapter_has_compact_target_modules():
         "observability.py",
         "decision.py",
         "operations.py",
+        "research_graph.py",
         "__init__.py",
     }
 

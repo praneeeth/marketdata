@@ -13,6 +13,8 @@ import json
 import logging
 import re
 
+from src.platform.compliance.prompt_rules import research_rules
+
 logger = logging.getLogger(__name__)
 
 # 触发词:显式命中即走计划驱动(简单启发式,试点足够)
@@ -37,13 +39,13 @@ def should_use_planning(content: str) -> bool:
 
 
 _PLAN_SYSTEM = (
-    "你是投资组合诊断规划助手。根据用户持仓,产出一个结构化诊断计划。"
-    "只输出 JSON,形如:"
-    '{"steps":[{"title":"分析 贵州茅台(600519)","action":"analyze_stock",'
-    '"params":{"symbol":"600519","market":"CN"}},'
-    '{"title":"组合整体风险","action":"portfolio_risk"}]}。'
-    "action 取值:analyze_stock(逐只持仓,params 带 symbol/market)、portfolio_risk(组合风险)。"
-    "不要包含汇总步骤,汇总由系统自动追加。"
+    "You plan a portfolio research review. Based on the user's holdings, output a "
+    "structured plan as JSON only, for example: "
+    '{"steps":[{"title":"Review Infosys (INFY)","action":"analyze_stock",'
+    '"params":{"symbol":"INFY","market":"CN"}},'
+    '{"title":"Portfolio-level risk","action":"portfolio_risk"}]}. '
+    "action is one of: analyze_stock (one per holding, params with symbol/market) or "
+    "portfolio_risk. Do not include a summary step; the system adds it."
 )
 
 
@@ -147,10 +149,17 @@ async def _publish_plan(stream, steps: list[dict], status: str, current=None) ->
     await stream.publish("plan", data)
 
 
-_STEP_SYSTEM = "你是资深投研分析师。基于给定数据,给出精炼、有据的分析(150 字内)。"
+_STEP_SYSTEM = (
+    "You are a research analyst writing for an educational service. Using only the data "
+    "given, write a concise, evidence-based description (120 words or fewer): trend, "
+    "indicator state, descriptive support and resistance, and notable risks.\n"
+    + research_rules()
+)
 _SUMMARY_SYSTEM = (
-    "你是资深投资顾问。基于各步骤的分析结果,给出全面的持仓诊断结论:"
-    "整体健康度、主要风险、可执行的调仓建议。分点、精炼、有据。"
+    "You write an educational portfolio research review from the step results: overall "
+    "picture, concentration, main risks and what changed recently. Use short, "
+    "evidence-based points. Do not suggest any change to holdings, weights or cash.\n"
+    + research_rules()
 )
 
 
@@ -162,12 +171,11 @@ async def _execute_step(db, ai_client, execute_tool, step: dict, portfolio_text:
         symbol = p.get("symbol", "")
         market = p.get("market", "CN")
         tech = await execute_tool(db, "get_technical_analysis", {"symbol": symbol, "market": market})
-        sug = await execute_tool(db, "get_stock_suggestions", {"symbol": symbol, "market": market})
         msgs = [
             {"role": "system", "content": _STEP_SYSTEM},
             {
                 "role": "user",
-                "content": f"分析持仓「{step['title']}」。\n技术面:\n{tech}\n\nAI 建议:\n{sug}",
+                "content": f"Holding: {step['title']}\nTechnical data:\n{tech}",
             },
         ]
         return await ai_client.chat_multi(msgs, temperature=0.4)

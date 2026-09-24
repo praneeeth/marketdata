@@ -6,6 +6,12 @@ from datetime import datetime
 from pathlib import Path
 
 from src.modules.automation.base import BaseAgent, AgentContext, AnalysisResult
+from src.modules.automation.research_output import (
+    load_research_prompt,
+    parse_research_items,
+    research_payload,
+)
+from src.platform.compliance import Feature, is_feature_enabled
 from src.platform.marketdata.collectors.news_collector import NewsCollector, NewsItem
 from src.modules.research.analysis_history import save_analysis
 from src.platform.marketdata.cn_symbol import get_cn_prefix
@@ -192,7 +198,7 @@ class NewsDigestAgent(BaseAgent):
 
     def build_prompt(self, data: dict, context: AgentContext) -> tuple[str, str]:
         """构建新闻速递 Prompt"""
-        system_prompt = PROMPT_PATH.read_text(encoding="utf-8")
+        system_prompt = load_research_prompt("news_digest.txt")
 
         lines = []
         since_hours_used = data.get("since_hours_used") or self.since_hours
@@ -502,7 +508,14 @@ class NewsDigestAgent(BaseAgent):
         suggestions = self._parse_suggestions_json(structured, context.watchlist)
         if not suggestions:
             suggestions = self._parse_suggestions(result.content, context.watchlist)
+        if not is_feature_enabled(Feature.SUGGESTION_POOL):
+            # Research-only: no per-security actions are produced or stored (ADR-004).
+            suggestions = {}
         result.raw_data["suggestions"] = suggestions
+        research_items = parse_research_items(
+            structured, allowed_symbols=[s.symbol for s in context.watchlist]
+        )
+        result.raw_data["research"] = research_payload(research_items)
         stock_map = {s.symbol: s for s in context.watchlist}
         for symbol, sug in suggestions.items():
             stock = stock_map.get(symbol)
@@ -572,6 +585,7 @@ class NewsDigestAgent(BaseAgent):
                 "important_count": len(important_news),
                 "news": payload_news,
                 "suggestions": suggestions,
+                "research": result.raw_data.get("research", []),
                 "prompt_context": user_content[:2000],
             },
         )

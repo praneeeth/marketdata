@@ -4,6 +4,13 @@ import re
 from datetime import date, datetime, timedelta
 
 from src.modules.automation.agent_catalog import infer_agent_kind
+from src.platform.compliance import (
+    Feature,
+    ensure_guarded,
+    guard_title,
+    is_feature_enabled,
+    sanitize_payload,
+)
 from src.platform.persistence.database import SessionLocal
 from src.platform.persistence.models import AnalysisHistory
 from src.platform.persistence.json_safe import to_jsonable
@@ -44,9 +51,16 @@ def save_analysis(
 
     date_str = analysis_date.strftime("%Y-%m-%d")
 
+    # Stored history is shown in the UI and exported to PDF: guard text and drop
+    # recommendation fields before persisting (ADR-002).
+    content = ensure_guarded(content, surface="analysis_history")
+    title = guard_title(title, surface="analysis_history_title") if title else ""
+
     db = SessionLocal()
     try:
-        payload = to_jsonable(raw_data or {})
+        payload = sanitize_payload(
+            to_jsonable(raw_data or {}), guard_strings=True, surface="analysis_history_raw"
+        )
         agent_kind = infer_agent_kind(agent_name)
 
         # 查找是否已存在
@@ -267,6 +281,14 @@ def get_latest_ta_verdict(
         raw = getattr(row, "raw_data", None) or {}
         if not isinstance(raw, dict):
             return None
+        if not is_feature_enabled(Feature.TRADINGAGENTS_RATING):
+            # Research-only: pass a neutral one-line summary forward, never a rating.
+            summary = raw.get("research_summary") or getattr(row, "content", "") or ""
+            return {
+                "one_liner": ensure_guarded(_clean_one_liner(str(summary)), surface="ta_verdict"),
+                "date": date_str,
+                "age_days": int(age_days),
+            }
         sug = raw.get("suggestion") or {}
         if not isinstance(sug, dict):
             sug = {}

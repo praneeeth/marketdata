@@ -27,6 +27,7 @@ from sqlalchemy.sql import func
 
 # 助手表由共享持久化平台注册；repository 是其唯一的模块内访问边界，
 # 不需要再经由一个只做 re-export 的 ``assistant.models`` 转发层。
+from src.platform.compliance import ensure_guarded
 from src.platform.persistence.models import (
     AssistantContextSnapshot,
     AssistantTaskEvent,
@@ -128,6 +129,8 @@ class AssistantRepository:
         return snapshot
 
     def add_message(self, conversation: ChatConversation, *, role: str, content: str) -> ChatMessage:
+        if role == "assistant":
+            content = ensure_guarded(content, surface="assistant_message")
         message = ChatMessage(conversation_id=conversation.id, role=role, content=content)
         self._session.add(message)
         if role == "user" and not conversation.title:
@@ -776,7 +779,7 @@ class AssistantRepository:
         message = ChatMessage(
             conversation_id=conversation.id,
             role="assistant",
-            content=content,
+            content=ensure_guarded(content, surface="assistant_message"),
         )
         self._session.add(message)
         self._session.flush()

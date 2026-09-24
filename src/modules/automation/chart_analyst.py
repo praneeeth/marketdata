@@ -5,6 +5,7 @@ from datetime import datetime
 from pathlib import Path
 
 from src.modules.automation.base import BaseAgent, AgentContext, AnalysisResult
+from src.modules.automation.research_output import load_research_prompt
 from src.platform.marketdata.collectors.screenshot_collector import ScreenshotCollector, ChartScreenshot
 from src.modules.research.signals import SignalPackBuilder
 
@@ -90,7 +91,7 @@ class ChartAnalystAgent(BaseAgent):
 
     def build_prompt(self, data: dict, context: AgentContext) -> tuple[str, str]:
         """构建技术分析 Prompt"""
-        system_prompt = PROMPT_PATH.read_text(encoding="utf-8")
+        system_prompt = load_research_prompt("chart_analyst.txt")
 
         lines = []
         lines.append(f"## 分析时间：{datetime.now().strftime('%Y-%m-%d %H:%M')}")

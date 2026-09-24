@@ -209,7 +209,8 @@ class TestResultMapper(unittest.TestCase):
         }
         result = map_state_to_result(stock=stock, ta_result=ta_result, model_label="deepseek/deepseek-chat")
         self.assertEqual(result.agent_name, "tradingagents")
-        self.assertIn("买入", result.title)
+        # The rating is mapped internally but never shown: the guarded title is neutral.
+        self.assertNotIn("买入", result.title)
         sug = result.raw_data["suggestion"]
         self.assertEqual(sug["action"], "buy")
         self.assertEqual(sug["action_label"], "买入")
@@ -718,6 +719,7 @@ class TestPortfolioContext(unittest.TestCase):
             patch.object(agent_module, "inject_api_key_env"),
             patch.object(agent_module, "patch_route_to_vendor", lambda: nullcontext()),
             patch.object(agent_module, "panwatch_data_context", lambda *args, **kwargs: nullcontext()),
+            patch.object(agent_module, "install_research_only_workflow", lambda graph, analysts: None),
         ):
             result = agent._run_tradingagents_sync(
                 ai_client=ai_client,

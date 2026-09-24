@@ -25,8 +25,10 @@ from src.modules.assistant.legacy_chat_tools import (
     fetch_realtime_context,
     fetch_technical_context,
 )
-from src.modules.assistant.prompt import ASSISTANT_SYSTEM_PROMPT as SYSTEM_PROMPT
+from src.modules.assistant.prompt import ASSISTANT_SYSTEM_PROMPT as SYSTEM_PROMPT  # noqa: F401 (eval harness)
+from src.modules.assistant.prompt import system_prompt_for
 from src.modules.assistant.repository import AssistantRepository
+from src.platform.compliance import ensure_guarded
 from src.platform.ai.ai_failover import get_configured_failover_client
 from src.platform.events.sse import SSEStream, chat_stream_hub
 from src.platform.persistence.database import SessionLocal, get_db
@@ -223,8 +225,17 @@ async def _build_messages_for_ai(db: Session, conv: ChatConversation) -> list[di
     """构建发给模型的完整 messages（system prompt + 历史 + 数据上下文，流式/非流式共用）。"""
     messages_for_ai: list[dict] = []
 
-    # System prompt
-    system_content = SYSTEM_PROMPT
+    # 历史消息
+    history = (
+        db.query(ChatMessage)
+        .filter(ChatMessage.conversation_id == conv.id)
+        .order_by(ChatMessage.created_at.asc())
+        .all()
+    )
+    latest_user = next((m.content for m in reversed(history) if m.role == "user"), None)
+
+    # System prompt (with a turn-level compliance notice for advice requests)
+    system_content = system_prompt_for(latest_user)
 
     # 绑定股票提示
     if conv.stock_symbol and conv.stock_market:
@@ -236,13 +247,6 @@ async def _build_messages_for_ai(db: Session, conv: ChatConversation) -> list[di
 
     messages_for_ai.append({"role": "system", "content": system_content})
 
-    # 历史消息
-    history = (
-        db.query(ChatMessage)
-        .filter(ChatMessage.conversation_id == conv.id)
-        .order_by(ChatMessage.created_at.asc())
-        .all()
-    )
     recent = history[-MAX_HISTORY_MESSAGES:] if len(history) > MAX_HISTORY_MESSAGES else history
     for m in recent:
         if m.role in ("user", "assistant"):
@@ -343,7 +347,7 @@ async def send_message(
         assistant_msg = ChatMessage(
             conversation_id=conversation_id,
             role="assistant",
-            content=ai_response,
+            content=ensure_guarded(ai_response, surface="chat_message"),
         )
         db.add(assistant_msg)
 
@@ -491,7 +495,7 @@ async def _run_chat_stream_task(
         assistant_msg = ChatMessage(
             conversation_id=conversation_id,
             role="assistant",
-            content=ai_response,
+            content=ensure_guarded(ai_response, surface="chat_message"),
         )
         db.add(assistant_msg)
         conv.updated_at = datetime.now(timezone.utc)

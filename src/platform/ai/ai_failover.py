@@ -38,6 +38,8 @@ from openai import (
 from src.platform.ai.ai_client import AIClient
 from src.platform.observability.log_context import get_log_context
 
+from src.platform.compliance import guard_chat_stream, guard_text
+
 logger = logging.getLogger(__name__)
 
 # ── 错误类别 ───────────────────────────────────────────────────────────
@@ -225,6 +227,9 @@ class FailoverAIClient:
                 continue
         raise last_exc or RuntimeError("所有候选模型均失败")
 
+    # Every model output leaving this client passes the compliance guard (ADR-002):
+    # this is the default layer for all non-TradingAgents LLM calls. Sinks guard again.
+
     async def chat(
         self,
         system_prompt: str,
@@ -232,9 +237,10 @@ class FailoverAIClient:
         images: list[str] | None = None,
         temperature: float | None = 0.4,
     ) -> str:
-        return await self._run(
+        content = await self._run(
             "chat", system_prompt, user_content, images=images, temperature=temperature
         )
+        return guard_text(content, surface="ai_chat").text
 
     async def chat_multi(
         self,
@@ -243,18 +249,38 @@ class FailoverAIClient:
         max_tokens: int | None = None,
     ) -> str:
         kwargs = {"max_tokens": max_tokens} if max_tokens is not None else {}
-        return await self._run(
+        content = await self._run(
             "chat_multi", messages, temperature=temperature, **kwargs
         )
+        return guard_text(content, surface="ai_chat").text
 
     async def chat_with_tools(
         self, messages: list[dict], tools: list[dict], temperature: float | None = 0.4
     ):
-        return await self._run(
+        message = await self._run(
             "chat_with_tools", messages, tools, temperature=temperature
         )
+        if getattr(message, "content", None):
+            message.content = guard_text(message.content, surface="ai_chat").text
+        return message
 
     async def chat_stream(
+        self,
+        messages: list[dict],
+        tools: list[dict] | None = None,
+        temperature: float | None = 0.4,
+        tool_choice: str | None = None,
+    ):
+        """Guarded stream: tokens are released sentence by sentence after checking."""
+        async for event in guard_chat_stream(
+            self._chat_stream_raw(
+                messages, tools=tools, temperature=temperature, tool_choice=tool_choice
+            ),
+            surface="ai_stream",
+        ):
+            yield event
+
+    async def _chat_stream_raw(
         self,
         messages: list[dict],
         tools: list[dict] | None = None,

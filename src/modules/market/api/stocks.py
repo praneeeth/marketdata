@@ -20,6 +20,8 @@ from src.platform.persistence.models import (
 from src.platform.marketdata.stock_list import search_stocks, refresh_stock_list
 from src.platform.marketdata.marketdata_client import md_quote_rows
 from src.platform.marketdata.models import MarketCode, MARKETS
+from src.platform.marketdata.india_bridge import display_symbol, parse_symbol
+from src.modules.market.brokers import get_broker_manager
 from src.modules.automation.agent_catalog import AGENT_KIND_WORKFLOW, infer_agent_kind
 
 logger = logging.getLogger(__name__)
@@ -185,9 +187,17 @@ def get_market_status():
 
 
 @router.get("/search")
-def search(q: str = Query("", min_length=1), market: str = Query("")):
-    """模糊搜索股票(代码/名称)"""
-    return search_stocks(q, market)
+def search(
+    q: str = Query("", min_length=1), market: str = Query(""), db: Session = Depends(get_db)
+):
+    """模糊搜索股票(代码/名称). India ("IN") searches the user's broker instrument list."""
+    market = market.strip().upper()
+    india = (
+        get_broker_manager().search_instruments(db, q) if market in ("", "IN") else []
+    )
+    if market == "IN":
+        return india
+    return india + search_stocks(q, market)
 
 
 @router.post("/refresh-list")
@@ -232,6 +242,9 @@ def get_quotes(db: Session = Depends(get_db)):
                     "change_pct": item["change_pct"],
                     "change_amount": item["change_amount"],
                     "prev_close": item["prev_close"],
+                    # India only: which broker served it and whether it is official data.
+                    **({"source": item["source"], "quality": item["quality"]}
+                       if "quality" in item else {}),
                 }
         except Exception as e:
             logger.error(f"获取 {market} 行情失败: {e}")
@@ -239,8 +252,24 @@ def get_quotes(db: Session = Depends(get_db)):
     return quotes
 
 
+def _normalise_india_stock(stock: StockCreate) -> StockCreate:
+    """Canonical India symbols: "INFY" for NSE, "BSE:INFY" for BSE."""
+    import re
+
+    try:
+        ref = parse_symbol(stock.symbol)
+    except ValueError:
+        raise HTTPException(400, "Enter a symbol, e.g. INFY or BSE:500209") from None
+    symbol = display_symbol(ref)
+    if not re.match(MARKETS[MarketCode.IN].symbol_pattern, symbol):
+        raise HTTPException(400, f"{stock.symbol!r} is not a valid NSE/BSE symbol")
+    return StockCreate(symbol=symbol, name=stock.name or ref.tradingsymbol, market="IN")
+
+
 @router.post("", response_model=StockResponse)
 def create_stock(stock: StockCreate, db: Session = Depends(get_db)):
+    if stock.market.upper() == "IN":
+        stock = _normalise_india_stock(stock)
     existing = db.query(Stock).filter(
         Stock.symbol == stock.symbol, Stock.market == stock.market
     ).first()

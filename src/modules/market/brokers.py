@@ -15,6 +15,7 @@ connection, which protects the public callback routes against CSRF.
 from __future__ import annotations
 
 import contextlib
+import functools
 import os
 import secrets
 import threading
@@ -27,6 +28,9 @@ from typing import Any
 
 from marketdata.india import (
     IST,
+    Capability,
+    Exchange,
+    InstrumentType,
     InvalidCredentials,
     MarketDataProvider,
     ProviderError,
@@ -245,6 +249,61 @@ class BrokerManager:
                 db.commit()
             out.append(self._session(row, creds, token.get("access_token", "")))
         return out
+
+    def search_instruments(
+        self, db: Session, query: str, limit: int = 20, user_id: str = LOCAL_USER
+    ) -> list[dict[str, str]]:
+        """Search NSE/BSE equities and indices in the user's own broker instrument master.
+
+        Uses the first connected, unexpired session whose broker has an instrument master;
+        the master is cached per credential, so this is cheap after the first call.
+        """
+        q = " ".join(query.strip().upper().split())
+        if not q:
+            return []
+        now = self._clock()
+        for session in self.sessions(db, user_id):
+            provider = self.providers.get(session.provider)
+            if (
+                provider is None
+                or Capability.INSTRUMENTS not in provider.capabilities
+                or session.is_expired(now)
+            ):
+                continue
+            ranked: list[tuple[int, str, dict[str, str]]] = []
+            for exchange in (Exchange.NSE, Exchange.BSE):
+                try:
+                    index = self.instrument_cache.get(
+                        session,
+                        exchange,
+                        functools.partial(provider.instruments, session, exchange),
+                    )
+                except ProviderError:
+                    break
+                for inst in index.values():
+                    if inst.instrument_type not in (InstrumentType.EQUITY, InstrumentType.INDEX):
+                        continue
+                    symbol, name = inst.tradingsymbol.upper(), inst.name.upper()
+                    if symbol == q:
+                        rank = 0
+                    elif symbol.startswith(q):
+                        rank = 1
+                    elif q in name:
+                        rank = 2
+                    else:
+                        continue
+                    shown = symbol if exchange is Exchange.NSE else f"BSE:{symbol}"
+                    item = {
+                        "symbol": shown,
+                        "name": inst.name,
+                        "market": "IN",
+                        "exchange": exchange.value,
+                    }
+                    ranked.append((rank + (0 if exchange is Exchange.NSE else 3), shown, item))
+            if ranked:
+                ranked.sort(key=lambda r: (r[0], r[1]))
+                return [item for _rank, _sym, item in ranked[:limit]]
+        return []
 
     # --- commands --------------------------------------------------------------------
 

@@ -14,6 +14,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from src.modules.market.brokers import BrokerError, BrokerManager, get_broker_manager
+from src.platform.marketdata.india_bridge import get_india_bridge
 from src.platform.persistence.database import get_db
 
 router = APIRouter()
@@ -48,6 +49,12 @@ def list_connections(db: DbSession, manager: Manager) -> dict[str, Any]:
         "available": manager.available(),
         "connections": manager.connections(db),
     }
+
+
+@router.get("/notice")
+def data_notice() -> dict[str, str]:
+    """Why Indian market data is missing right now (empty when the last fetch worked)."""
+    return {"notice": get_india_bridge().data_notice()}
 
 
 @router.put("/{provider}")

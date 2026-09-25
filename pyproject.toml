@@ -26,6 +26,7 @@ include = [
     "src/modules/market/api/brokers.py",
     "src/platform/marketdata/india_bridge.py",
     "tests/test_india_bridge.py",
+    "tests/test_india_stocks_api.py",
     "tests/compliance/**/*.py",
     "tests/security/**/*.py",
     "packages/marketdata/src/marketdata/india/**/*.py",

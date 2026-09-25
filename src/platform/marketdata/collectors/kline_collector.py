@@ -87,6 +87,8 @@ def get_index_klines(index_code: str, market: MarketCode, days: int = 120) -> li
     """取大盘/指数日K:走 marketdata 包 index_klines(INDEX_SECID 显式映射,未映射如美股指数
     → 空列表,fail-soft;见 packages/marketdata/src/marketdata/client.py)。
     """
+    if market == MarketCode.IN:
+        return KlineCollector(MarketCode.IN).get_klines(index_code, days=days)
     try:
         bars = get_market_data().index_klines(index_code, market=market.value, days=days)
     except Exception as e:
@@ -406,6 +408,14 @@ class KlineCollector:
         正缓存(按市场状态 TTL)+ 同标的并发合并(只联网一次)+ 失败负缓存
         (源短暂故障时冷却窗口内不再联网),避免多消费者并发把数据源打爆。
         """
+        if self.market == MarketCode.IN:
+            # Per-user broker data: skip the process-wide cache below (it is keyed by
+            # symbol only). The India layer caches per credential instead.
+            from src.platform.marketdata.india_bridge import get_india_bridge
+
+            bars = get_india_bridge().daily_bars(symbol, max(1, int(days or 1)))
+            return [KlineData(date=b.date, open=b.open, close=b.close, high=b.high,
+                              low=b.low, volume=b.volume) for b in bars]
         cache_key = f"{self.market.value}:{symbol}"
         need = max(1, int(days or 1))
 

@@ -46,9 +46,14 @@ from src.modules.research.api import (
     recommendations,
 )
 from src.modules.strategy.api import factors
+from src.modules.market.brokers import get_broker_manager
 from src.platform.compliance import Feature, is_feature_enabled
 from src.platform.compliance.http import feature_gate
+from src.platform.marketdata.india_bridge import register_broker_manager
 from src.web.response import ResponseWrapperMiddleware
+
+# Market "IN" quotes/K-lines (platform layer) read the user's broker sessions (modules layer).
+register_broker_manager(get_broker_manager)
 
 app = FastAPI(
     title="PanWatch API",

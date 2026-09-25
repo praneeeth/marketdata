@@ -8,6 +8,7 @@ class MarketCode(str, Enum):
     CN = "CN"  # A股
     HK = "HK"  # 港股
     US = "US"  # 美股
+    IN = "IN"  # India: NSE/BSE via the user's broker (India fork, Phase 2)
 
 
 @dataclass
@@ -80,6 +81,18 @@ MARKETS: dict[MarketCode, MarketDef] = {
             TradingSession(time(9, 30), time(16, 0)),
         ],
         symbol_pattern=r"^[A-Z]{1,5}$",
+    ),
+    # Normal session only; pre-open, special sessions and the NSE holiday calendar
+    # arrive in Phase 3. Until then only weekends are treated as closed.
+    MarketCode.IN: MarketDef(
+        code=MarketCode.IN,
+        name="India (NSE/BSE)",
+        timezone="Asia/Kolkata",
+        sessions=[
+            TradingSession(time(9, 15), time(15, 30)),
+        ],
+        # "INFY", "NSE:INFY", "BSE:INFY", "M&M", "BAJAJ-AUTO", "NIFTY 50"
+        symbol_pattern=r"^((NSE|BSE):)?[A-Z0-9][A-Z0-9&\-. ]{0,39}$",
     ),
 }
 

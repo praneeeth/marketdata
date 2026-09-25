@@ -109,6 +109,10 @@ def md_quote_rows(symbols: list[str], market: str) -> list[dict]:
     syms = list(symbols)
     if not syms:
         return []
+    if str(market).upper() == "IN":
+        from src.platform.marketdata.india_bridge import get_india_bridge
+
+        return get_india_bridge().quote_rows(syms)
     quotes = get_market_data().quotes(syms, market=market)
     return [_quote_to_row(q) for q in quotes]
 
@@ -167,6 +171,14 @@ def md_stock_data(symbols: list[str], market: str) -> list:
     syms = list(symbols)
     if not syms:
         return []
+    if str(market).upper() == "IN":
+        return [StockData(
+            symbol=r["symbol"], name=r["name"] or "", market=MarketCode.IN,
+            current_price=r["current_price"] or 0.0, change_pct=r["change_pct"] or 0.0,
+            change_amount=r["change_amount"] or 0.0, volume=r["volume"] or 0.0,
+            turnover=0.0, open_price=r["open_price"] or 0.0,
+            high_price=r["high_price"] or 0.0, low_price=r["low_price"] or 0.0,
+            prev_close=r["prev_close"] or 0.0) for r in md_quote_rows(syms, "IN")]
     quotes = get_market_data().quotes(syms, market=market)
     return [StockData(
         symbol=q.symbol, name=q.name or "", market=MarketCode(q.market),

@@ -53,6 +53,15 @@ _INDEX_TICKERS: Mapping[str, str] = {
     "SENSEX": "^BSESN",
 }
 
+_FAST_INFO_KEYS = (
+    "last_price",
+    "previous_close",
+    "open",
+    "day_high",
+    "day_low",
+    "last_volume",
+)
+
 TickerFactory = Callable[[str], Any]
 
 
@@ -192,8 +201,15 @@ class YFinanceProvider:
     ) -> OptionChain:
         raise NotSupported(NAME, "Yahoo has no Indian option chains")
 
-    def _fast_info(self, symbol: str) -> Any:
-        return self._call(lambda: self._ticker(symbol).fast_info)
+    def _fast_info(self, symbol: str) -> dict[str, Any]:
+        # FastInfo is lazy: the network fetch happens on first key access, so read every
+        # field inside _call so that errors are wrapped.
+        def read() -> dict[str, Any]:
+            info = self._ticker(symbol).fast_info
+            return {key: _get(info, key) for key in _FAST_INFO_KEYS}
+
+        values: dict[str, Any] = self._call(read)
+        return values
 
     def _call(self, fn: Callable[[], Any]) -> Any:
         try:

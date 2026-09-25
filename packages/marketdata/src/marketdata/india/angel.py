@@ -7,7 +7,7 @@ Everything marked (verify) could not be checked against live traffic from the sa
 
 from __future__ import annotations
 
-from collections.abc import Iterator, Mapping, Sequence
+from collections.abc import Iterable, Iterator, Mapping, Sequence
 from datetime import date, datetime, time, timedelta
 from typing import Any
 
@@ -23,6 +23,7 @@ from marketdata.india.errors import (
     RateLimited,
     SessionExpired,
 )
+from marketdata.india.instrument_cache import InstrumentCache
 from marketdata.india.options import batched, build_chain, select_contracts
 from marketdata.india.session import ProviderSession, Secret
 from marketdata.india.transport import Transport, provider_message
@@ -115,8 +116,15 @@ class AngelProvider:
     )
     quality = DataQuality.OFFICIAL_REALTIME
 
-    def __init__(self, transport: Transport | None = None) -> None:
+    def __init__(
+        self,
+        transport: Transport | None = None,
+        *,
+        instrument_cache: InstrumentCache | None = None,
+    ) -> None:
         self._t = transport or Transport(NAME, API_BASE, error_mapper=_error_mapper)
+        # Shared with IndiaMarketData so option chains reuse the per-credential master.
+        self._instrument_cache = instrument_cache
 
     # --- login -----------------------------------------------------------------------
 
@@ -244,7 +252,7 @@ class AngelProvider:
         self, session: ProviderSession, underlying: InstrumentRef, expiry: date
     ) -> OptionChain:
         fo = Exchange.BFO if underlying.exchange is Exchange.BSE else Exchange.NFO
-        contracts = select_contracts(self.instruments(session, fo), underlying, expiry)
+        contracts = select_contracts(self._cached_instruments(session, fo), underlying, expiry)
         spot = self.quotes(session, [underlying]) if underlying.id_for(NAME) else []
         return build_chain(
             underlying=underlying,
@@ -257,6 +265,15 @@ class AngelProvider:
         )
 
     # --- helpers ---------------------------------------------------------------------
+
+    def _cached_instruments(
+        self, session: ProviderSession, exchange: Exchange
+    ) -> Iterable[Instrument]:
+        if self._instrument_cache is None:
+            return self.instruments(session, exchange)
+        return self._instrument_cache.get(
+            session, exchange, lambda: self.instruments(session, exchange)
+        ).values()
 
     def _post(
         self,

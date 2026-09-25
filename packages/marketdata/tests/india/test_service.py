@@ -289,3 +289,22 @@ def test_option_chain_failover_to_capable_provider() -> None:
         service(unsupported).corporate_actions(
             [sess("kite", "k1")], INFY, date(2026, 1, 1), date(2026, 2, 1)
         )
+
+
+def test_one_unknown_symbol_does_not_sink_the_batch() -> None:
+    """Review #1: a delisted symbol in a watchlist must not hide the other quotes."""
+    kite = FakeProvider("kite")
+    svc = service(kite)
+    quotes = svc.quotes([sess("kite", "k1")], [INFY, InstrumentRef(Exchange.NSE, "DELISTEDCO")])
+    assert [q.instrument.tradingsymbol for q in quotes] == ["INFY"]
+
+
+def test_shared_instrument_cache_is_used() -> None:
+    """Review #7: the service and adapters can share one per-credential master cache."""
+    from marketdata.india.instrument_cache import InstrumentCache
+
+    kite = FakeProvider("kite")
+    cache = InstrumentCache(CacheTTLs().instruments, Clock())
+    svc = IndiaMarketData({"kite": kite}, clock=Clock(), instrument_cache=cache)
+    svc.quotes([sess("kite", "k1")], [INFY])
+    assert "INFY" in cache.get(sess("kite", "k1"), Exchange.NSE, lambda: [])

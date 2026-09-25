@@ -149,3 +149,23 @@ def test_missing_library(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_fast_info_key_errors() -> None:
     assert yf._get({}, "x") is None
     assert yf._get(None, "x") is None
+
+
+class LazyFailingInfo:
+    """yfinance's FastInfo fetches on first key access, not on attribute access."""
+
+    def __getitem__(self, key: str) -> Any:
+        raise ConnectionError("GET https://query2.example/v7?crumb=SECRET_CRUMB failed")
+
+
+class LazyTicker:
+    def __init__(self, symbol: str) -> None:
+        self.fast_info = LazyFailingInfo()
+
+
+def test_lazy_fast_info_errors_are_wrapped() -> None:
+    """Review #6: network errors raised on key access must become ProviderUnavailable."""
+    p = yf.YFinanceProvider(DEV_ENV, ticker_factory=LazyTicker)
+    with pytest.raises(ProviderUnavailable) as exc:
+        p.quotes(session_for("yfinance"), [INFY])
+    assert "SECRET_CRUMB" not in str(exc.value)

@@ -13,7 +13,6 @@ Callers pass the *current user's* broker sessions in priority order. The service
 
 from __future__ import annotations
 
-import threading
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
@@ -28,6 +27,7 @@ from marketdata.india.errors import (
     ProviderError,
     SessionExpired,
 )
+from marketdata.india.instrument_cache import InstrumentCache
 from marketdata.india.provider import MarketDataProvider
 from marketdata.india.session import ProviderSession
 from marketdata.india.types import (
@@ -35,8 +35,6 @@ from marketdata.india.types import (
     Candle,
     Capability,
     CorporateAction,
-    Exchange,
-    Instrument,
     InstrumentRef,
     Interval,
     OptionChain,
@@ -70,44 +68,6 @@ class AllProvidersFailed(MarketDataError):
         return [name for name, err in self.failures if isinstance(err, SessionExpired)]
 
 
-class _InstrumentStore:
-    """Instrument masters cached per (credential, exchange), indexed for lookup."""
-
-    def __init__(self, ttl: timedelta, clock: Callable[[], datetime]) -> None:
-        self._ttl = ttl
-        self._clock = clock
-        self._lock = threading.Lock()
-        self._masters: dict[tuple[str, Exchange], tuple[datetime, dict[str, Instrument]]] = {}
-
-    def lookup(
-        self,
-        provider: MarketDataProvider,
-        session: ProviderSession,
-        ref: InstrumentRef,
-    ) -> Instrument | None:
-        index = self._master(provider, session, ref.exchange)
-        return index.get(ref.tradingsymbol.upper())
-
-    def _master(
-        self, provider: MarketDataProvider, session: ProviderSession, exchange: Exchange
-    ) -> dict[str, Instrument]:
-        key = (session.credential_id, exchange)
-        now = self._clock()
-        with self._lock:
-            cached = self._masters.get(key)
-        if cached is not None and now - cached[0] < self._ttl:
-            return cached[1]
-        index = {i.tradingsymbol.upper(): i for i in provider.instruments(session, exchange)}
-        with self._lock:
-            self._masters[key] = (now, index)
-        return index
-
-    def forget(self, credential_id: str) -> None:
-        with self._lock:
-            for key in [k for k in self._masters if k[0] == credential_id]:
-                del self._masters[key]
-
-
 class IndiaMarketData:
     def __init__(
         self,
@@ -116,12 +76,13 @@ class IndiaMarketData:
         ttls: CacheTTLs | None = None,
         clock: Callable[[], datetime] = lambda: datetime.now(IST),
         cache: TTLCache | None = None,
+        instrument_cache: InstrumentCache | None = None,
     ) -> None:
         self._providers = dict(providers)
         self._ttls = ttls or CacheTTLs()
         self._clock = clock
         self._cache = cache or TTLCache(max_size=4096)
-        self._instruments = _InstrumentStore(self._ttls.instruments, clock)
+        self._instruments = instrument_cache or InstrumentCache(self._ttls.instruments, clock)
 
     # --- public API --------------------------------------------------------------------
 
@@ -136,7 +97,18 @@ class IndiaMarketData:
             cached: list[Quote] | None = self._cache.get(key)
             if cached is not None:
                 return cached
-            resolved = [self._resolve(provider, session, r) for r in refs]
+            # Skip symbols this provider doesn't list (e.g. delisted) instead of failing
+            # the whole batch; fail over only if none of them can be resolved.
+            resolved: list[InstrumentRef] = []
+            for ref in refs:
+                try:
+                    resolved.append(self._resolve(provider, session, ref))
+                except InstrumentNotResolved:
+                    continue
+            if not resolved:
+                raise InstrumentNotResolved(
+                    provider.name, "none of the instruments are in its instrument list"
+                )
             quotes = provider.quotes(session, resolved)
             if not quotes:
                 raise BadResponse(provider.name, "returned no quotes")
@@ -256,7 +228,10 @@ class IndiaMarketData:
     ) -> InstrumentRef:
         if ref.id_for(provider.name) or Capability.INSTRUMENTS not in provider.capabilities:
             return ref
-        inst = self._instruments.lookup(provider, session, ref)
+        index = self._instruments.get(
+            session, ref.exchange, lambda: provider.instruments(session, ref.exchange)
+        )
+        inst = index.get(ref.tradingsymbol.upper())
         provider_id = inst.ref.id_for(provider.name) if inst else None
         if provider_id:
             return ref.with_id(provider.name, provider_id)

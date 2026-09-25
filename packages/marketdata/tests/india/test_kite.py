@@ -290,3 +290,23 @@ def test_option_chain_on_bse_uses_bfo() -> None:
     )
     assert chain.rows == ()
     assert chain.spot is None
+
+
+def test_option_chain_reuses_the_cached_instrument_master() -> None:
+    """Review #7: repeated chains must not re-download the F&O master."""
+    from datetime import timedelta as _td
+
+    from marketdata.india.instrument_cache import InstrumentCache
+
+    router = Router()
+    from .providers import kite_routes
+
+    kite_routes(router)
+    cache = InstrumentCache(_td(hours=12), lambda: datetime(2026, 9, 23, tzinfo=IST))
+    provider = kite.KiteProvider(
+        router.transport("kite", kite.API_BASE, kite._error_mapper), instrument_cache=cache
+    )
+    for _ in range(3):
+        provider.option_chain(session_for("kite"), KITE.underlying, KITE.expiry)
+    downloads = [r for r in router.requests if r.url.path == "/instruments/NFO"]
+    assert len(downloads) == 1

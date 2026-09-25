@@ -282,3 +282,23 @@ def test_angel_timestamp_parsing() -> None:
     assert angel._angel_ts("bad") is None
     assert angel._angel_ts(None) is None
     assert angel._expiry(None) is None
+
+
+def test_option_chain_reuses_the_cached_scrip_master() -> None:
+    """Review #7: the ~40 MB scrip master must not be fetched on every chain."""
+    from datetime import timedelta as _td
+
+    from marketdata.india.instrument_cache import InstrumentCache
+
+    from .providers import angel_routes
+
+    router = Router()
+    angel_routes(router)
+    cache = InstrumentCache(_td(hours=12), lambda: datetime(2026, 9, 23, tzinfo=IST))
+    provider = angel.AngelProvider(
+        router.transport("angel", angel.API_BASE, angel._error_mapper), instrument_cache=cache
+    )
+    for _ in range(3):
+        provider.option_chain(session_for("angel"), ANGEL.underlying, ANGEL.expiry)
+    downloads = [r for r in router.requests if r.url.path.endswith("OpenAPIScripMaster.json")]
+    assert len(downloads) == 1

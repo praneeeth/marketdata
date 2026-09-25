@@ -25,11 +25,14 @@ include = [
     "src/modules/market/brokers.py",
     "src/modules/market/api/brokers.py",
     "src/platform/marketdata/india_bridge.py",
+    "src/modules/market/api/global_markets.py",
     "tests/test_india_bridge.py",
     "tests/test_india_stocks_api.py",
+    "tests/test_global_markets_api.py",
     "tests/compliance/**/*.py",
     "tests/security/**/*.py",
     "packages/marketdata/src/marketdata/india/**/*.py",
+    "packages/marketdata/src/marketdata/global_cues.py",
     "packages/marketdata/tests/india/**/*.py",
 ]
 
@@ -56,7 +59,9 @@ files = [
     "src/modules/market/brokers.py",
     "src/modules/market/api/brokers.py",
     "src/platform/marketdata/india_bridge.py",
+    "src/modules/market/api/global_markets.py",
     "packages/marketdata/src/marketdata/india",
+    "packages/marketdata/src/marketdata/global_cues.py",
 ]
 mypy_path = "packages/marketdata/src"
 follow_imports = "silent"
@@ -75,6 +80,7 @@ include = [
     "src/modules/market/brokers.py",
     "src/modules/market/api/brokers.py",
     "src/platform/marketdata/india_bridge.py",
+    "src/modules/market/api/global_markets.py",
 ]
 
 [tool.coverage.report]

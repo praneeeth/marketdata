@@ -33,6 +33,7 @@ import BenchmarkShareCard from '@/components/BenchmarkShareCard'
 import DiagnosticsShareCard from '@/components/DiagnosticsShareCard'
 import DigestShareCard from '@/components/DigestShareCard'
 import { useCompliance } from '@/hooks/use-compliance'
+import GlobalMarketsPanel from '@/components/GlobalMarketsPanel'
 
 function pct(v?: number | null, digits = 2): string {
   if (v == null || !isFinite(v)) return '--'
@@ -427,6 +428,8 @@ export default function DashboardPage() {
           </div>
         ))}
       </div>
+
+      <GlobalMarketsPanel />
 
       {/* 主体:要紧事(7) | 体检(5);机会(5) | 简报(7) */}
       <div className="grid grid-cols-1 gap-3 lg:grid-cols-12">

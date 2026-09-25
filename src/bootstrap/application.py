@@ -28,6 +28,7 @@ from src.modules.assistant.task_runner import assistant_task_runner
 from src.modules.automation.api import agents, suggestions, templates
 from src.modules.market.api import (
     brokers,
+    global_markets,
     discovery,
     klines,
     market,
@@ -74,6 +75,8 @@ app.add_middleware(
 app.include_router(auth.router, prefix="/api/auth", tags=["auth"])
 # 市场指数（公共数据，无需登录）
 app.include_router(market.router, prefix="/api/market", tags=["market"])
+# Global cues (world indices, crude, gold, USD/INR): public context data, no user data.
+app.include_router(global_markets.router, prefix="/api/market", tags=["market"])
 # Compliance status and disclaimer (status is public; /ack checks login itself)
 app.include_router(compliance.router, prefix="/api/compliance", tags=["compliance"])
 # Broker login callbacks: the broker redirects the browser here, protected by the login state.

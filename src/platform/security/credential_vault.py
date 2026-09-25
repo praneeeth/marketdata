@@ -1,8 +1,10 @@
 """Encrypt users' broker credentials at rest (AES-256-GCM with key IDs for rotation).
 
 ``CREDENTIALS_MASTER_KEY`` holds one or more keys as ``<key-id>:<base64url 32 bytes>``,
-comma-separated. The first key encrypts; every listed key can decrypt, so a key is
-rotated by putting the new one first, re-encrypting, then removing the old one.
+comma-separated. The first key encrypts; every listed key can decrypt. To rotate: put
+the new key first and restart, run ``python -m src.modules.market.brokers rotate-keys``
+to re-encrypt every stored value, then remove the old key. Key ids may contain only
+letters, digits, ``-`` and ``_``.
 
 Each ciphertext is bound to a *context* (e.g. user, connection and field) through
 AES-GCM associated data. Moving a stored value to another row or user makes it fail to
@@ -17,6 +19,7 @@ import base64
 import binascii
 import json
 import os
+import re
 import secrets
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -28,6 +31,8 @@ ENV_VAR = "CREDENTIALS_MASTER_KEY"
 _VERSION = "v1"
 _NONCE_BYTES = 12
 _KEY_BYTES = 32
+# Tokens are "."-joined, so key ids must not contain "." (or anything else unusual).
+_KEY_ID = re.compile(r"^[A-Za-z0-9_-]{1,32}$")
 
 
 class VaultError(Exception):
@@ -81,6 +86,10 @@ class CredentialVault:
             kid, sep, encoded = part.partition(":")
             if not sep or not kid or not encoded:
                 raise VaultNotConfigured(f"{ENV_VAR} entries must look like <key-id>:<base64>")
+            if not _KEY_ID.match(kid):
+                raise VaultNotConfigured(
+                    f"key id {kid!r} may only contain letters, digits, '-' and '_'"
+                )
             if kid in keys:
                 raise VaultNotConfigured(f"duplicate key id {kid!r} in {ENV_VAR}")
             try:

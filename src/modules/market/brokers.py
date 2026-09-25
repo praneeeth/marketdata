@@ -35,9 +35,10 @@ from marketdata.india import (
     UnofficialDataDisabled,
 )
 from marketdata.india.angel import AngelProvider
+from marketdata.india.instrument_cache import InstrumentCache
 from marketdata.india.kite import KiteProvider
 from marketdata.india.kite import login_url as kite_login_url
-from marketdata.india.service import IndiaMarketData
+from marketdata.india.service import CacheTTLs, IndiaMarketData
 from marketdata.india.upstox import UpstoxProvider
 from marketdata.india.upstox import authorize_url as upstox_authorize_url
 from marketdata.india.yfinance_dev import YFinanceProvider, unofficial_data_allowed
@@ -49,7 +50,7 @@ from src.platform.security.credential_vault import (
     VaultDecryptError,
     VaultError,
 )
-from src.platform.security.secrets import is_masked, mask_secret
+from src.platform.security.secrets import keep_unless_masked, mask_secret
 
 LOCAL_USER = "local"
 _STATE_TTL_S = 600.0
@@ -134,11 +135,13 @@ class _StateStore:
         return entry[0]
 
 
-def default_providers(env: Mapping[str, str]) -> dict[str, MarketDataProvider]:
+def default_providers(
+    env: Mapping[str, str], instrument_cache: InstrumentCache | None = None
+) -> dict[str, MarketDataProvider]:
     providers: dict[str, MarketDataProvider] = {
-        "kite": KiteProvider(),
+        "kite": KiteProvider(instrument_cache=instrument_cache),
         "upstox": UpstoxProvider(),
-        "angel": AngelProvider(),
+        "angel": AngelProvider(instrument_cache=instrument_cache),
     }
     with contextlib.suppress(UnofficialDataDisabled):
         providers["yfinance"] = YFinanceProvider(env)
@@ -157,9 +160,14 @@ class BrokerManager:
     ) -> None:
         self._env = dict(os.environ if env is None else env)
         self._vault_factory = vault_factory
-        self.providers = dict(default_providers(self._env) if providers is None else providers)
-        self.data = IndiaMarketData(self.providers)
         self._clock = clock
+        # One per-credential instrument master cache shared by the data service and the
+        # adapters' option chains, so each master is downloaded once per TTL.
+        self.instrument_cache = InstrumentCache(CacheTTLs().instruments, clock)
+        self.providers = dict(
+            default_providers(self._env, self.instrument_cache) if providers is None else providers
+        )
+        self.data = IndiaMarketData(self.providers, instrument_cache=self.instrument_cache)
         self._states = state_store or _StateStore()
 
     # --- queries ---------------------------------------------------------------------
@@ -203,7 +211,10 @@ class BrokerManager:
         """The user's usable sessions in priority order, for :class:`IndiaMarketData`.
 
         Expired sessions are included (the data service skips and reports them) so the UI
-        can prompt "reconnect". Rows that fail to decrypt are marked and skipped.
+        can prompt "reconnect". Rows that fail to decrypt are marked and skipped. Without a
+        configured vault nothing is returned and no row is touched, so a restart with a
+        missing key does not mark every connection as failed. Values still encrypted
+        under an older key are re-encrypted under the active key as they are read.
         """
         rows = (
             db.query(BrokerConnection)
@@ -211,23 +222,27 @@ class BrokerManager:
             .order_by(BrokerConnection.priority, BrokerConnection.provider)
             .all()
         )
+        try:
+            vault = self._vault_factory()
+        except VaultError:
+            vault = None
         out: list[ProviderSession] = []
-        vault: CredentialVault | None = None
         for row in rows:
             if row.provider == "yfinance":
                 if "yfinance" in self.providers:
                     out.append(ProviderSession("yfinance", row.id, row.user_id))
                 continue
-            if not row.session_enc:
+            if not row.session_enc or vault is None:
                 continue
             try:
-                vault = vault or self._vault_factory()
                 creds = vault.decrypt(row.credentials_enc, context=_ctx(row, "credentials"))
                 token = vault.decrypt(row.session_enc, context=_ctx(row, "session"))
-            except VaultError:
+            except VaultDecryptError:
                 row.status, row.last_error = "error", "Stored credentials could not be read."
                 db.commit()
                 continue
+            if self._rotate_row(vault, row):
+                db.commit()
             out.append(self._session(row, creds, token.get("access_token", "")))
         return out
 
@@ -239,10 +254,11 @@ class BrokerManager:
         provider: str,
         credentials: Mapping[str, str],
         *,
-        priority: int = 0,
-        enabled: bool = True,
+        priority: int | None = None,
+        enabled: bool | None = None,
         user_id: str = LOCAL_USER,
     ) -> dict[str, Any]:
+        """Create or update a connection. ``None`` keeps the stored priority/enabled."""
         spec = self._spec(provider)
         if provider == "yfinance" and "yfinance" not in self.providers:
             raise BrokerError("Unofficial data is disabled on this server.")
@@ -253,24 +269,31 @@ class BrokerManager:
             stored = self._decrypt_or_empty(vault, row, "credentials")
         merged: dict[str, str] = {}
         for field in spec.credential_fields:
-            incoming = str(credentials.get(field, "") or "").strip()
-            value = stored.get(field, "") if not incoming or is_masked(incoming) else incoming
+            incoming = str(credentials.get(field, "") or "").strip() or None
+            value = keep_unless_masked(stored.get(field), incoming) or ""
             if not value:
                 raise BrokerError(f"{field} is required for {spec.label}.")
             merged[field] = value
         if row is None:
-            row = BrokerConnection(id=uuid.uuid4().hex, user_id=user_id, provider=provider)
+            row = BrokerConnection(
+                id=uuid.uuid4().hex, user_id=user_id, provider=provider, priority=0, enabled=True
+            )
             db.add(row)
         changed = merged != stored
-        row.priority, row.enabled = priority, enabled
+        if priority is not None:
+            row.priority = priority
+        if enabled is not None:
+            row.enabled = enabled
         if vault is not None:
             row.credentials_enc = vault.encrypt(merged, context=_ctx(row, "credentials"))
         row.key_hint = mask_secret(merged[spec.hint_field]) if spec.hint_field else ""
         if provider == "yfinance":
             row.status = "connected"
         elif changed:
-            # New keys invalidate the old session.
+            # New keys (possibly another broker app or account) invalidate the old session
+            # and anything cached under this credential.
             row.session_enc, row.session_expires_at, row.status = None, None, "disconnected"
+            self.data.forget_credential(row.id)
         db.commit()
         return self._public(row)
 
@@ -360,6 +383,19 @@ class BrokerManager:
             return self._login_failed(db, row, e)
         return self._store_session(db, vault, row, session)
 
+    def rotate_keys(self, db: Session) -> int:
+        """Re-encrypt every stored value under the active key. Returns how many changed.
+
+        Run after putting a new key first in CREDENTIALS_MASTER_KEY and before removing
+        the old one. Rows that cannot be decrypted are left as they are.
+        """
+        vault = self._vault()
+        changed = 0
+        for row in db.query(BrokerConnection).all():
+            changed += self._rotate_row(vault, row)
+        db.commit()
+        return changed
+
     def mark_needs_reconnect(
         self, db: Session, providers: Sequence[str], user_id: str = LOCAL_USER
     ) -> None:
@@ -371,6 +407,21 @@ class BrokerManager:
         db.commit()
 
     # --- internals -------------------------------------------------------------------
+
+    @staticmethod
+    def _rotate_row(vault: CredentialVault, row: BrokerConnection) -> int:
+        changed = 0
+        for attr, field in (("credentials_enc", "credentials"), ("session_enc", "session")):
+            token = getattr(row, attr)
+            if not token:
+                continue
+            try:
+                if vault.needs_rotation(token):
+                    setattr(row, attr, vault.rotate(token, context=_ctx(row, field)))
+                    changed += 1
+            except VaultDecryptError:
+                continue
+        return changed
 
     def _store_session(
         self, db: Session, vault: CredentialVault, row: BrokerConnection, session: ProviderSession
@@ -501,3 +552,29 @@ def get_broker_manager() -> BrokerManager:
         if _manager is None:
             _manager = BrokerManager()
         return _manager
+
+
+def _open_db() -> Session:
+    from src.platform.persistence.database import SessionLocal
+
+    return SessionLocal()
+
+
+def main(argv: Sequence[str]) -> int:
+    """``python -m src.modules.market.brokers rotate-keys``"""
+    if list(argv) != ["rotate-keys"]:
+        print("usage: python -m src.modules.market.brokers rotate-keys")
+        return 2
+    db = _open_db()
+    try:
+        count = get_broker_manager().rotate_keys(db)
+    finally:
+        db.close()
+    print(f"Re-encrypted {count} stored value(s) under the active key.")
+    return 0
+
+
+if __name__ == "__main__":  # pragma: no cover
+    import sys
+
+    raise SystemExit(main(sys.argv[1:]))

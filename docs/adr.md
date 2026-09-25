@@ -269,7 +269,8 @@ and open questions live in [`docs/india-fork/PLAN.md`](india-fork/PLAN.md).
     every cache entry, including instrument masters, by credential ID. Expired sessions
     are skipped and reported through `needs_reconnect`.
   - **Credentials at rest.** `CredentialVault` uses AES-256-GCM with key IDs for
-    rotation. The associated data binds each value to `user|connection|field`.
+    rotation (`python -m src.modules.market.brokers rotate-keys` re-encrypts stored values;
+    reads also re-encrypt lazily). The associated data binds each value to `user|connection|field`.
     `broker_connections` stores only vault tokens plus a masked hint.
   - **Logins.** Kite (request token) and Upstox (OAuth code) use single-use, 10-minute
     state tokens on public callbacks. Angel One takes a TOTP typed at login, and no seed

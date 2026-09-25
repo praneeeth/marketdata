@@ -156,3 +156,16 @@ def test_repr_and_errors_leak_nothing(
 
 def test_generated_specs_are_unique() -> None:
     assert generate_key_spec() != generate_key_spec()
+
+
+@pytest.mark.parametrize("kid", ["prod.2026", "a b", "k|1", "ключ"])
+def test_key_ids_must_be_token_safe(kid: str) -> None:
+    """Review #5: a '.' in the key id would make every token undecryptable."""
+    spec = generate_key_spec("k1").replace("k1", kid, 1)
+    with pytest.raises(VaultNotConfigured, match="key id"):
+        CredentialVault.from_spec(spec)
+
+
+def test_dashes_and_underscores_are_fine() -> None:
+    v = CredentialVault.from_spec(generate_key_spec("prod-2026_a"))
+    assert v.decrypt(v.encrypt({"a": "b"}, context=CTX), context=CTX) == {"a": "b"}

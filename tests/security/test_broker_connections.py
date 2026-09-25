@@ -13,6 +13,7 @@ import pytest
 from fastapi.testclient import TestClient
 from marketdata.india import (
     IST,
+    Exchange,
     InvalidCredentials,
     ProviderSession,
     ProviderUnavailable,
@@ -529,3 +530,136 @@ def test_callbacks_are_public_but_management_is_not(
     # The browser arrives from the broker without our bearer token; state protects it.
     cb = client.get("/api/brokers/kite/callback?request_token=x&state=y", follow_redirects=False)
     assert cb.status_code == 303
+
+
+# --- review fixes ------------------------------------------------------------------------
+
+
+def test_missing_vault_does_not_poison_rows(manager: BrokerManager, db: Session) -> None:
+    """Review #2: a restart without the key must not mark every connection as failed."""
+    connect_kite(manager, db)
+
+    def no_vault() -> CredentialVault:
+        raise VaultNotConfigured("not set")
+
+    broken = BrokerManager(vault_factory=no_vault, providers=manager.providers, env={})
+    assert broken.sessions(db) == []
+    row = db.query(BrokerConnection).one()
+    assert row.status == "connected"
+    assert row.last_error == ""
+    assert [s.provider for s in manager.sessions(db)] == ["kite"]  # key back: all fine
+
+
+def test_editing_keys_keeps_priority_and_enabled(manager: BrokerManager, db: Session) -> None:
+    """Review #3: saving keys must not reset failover order or re-enable a connection."""
+    save_kite(manager, db, priority=2, enabled=False)
+    public = manager.save(db, "kite", {"api_key": "kite_key_123", "api_secret": "new_secret"})
+    assert public["priority"] == 2
+    assert public["enabled"] is False
+    public = manager.save(db, "kite", {}, priority=1)
+    assert public["priority"] == 1
+    assert public["enabled"] is False
+
+
+def test_new_connections_default_to_enabled(manager: BrokerManager, db: Session) -> None:
+    public = save_kite(manager, db)
+    assert public["priority"] == 0
+    assert public["enabled"] is True
+
+
+def test_rotate_keys_reencrypts_every_row(db: Session, clock: Clock) -> None:
+    """Review #4: the documented rotation must actually re-encrypt stored values."""
+    old_spec = generate_key_spec("old")
+    new_spec = generate_key_spec("new")
+    spec = {"value": old_spec}
+    providers = {"kite": FakeKite(), "upstox": FakeUpstox(), "angel": FakeAngel()}
+
+    def factory() -> CredentialVault:
+        return CredentialVault.from_spec(spec["value"])
+
+    m = BrokerManager(vault_factory=factory, providers=providers, env={}, clock=clock)
+    connect_kite(m, db)
+    m.save(db, "angel", {"api_key": "a", "client_code": "C1", "pin": "1"})
+
+    spec["value"] = f"{new_spec},{old_spec}"  # step 1: new key first
+    assert m.rotate_keys(db) == 3  # kite credentials + kite session + angel credentials
+    assert m.rotate_keys(db) == 0  # idempotent
+    spec["value"] = new_spec  # step 2: old key removed
+    (session,) = m.sessions(db)
+    assert session.access_token.reveal() == TOKEN
+    assert m.login_with_totp(db, "angel", "123456")["status"] == "connected"
+
+
+def test_sessions_rotate_lazily(db: Session, clock: Clock) -> None:
+    old_spec = generate_key_spec("old")
+    spec = {"value": old_spec}
+    m = BrokerManager(
+        vault_factory=lambda: CredentialVault.from_spec(spec["value"]),
+        providers={"kite": FakeKite()},
+        env={},
+        clock=clock,
+    )
+    connect_kite(m, db)
+    spec["value"] = f"{generate_key_spec('new')},{old_spec}"
+    m.sessions(db)
+    row = db.query(BrokerConnection).one()
+    assert row.credentials_enc.startswith("v1.new.")
+    assert (row.session_enc or "").startswith("v1.new.")
+
+
+def test_rotate_keys_without_vault_is_an_error(db: Session) -> None:
+    def no_vault() -> CredentialVault:
+        raise VaultNotConfigured("not set")
+
+    m = BrokerManager(vault_factory=no_vault, providers={}, env={})
+    with pytest.raises(BrokerError, match="CREDENTIALS_MASTER_KEY"):
+        m.rotate_keys(db)
+
+
+def test_rotate_keys_skips_unreadable_rows(manager: BrokerManager, db: Session) -> None:
+    connect_kite(manager, db)
+    row = db.query(BrokerConnection).one()
+    row.credentials_enc = "v1.k1.garbage.garbage"
+    db.commit()
+    assert manager.rotate_keys(db) == 0
+
+
+def test_changing_keys_drops_cached_instruments(manager: BrokerManager, db: Session) -> None:
+    """Review #9: a different broker app/account must not reuse the old master."""
+    connect_kite(manager, db)
+    row = db.query(BrokerConnection).one()
+    (session,) = manager.sessions(db)
+    manager.instrument_cache.get(session, Exchange.NSE, lambda: [])
+    assert manager.instrument_cache._fresh((row.id, Exchange.NSE)) is not None
+    manager.save(db, "kite", {"api_key": "other_key_456", "api_secret": SECRET})
+    assert manager.instrument_cache._fresh((row.id, Exchange.NSE)) is None
+
+
+def test_adapters_share_the_managers_instrument_cache(db: Session) -> None:
+    m = BrokerManager(vault_factory=lambda: CredentialVault.from_spec(VAULT_SPEC), env={})
+    kite = m.providers["kite"]
+    assert isinstance(kite, KiteProvider)
+    assert kite._instrument_cache is m.instrument_cache
+    assert m.data._instruments is m.instrument_cache
+
+
+def test_rotate_keys_cli(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    calls: list[str] = []
+
+    class FakeManager:
+        def rotate_keys(self, db: Session) -> int:
+            calls.append("rotate")
+            return 4
+
+    class FakeDb:
+        def close(self) -> None:
+            calls.append("close")
+
+    monkeypatch.setattr(brokers_mod, "get_broker_manager", lambda: FakeManager())
+    monkeypatch.setattr(brokers_mod, "_open_db", lambda: FakeDb())
+    assert brokers_mod.main(["rotate-keys"]) == 0
+    assert "Re-encrypted 4" in capsys.readouterr().out
+    assert calls == ["rotate", "close"]
+    assert brokers_mod.main([]) == 2

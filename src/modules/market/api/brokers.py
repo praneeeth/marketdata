@@ -28,8 +28,9 @@ _RETURN_PATH = "/datasources"
 
 class SaveRequest(BaseModel):
     credentials: dict[str, str] = Field(default_factory=dict)
-    priority: int = 0
-    enabled: bool = True
+    # Omitted means "keep the stored value" (new connections: priority 0, enabled).
+    priority: int | None = None
+    enabled: bool | None = None
 
 
 class TotpRequest(BaseModel):

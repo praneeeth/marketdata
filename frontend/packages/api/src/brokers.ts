@@ -34,10 +34,15 @@ export interface BrokerOverview {
 
 export const brokersApi = {
   list: () => fetchAPI<BrokerOverview>('/brokers'),
-  save: (provider: string, credentials: Record<string, string>, priority = 0, enabled = true) =>
+  /** Omitted `priority`/`enabled` keep the stored values, so editing keys never resets them. */
+  save: (
+    provider: string,
+    credentials: Record<string, string>,
+    options: { priority?: number; enabled?: boolean } = {},
+  ) =>
     fetchAPI<BrokerConnection>(`/brokers/${provider}`, {
       method: 'PUT',
-      body: JSON.stringify({ credentials, priority, enabled }),
+      body: JSON.stringify({ credentials, ...options }),
     }),
   remove: (provider: string) =>
     fetchAPI<{ deleted: boolean }>(`/brokers/${provider}`, { method: 'DELETE' }),

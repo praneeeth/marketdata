@@ -63,6 +63,9 @@ def _quote_to_response(symbol: str, market: MarketCode, quote: dict | None) -> d
         "pe_ratio": quote.get("pe_ratio"),
         "total_market_value": quote.get("total_market_value"),
         "circulating_market_value": quote.get("circulating_market_value"),
+        # India only: serving broker and data quality ("unofficial_delayed" for yfinance).
+        **({"source": quote.get("source"), "quality": quote.get("quality")}
+           if "quality" in quote else {}),
     }
 
 

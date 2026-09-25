@@ -958,3 +958,12 @@ the imported upstream history that option A exists to preserve.
 | Phase 2 branch | `phase-2/india-market-data`, stacked on the Phase 1 branch; separate PR | decided |
 | English translation (Phase 4) | Starts right after Phase 2, UI first, because Phase 2 deletes much of the Chinese code | decided |
 | Q17 product name | Still undecided; the translation uses a placeholder | **open** |
+
+**2026-09-25.** Owner decisions on markets and global data:
+
+| Topic | Decision | Status |
+| --- | --- | --- |
+| Markets (refines Q2) | India-only for the watchlist, research and agents: NSE/BSE through the user's broker. India is the only market, not one option among CN/HK/US; the market pickers go away | decided |
+| Global markets | A read-only "Global markets" panel for context: US (S&P 500, Nasdaq, Dow), Asia (Nikkei, Hang Seng), Europe (FTSE, DAX), crude, gold and USD/INR. No global stocks in the watchlist | decided |
+| Q8, global cues source | Free delayed sources now, labelled "Delayed / unofficial"; switch to a licensed feed before any public launch. Their terms may not permit commercial display, so this is part of the legal review | decided (interim) |
+| Q8, other market-level data | GIFT Nifty, FII/DII flows, filings, fundamentals | **open** |

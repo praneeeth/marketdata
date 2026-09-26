@@ -1,7 +1,7 @@
 // PanWatch Service Worker
 const CACHE_NAME = 'panwatch-v2';
 
-// 需要缓存的静态资源
+// Static assets to cache
 const STATIC_ASSETS = [
   '/',
   '/manifest.json',
@@ -9,18 +9,18 @@ const STATIC_ASSETS = [
   '/icon-512.png',
 ];
 
-// 安装时缓存静态资源
+// Cache static assets on install
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
       return cache.addAll(STATIC_ASSETS);
     })
   );
-  // 立即激活
+  // Activate at once
   self.skipWaiting();
 });
 
-// 激活时清理旧缓存
+// Clean up old caches on activate
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys().then((cacheNames) => {
@@ -31,18 +31,18 @@ self.addEventListener('activate', (event) => {
       );
     })
   );
-  // 立即接管所有客户端
+  // Take control of all clients at once
   self.clients.claim();
 });
 
-// 网络优先策略（适合实时数据应用）
+// Network-first strategy (suits a live-data app)
 self.addEventListener('fetch', (event) => {
-  // 只处理同源请求
+  // Same-origin requests only
   if (!event.request.url.startsWith(self.location.origin)) {
     return;
   }
 
-  // API 请求不缓存，直接走网络
+  // API requests aren't cached; always go to the network
   if (event.request.url.includes('/api/')) {
     return;
   }
@@ -50,7 +50,7 @@ self.addEventListener('fetch', (event) => {
   event.respondWith(
     fetch(event.request)
       .then((response) => {
-        // 成功获取网络响应，更新缓存
+        // Got a network response; update the cache
         if (response.ok) {
           const responseClone = response.clone();
           caches.open(CACHE_NAME).then((cache) => {
@@ -60,7 +60,7 @@ self.addEventListener('fetch', (event) => {
         return response;
       })
       .catch(() => {
-        // 网络失败，尝试从缓存获取
+        // Network failed; try the cache
         return caches.match(event.request);
       })
   );

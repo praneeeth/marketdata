@@ -14,22 +14,22 @@ import { useCompliance } from '@/hooks/use-compliance'
 interface ShareCardDialogProps {
   open: boolean
   onClose: () => void
-  /** 导出 PNG 文件名(不含扩展名)。 */
+  /** Exported PNG file name (without the extension). */
   filename: string
-  /** 卡片固定宽度,默认 640。 */
+  /** Fixed card width, 640 by default. */
   width?: number
-  /** 卡片正脸内容,由各业务卡传入。颜色须显式内联,勿依赖主题 CSS 变量。 */
+  /** The card's face, supplied by each card. Colours must be inline and explicit, not theme CSS variables. */
   children: ReactNode
 }
 
 /**
- * 分享卡通用外壳:统一的 Dialog + 固定宽度卡片容器 + 品牌页脚 + 「下载图片」按钮。
+ * Shared share-card shell: one Dialog + a fixed-width card container + brand footer + a "Download image" button.
  *
- * 设计要点:
- * - 卡片容器固定宽度(默认 640px),自带白→#f8fafc 渐变背景、圆角、内边距、系统字体、显式深色文字,
- *   保证导出 PNG 在任何主题(亮/暗)下都一致。各业务卡只需提供「正脸」children。
- * - 页脚(免责 + 盯盘侠 PanWatch · github 引流行)由外壳统一渲染,作为全体分享卡的一致性锚点。
- * - 「下载图片」用 html-to-image 的 toPng(pixelRatio:2, cacheBust:true)导出为 ${filename}.png。
+ * Design notes:
+ * - The card container has a fixed width (640px by default), its own white -> #f8fafc gradient, rounded corners, padding, system font and explicit dark text,
+ *   so the exported PNG looks the same in any theme (light/dark). Each card only supplies its face as children.
+ * - The footer (disclaimer + PanWatch · GitHub line) is rendered by the shell, as the consistent anchor for every share card.
+ * - "Download image" exports ${filename}.png with html-to-image's toPng (pixelRatio: 2, cacheBust: true).
  */
 function ShareCardDialogInner({
   open,
@@ -51,7 +51,7 @@ function ShareCardDialogInner({
       link.href = dataUrl
       link.click()
     } catch (e) {
-      alert(e instanceof Error ? `图片生成失败:${e.message}` : '图片生成失败,请重试')
+      alert(e instanceof Error ? `Image generation failed: ${e.message}` : 'Image generation failed; please try again')
     } finally {
       setBusy(false)
     }
@@ -61,13 +61,13 @@ function ShareCardDialogInner({
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
       <DialogContent className="max-w-2xl">
         <DialogHeader>
-          <DialogTitle>分享图片</DialogTitle>
-          <DialogDescription>导出一张干净的卡片,可分享到雪球 / 微信群。</DialogDescription>
+          <DialogTitle>Share image</DialogTitle>
+          <DialogDescription>Export a clean card to share on social media or in group chats.</DialogDescription>
         </DialogHeader>
 
-        {/* 预览区:外层用主题背景,内层卡片自带显式配色 */}
+        {/* Preview: the outer area uses the theme background; the inner card has its own explicit colours */}
         <div className="flex justify-center overflow-x-auto rounded-xl bg-accent/30 p-4 scrollbar">
-          {/* 导出卡片:固定宽度,所有颜色显式内联,不依赖主题 CSS 变量 */}
+          {/* Exported card: fixed width, every colour inline, no theme CSS variables */}
           <div
             ref={cardRef}
             style={{
@@ -82,15 +82,15 @@ function ShareCardDialogInner({
               color: '#0f172a',
             }}
           >
-            {/* 业务卡正脸 */}
+            {/* The card's face */}
             {children}
 
-            {/* 分割线 */}
+            {/* Divider */}
             <div style={{ height: 1, background: '#e2e8f0', margin: '24px 0 16px' }} />
 
-            {/* 页脚:免责 + 品牌引流行(全体分享卡一致) */}
+            {/* Footer: disclaimer + brand line (the same on every share card) */}
             <div style={{ fontSize: 12, color: '#94a3b8', lineHeight: 1.6 }}>
-              仅供参考,不构成投资建议
+              For reference only; not investment advice
             </div>
             <div
               style={{
@@ -118,9 +118,9 @@ function ShareCardDialogInner({
                   flexShrink: 0,
                 }}
               >
-                盯
+                P
               </span>
-              <span>盯盘侠 PanWatch</span>
+              <span>PanWatch</span>
               <span style={{ color: '#cbd5e1', fontWeight: 400 }}>·</span>
               <span style={{ color: '#64748b', fontWeight: 500, fontSize: 12.5 }}>
                 github.com/TNT-Likely/PanWatch
@@ -129,10 +129,10 @@ function ShareCardDialogInner({
           </div>
         </div>
 
-        {/* 操作区 */}
+        {/* Actions */}
         <div className="mt-4 flex items-center justify-end gap-3">
           <Button variant="outline" size="sm" className="h-9" onClick={onClose} disabled={busy}>
-            关闭
+            Close
           </Button>
           <Button size="sm" className="h-9" onClick={() => void handleDownload()} disabled={busy}>
             {busy ? (
@@ -140,7 +140,7 @@ function ShareCardDialogInner({
             ) : (
               <ImageDown className="w-3.5 h-3.5" />
             )}
-            {busy ? '生成中…' : '下载图片'}
+            {busy ? 'Generating…' : 'Download image'}
           </Button>
         </div>
       </DialogContent>

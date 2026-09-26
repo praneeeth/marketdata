@@ -11,7 +11,7 @@ describe('portfolio page loading', () => {
   it('resolves core data without waiting for background lanes', async () => {
     const signal = new AbortController().signal
     const api = {
-      loadStocks: vi.fn().mockResolvedValue([{ symbol: '600519', market: 'CN' }]),
+      loadStocks: vi.fn().mockResolvedValue([{ symbol: 'INFY', market: 'IN' }]),
       loadPortfolio: vi.fn().mockResolvedValue({ accounts: [{ positions: [] }] }),
       loadMarketStatus: vi.fn(),
       buildQuoteItems: vi.fn(),
@@ -24,7 +24,7 @@ describe('portfolio page loading', () => {
     const result = await loadPortfolioPageCoreData(api, signal)
 
     expect(result).toEqual({
-      stocks: [{ symbol: '600519', market: 'CN' }],
+      stocks: [{ symbol: 'INFY', market: 'IN' }],
       portfolio: { accounts: [{ positions: [] }] },
     })
     expect(api.loadMarketStatus).not.toHaveBeenCalled()
@@ -34,15 +34,15 @@ describe('portfolio page loading', () => {
 
   it('runs background lanes after core data and passes the same signal', async () => {
     const signal = new AbortController().signal
-    const items = [{ symbol: '600519', market: 'CN' }]
+    const items = [{ symbol: 'INFY', market: 'IN' }]
     const api = {
-      loadMarketStatus: vi.fn().mockResolvedValue([{ code: 'CN' }]),
+      loadMarketStatus: vi.fn().mockResolvedValue([{ code: 'IN' }]),
       buildQuoteItems: vi.fn().mockReturnValue(items),
       loadSuggestions: vi.fn().mockResolvedValue({}),
       loadPriceAlerts: vi.fn().mockResolvedValue({}),
-      loadKlines: vi.fn().mockResolvedValue({ 'CN:600519': { trend: '多头排列' } }),
+      loadKlines: vi.fn().mockResolvedValue({ 'IN:INFY': { trend: 'bullish alignment' } }),
     }
-    const stocks = [{ symbol: '600519', market: 'CN' }]
+    const stocks = [{ symbol: 'INFY', market: 'IN' }]
     const portfolio = { accounts: [{ positions: [] }] }
 
     const result = await loadPortfolioPageBackgroundData(api, stocks, portfolio, signal)
@@ -53,40 +53,40 @@ describe('portfolio page loading', () => {
     expect(api.loadPriceAlerts).toHaveBeenCalledWith(items, signal)
     expect(api.loadKlines).toHaveBeenCalledWith(items, signal)
     expect(result).toEqual({
-      marketStatus: [{ code: 'CN' }],
+      marketStatus: [{ code: 'IN' }],
       suggestions: {},
       priceAlerts: {},
-      klines: { 'CN:600519': { trend: '多头排列' } },
+      klines: { 'IN:INFY': { trend: 'bullish alignment' } },
     })
   })
 
   it('loads quotes as the priority lane before the page is revealed', async () => {
     const signal = new AbortController().signal
-    const items = [{ symbol: '600519', market: 'CN' }]
+    const items = [{ symbol: 'INFY', market: 'IN' }]
     const api = {
       buildQuoteItems: vi.fn().mockReturnValue(items),
-      loadQuotes: vi.fn().mockResolvedValue([{ symbol: '600519', market: 'CN' }]),
+      loadQuotes: vi.fn().mockResolvedValue([{ symbol: 'INFY', market: 'IN' }]),
     }
 
     const result = await loadPortfolioPageQuoteData(
       api,
-      [{ symbol: '600519', market: 'CN' }],
+      [{ symbol: 'INFY', market: 'IN' }],
       { accounts: [] },
       signal,
     )
 
     expect(api.buildQuoteItems).toHaveBeenCalledWith(
-      [{ symbol: '600519', market: 'CN' }],
+      [{ symbol: 'INFY', market: 'IN' }],
       { accounts: [] },
     )
     expect(api.loadQuotes).toHaveBeenCalledWith(items, signal)
-    expect(result).toEqual({ quotes: [{ symbol: '600519', market: 'CN' }] })
+    expect(result).toEqual({ quotes: [{ symbol: 'INFY', market: 'IN' }] })
   })
 
   it('formats suggestion stock keys as market then symbol', () => {
     expect(buildPortfolioStockKeys([
-      { symbol: '600519', market: 'CN' },
-      { symbol: '00700', market: 'HK' },
-    ])).toBe('CN:600519,HK:00700')
+      { symbol: 'INFY', market: 'IN' },
+      { symbol: 'TCS', market: 'IN' },
+    ])).toBe('IN:INFY,IN:TCS')
   })
 })

@@ -1,13 +1,13 @@
-// SSE 客户端基建：基于 fetch + ReadableStream（原生 EventSource 无法带 Authorization header）
-// - readSSE: 单次连接，流结束后 resolve；连接失败直接 reject（调用方据此降级轮询/非流式）
-// - subscribeSSE: 自动重连订阅（带 Last-Event-ID 续推），用于进度/日志等 GET 流
+// SSE client plumbing on fetch + ReadableStream (the native EventSource can't send an Authorization header)
+// - readSSE: one connection, resolves when the stream ends; rejects on connection failure (the caller then falls back to polling/non-streaming)
+// - subscribeSSE: auto-reconnecting subscription (resumes with Last-Event-ID), for GET streams such as progress/logs
 import { getToken } from './client'
 
 export interface SSEEvent {
-  /** 事件序号（服务端自增，断线重连用） */
+  /** Event sequence number (increasing on the server; used to resume) */
   id: number
   event: string
-  /** data 行 JSON.parse 后的结果；解析失败时为原始字符串 */
+  /** The data line after JSON.parse; the raw string if parsing fails */
   data: any
 }
 
@@ -15,15 +15,15 @@ export interface ReadSSEOptions {
   method?: 'GET' | 'POST'
   body?: unknown
   signal?: AbortSignal
-  /** 断线重连时带上，服务端从其后续推 */
+  /** Sent on reconnect; the server resumes after it */
   lastEventId?: number
   onEvent: (ev: SSEEvent) => void
 }
 
-/** 解析一段 SSE wire 文本块（不含结尾空行分隔符） */
+/** Parse one SSE wire text block (without the trailing blank-line separator) */
 function parseEventBlock(block: string): SSEEvent | null {
   const lines = block.split('\n')
-  if (lines.every((l) => !l || l.startsWith(':'))) return null // 心跳注释
+  if (lines.every((l) => !l || l.startsWith(':'))) return null // heartbeat comment
   let id = 0
   let event = 'message'
   const dataLines: string[] = []
@@ -39,16 +39,16 @@ function parseEventBlock(block: string): SSEEvent | null {
     try {
       data = JSON.parse(raw)
     } catch {
-      /* 保留原始字符串 */
+      /* keep the raw string */
     }
   }
   return { id, event, data }
 }
 
 /**
- * 建立一次 SSE 连接并消费到流结束。
- * 返回本次收到的最后事件序号（供调用方断线重连续推）。
- * 连接失败（HTTP 非 2xx / content-type 不对 / 网络错误）时抛异常。
+ * Open one SSE connection and consume it to the end.
+ * Returns the last event sequence number received (so the caller can resume).
+ * Throws on connection failure (non-2xx HTTP / wrong content-type / network error).
  */
 export async function readSSE(path: string, options: ReadSSEOptions): Promise<{ lastEventId: number }> {
   const headers: Record<string, string> = { Accept: 'text/event-stream' }
@@ -67,8 +67,8 @@ export async function readSSE(path: string, options: ReadSSEOptions): Promise<{ 
   })
   if (!res.ok) throw new Error(`SSE HTTP ${res.status}`)
   const contentType = res.headers.get('content-type') || ''
-  if (!contentType.includes('text/event-stream')) throw new Error(`非 SSE 响应: ${contentType}`)
-  if (!res.body) throw new Error('SSE 响应无 body')
+  if (!contentType.includes('text/event-stream')) throw new Error(`Not an SSE response: ${contentType}`)
+  if (!res.body) throw new Error('SSE response has no body')
 
   const reader = res.body.getReader()
   const decoder = new TextDecoder()
@@ -80,7 +80,7 @@ export async function readSSE(path: string, options: ReadSSEOptions): Promise<{ 
     const { done, value } = await reader.read()
     if (done) break
     buffer += decoder.decode(value, { stream: true })
-    // 事件之间以空行分隔
+    // Events are separated by blank lines
     let sepIndex: number
     while ((sepIndex = buffer.indexOf('\n\n')) >= 0) {
       const block = buffer.slice(0, sepIndex)
@@ -96,21 +96,21 @@ export async function readSSE(path: string, options: ReadSSEOptions): Promise<{ 
 }
 
 export interface SubscribeSSEOptions {
-  /** 首次连接的续推起点（如已知的最大日志 id） */
+  /** Where the first connection resumes from (e.g. the highest known log id) */
   lastEventId?: number
   onEvent: (ev: SSEEvent) => void
-  /** 每次（重）连接成功前触发，可用于 UI 状态 */
+  /** Called before each (re)connection succeeds; useful for UI state */
   onRetry?: (attempt: number) => void
-  /** 重试次数用尽后触发（调用方降级轮询） */
+  /** Called once retries are exhausted (the caller falls back to polling) */
   onFailed?: (err: unknown) => void
-  /** 服务端正常关流后触发（如流超时；调用方可重新订阅或降级） */
+  /** Called when the server closes the stream normally (e.g. a timeout; the caller may resubscribe or fall back) */
   onClosed?: () => void
   maxRetries?: number
 }
 
 /**
- * 自动重连的 SSE 订阅（GET）。断线按指数退避重连并带 Last-Event-ID 续推。
- * 返回取消函数；服务端正常关流（收到 done 事件后调用方主动 close）或重试用尽后停止。
+ * Auto-reconnecting SSE subscription (GET). Reconnects with exponential backoff and resumes with Last-Event-ID.
+ * Returns a cancel function; stops when the server closes normally (the caller closes after the done event) or retries run out.
  */
 export function subscribeSSE(path: string, options: SubscribeSSEOptions): () => void {
   const controller = new AbortController()
@@ -127,12 +127,12 @@ export function subscribeSSE(path: string, options: SubscribeSSEOptions): () => 
           lastEventId,
           onEvent: (ev) => {
             if (ev.id > 0) lastEventId = ev.id
-            attempt = 0 // 收到数据即重置重试计数
+            attempt = 0 // receiving data resets the retry count
             options.onEvent(ev)
           },
         })
         lastEventId = newId
-        // 服务端正常关流（如超时 done）：由调用方决定是否重订阅，这里退出
+        // The server closed the stream normally (e.g. a timeout done): the caller decides whether to resubscribe; exit here
         if (!closed) options.onClosed?.()
         return
       } catch (err) {
@@ -143,7 +143,7 @@ export function subscribeSSE(path: string, options: SubscribeSSEOptions): () => 
           return
         }
         options.onRetry?.(attempt)
-        // 指数退避：1s/2s/4s/8s/8s...
+        // Exponential backoff: 1s/2s/4s/8s/8s...
         const delay = Math.min(1000 * 2 ** (attempt - 1), 8000)
         await new Promise((r) => setTimeout(r, delay))
       }

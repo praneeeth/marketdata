@@ -1,21 +1,21 @@
 import { useId } from 'react'
 
 interface SparklineProps {
-  /** 数值序列(如近20日收盘价/净值),自动 min-max 归一到画布高度 */
+  /** Value series (e.g. the last 20 closes/NAVs), min-max normalised to the canvas height */
   data: number[]
   width?: number
   height?: number
-  /** 线条颜色,支持 currentColor 或任意 CSS 颜色(含 hsl(var(--xx))),亮暗主题都可读 */
+  /** Line colour: currentColor or any CSS colour (including hsl(var(--xx))), readable in light and dark themes */
   stroke?: string
-  /** 传入则渲染渐变面积(顶部半透明 → 底部透明);不传则只画线 */
+  /** When given, renders a gradient area (semi-transparent at the top -> transparent at the bottom); otherwise just the line */
   fill?: string
   className?: string
 }
 
 /**
- * 极简走势线,无第三方图表库依赖:SVG polyline + 可选渐变面积 + 尾端点圆。
- * 用 viewBox 精确匹配 width/height 并配合 preserveAspectRatio="none" + width="100%"
- * 让父容器控制实际渲染宽度;线宽用 vector-effect="non-scaling-stroke" 避免横向拉伸变形。
+ * Minimal trend line with no third-party chart library: SVG polyline + optional gradient area + end-point circle.
+ * The viewBox matches width/height exactly, and with preserveAspectRatio="none" + width="100%"
+ * the parent controls the rendered width; vector-effect="non-scaling-stroke" keeps the line width from stretching.
  */
 export default function Sparkline({
   data,

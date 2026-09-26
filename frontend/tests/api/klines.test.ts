@@ -12,13 +12,13 @@ describe('klinesApi', () => {
       new Response(JSON.stringify({
         code: 0,
         success: true,
-        data: [{ symbol: '600519', market: 'CN', summary: { trend: '多头排列' } }],
+        data: [{ symbol: 'INFY', market: 'IN', summary: { trend: 'bullish alignment' } }],
         message: '',
       }), { status: 200, headers: { 'Content-Type': 'application/json' } }),
     )
 
     await klinesApi.summaryBatch([
-      { symbol: '600519', market: 'CN' },
+      { symbol: 'INFY', market: 'IN' },
       { symbol: '00700', market: 'HK' },
     ])
 
@@ -26,7 +26,7 @@ describe('klinesApi', () => {
     expect(fetchMock.mock.calls[0]?.[0]).toBe('/api/klines/summary/batch')
     expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toEqual({
       items: [
-        { symbol: '600519', market: 'CN' },
+        { symbol: 'INFY', market: 'IN' },
         { symbol: '00700', market: 'HK' },
       ],
     })

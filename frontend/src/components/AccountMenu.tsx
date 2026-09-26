@@ -12,26 +12,26 @@ export interface AccountNavItem {
 }
 
 const THEME_OPTIONS: { value: ThemeMode; icon: LucideIcon; label: string }[] = [
-  { value: 'light', icon: Sun, label: '亮色' },
-  { value: 'dark', icon: Moon, label: '暗色' },
-  { value: 'system', icon: Monitor, label: '跟随系统' },
+  { value: 'light', icon: Sun, label: 'Light' },
+  { value: 'dark', icon: Moon, label: 'Dark' },
+  { value: 'system', icon: Monitor, label: 'System' },
 ]
 
 interface AccountMenuProps {
-  /** 原“更多”里折叠的导航项(Agent / 历史 / 数据源 / 设置)。 */
+  /** Navigation items previously folded under "More" (Agents / History / Data sources / Settings). */
   navItems: AccountNavItem[]
   mode: ThemeMode
   onSetMode: (m: ThemeMode) => void
-  /** 打开「系统自检」弹窗(状态由上层 App 托管,避免桌面/移动两个实例重复)。 */
+  /** Open the "System self-check" dialog (state lives in App, so desktop and mobile don't create two instances). */
   onOpenSelfCheck: () => void
-  /** 头像尺寸:桌面 md,移动端 sm。 */
+  /** Avatar size: md on desktop, sm on mobile. */
   size?: 'sm' | 'md'
 }
 
 /**
- * 右上角头像区域 + 下拉菜单(参考 beecount-cloud):
- * 把原“更多”导航、主题色(亮/暗/跟随系统)、退出登录收进头像下拉
- * (查看日志 / GitHub 仍在外侧)。
+ * Avatar area at the top right + dropdown menu (modelled on beecount-cloud):
+ * the old "More" navigation, theme (light/dark/system) and sign-out live in the avatar dropdown
+ * (View logs / GitHub stay outside).
  */
 export default function AccountMenu({
   navItems,
@@ -44,12 +44,12 @@ export default function AccountMenu({
   const ref = useRef<HTMLDivElement | null>(null)
   const location = useLocation()
   const avatar = useAvatar()
-  // 仅在支持 hover 的设备(PC)启用悬停展开;触屏维持点击
+  // Open on hover only on devices that support hover (desktop); touch keeps tap-to-open
   const [canHover] = useState(
     () => typeof window !== 'undefined' && window.matchMedia('(hover: hover)').matches,
   )
 
-  // 点击外部关闭
+  // Close on outside click
   useEffect(() => {
     const onPointerDown = (e: PointerEvent) => {
       if (open && ref.current && !ref.current.contains(e.target as Node)) {
@@ -60,7 +60,7 @@ export default function AccountMenu({
     return () => document.removeEventListener('pointerdown', onPointerDown)
   }, [open])
 
-  // 路由变化时关闭
+  // Close on route change
   useEffect(() => {
     setOpen(false)
   }, [location.pathname])
@@ -80,21 +80,21 @@ export default function AccountMenu({
         className={`${avatarSize} rounded-full overflow-hidden bg-gradient-to-br from-primary to-primary/70 flex items-center justify-center shadow-sm ring-1 transition-all ${
           open ? 'ring-primary/50' : 'ring-border/40 hover:ring-primary/40'
         }`}
-        title="账户与设置"
-        aria-label="账户与设置"
+        title="Account and settings"
+        aria-label="Account and settings"
       >
         {avatar ? (
-          <img src={avatar} alt="头像" className="w-full h-full object-cover" />
+          <img src={avatar} alt="Avatar" className="w-full h-full object-cover" />
         ) : (
           <User className={`${iconSize} text-white`} />
         )}
       </button>
 
       {open && (
-        // top-full + pt-2:用透明内边距桥接头像与菜单,hover 移入不断开
+        // top-full + pt-2: transparent padding bridges the avatar and the menu so moving the pointer in doesn't close it
         <div className="absolute right-0 top-full pt-2 z-50">
           <div className="w-48 rounded-xl border border-border/60 bg-card/95 backdrop-blur p-1.5 shadow-xl">
-          {/* 原“更多”导航 */}
+          {/* The old "More" navigation */}
           {navItems.map(({ to, icon: Icon, label }) => {
             const isActive = location.pathname.startsWith(to)
             return (
@@ -116,8 +116,8 @@ export default function AccountMenu({
 
           <div className="my-1 h-px bg-border/50" />
 
-          {/* 主题色:亮 / 暗 / 跟随系统 */}
-          <div className="px-2.5 pt-0.5 pb-1 text-[11px] text-muted-foreground">主题</div>
+          {/* Theme: light / dark / system */}
+          <div className="px-2.5 pt-0.5 pb-1 text-[11px] text-muted-foreground">Theme</div>
           {THEME_OPTIONS.map(({ value, icon: Icon, label }) => {
             const active = mode === value
             return (
@@ -138,7 +138,7 @@ export default function AccountMenu({
           })}
 
           <div className="my-1 h-px bg-border/50" />
-          {/* 系统自检:打开弹窗(逐项检查数据源/AI/通知连通性) */}
+          {/* System self-check: opens the dialog (checks data source/AI/notification connectivity item by item) */}
           <button
             onClick={() => {
               setOpen(false)
@@ -147,7 +147,7 @@ export default function AccountMenu({
             className="flex w-full items-center gap-2.5 px-2.5 py-2 rounded-lg text-[12px] text-muted-foreground hover:text-foreground hover:bg-accent/60 transition-colors"
           >
             <Stethoscope className="w-3.5 h-3.5" />
-            系统自检
+            System self-check
           </button>
 
           {isAuthenticated() && (
@@ -158,7 +158,7 @@ export default function AccountMenu({
                 className="flex w-full items-center gap-2.5 px-2.5 py-2 rounded-lg text-[12px] text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
               >
                 <LogOut className="w-3.5 h-3.5" />
-                退出登录
+                Sign out
               </button>
             </>
           )}

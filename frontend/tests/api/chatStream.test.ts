@@ -28,13 +28,13 @@ describe('assistant task stream', () => {
       options.onEvent({
         id: 4,
         event: 'done',
-        data: { message_id: 7, content: '完成', created_at: '' },
+        data: { message_id: 7, content: 'Done', created_at: '' },
       })
       return { lastEventId: 4 }
     })
 
     const onDone = vi.fn()
-    await chatApi.sendAssistantMessageStream(1, '分析市场', { onDone })
+    await chatApi.sendAssistantMessageStream(1, 'analyse the market', { onDone })
 
     expect(calls).toEqual([
       {
@@ -48,7 +48,7 @@ describe('assistant task stream', () => {
     ])
     expect(onDone).toHaveBeenCalledWith({
       message_id: 7,
-      content: '完成',
+      content: 'Done',
       created_at: '',
     })
   })
@@ -66,7 +66,7 @@ describe('assistant task stream', () => {
       options.onEvent({
         id: 9,
         event: 'done',
-        data: { message_id: 10, content: '全部完成', created_at: '' },
+        data: { message_id: 10, content: 'All done', created_at: '' },
       })
       return { lastEventId: 9 }
     })
@@ -88,7 +88,7 @@ describe('assistant task stream', () => {
     ])
     expect(onDone).toHaveBeenCalledWith({
       message_id: 10,
-      content: '全部完成',
+      content: 'All done',
       created_at: '',
     })
   })

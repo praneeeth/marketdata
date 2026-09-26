@@ -7,7 +7,7 @@ interface BenchChartProps {
   className?: string
 }
 
-// 3 条内部参考线(均匀分布,非顶/底边框线)
+// 3 inner reference lines (evenly spaced; not the top/bottom borders)
 const GRID_FRACS = [0.2, 0.5, 0.8]
 
 function BenchChartSvg({
@@ -20,7 +20,7 @@ function BenchChartSvg({
   height: number
 }) {
   const padLeft = 2
-  const padRight = 40 // 预留右侧 % 刻度文字
+  const padRight = 40 // room for the % tick labels on the right
   const padTop = 12
   const padBottom = 12
   const innerW = Math.max(10, width - padLeft - padRight)
@@ -51,7 +51,7 @@ function BenchChartSvg({
   const areaAttr = `${xAt(0).toFixed(1)},${baseline.toFixed(1)} ${portfolioAttr} ${xAt(n - 1).toFixed(1)},${baseline.toFixed(1)}`
 
   return (
-    <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} role="img" aria-label="组合净值 vs 基准走势图">
+    <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} role="img" aria-label="Portfolio NAV vs benchmark chart">
       <defs>
         <linearGradient id="benchchart-area" x1="0" y1="0" x2="0" y2="1">
           <stop offset="0%" stopColor="hsl(var(--primary))" stopOpacity={0.22} />
@@ -59,7 +59,7 @@ function BenchChartSvg({
         </linearGradient>
       </defs>
 
-      {/* 网格线 + 右侧 % 刻度(以曲线起点=100 为基准的累计收益率) */}
+      {/* Grid lines + % ticks on the right (cumulative return with the curve's start = 100) */}
       {GRID_FRACS.map((frac) => {
         const y = padTop + innerH * frac
         const v = min + (max - min) * (1 - frac)
@@ -90,7 +90,7 @@ function BenchChartSvg({
         )
       })}
 
-      {/* 基准:虚线(中性色) */}
+      {/* Benchmark: dashed (neutral colour) */}
       <polyline
         points={benchmarkAttr}
         fill="none"
@@ -101,7 +101,7 @@ function BenchChartSvg({
         strokeLinecap="round"
       />
 
-      {/* 组合:实线 + 浅面积(主角) */}
+      {/* Portfolio: solid line + light area (the main line) */}
       <polygon points={areaAttr} fill="url(#benchchart-area)" stroke="none" />
       <polyline
         points={portfolioAttr}
@@ -112,7 +112,7 @@ function BenchChartSvg({
         strokeLinecap="round"
       />
 
-      {/* 两端点圆(组合线起止) */}
+      {/* End-point circles (portfolio line start and end) */}
       <circle cx={x0} cy={y0} r={4} fill="hsl(var(--card))" />
       <circle cx={x0} cy={y0} r={2.5} fill="hsl(var(--primary))" />
       <circle cx={xN} cy={yN} r={4} fill="hsl(var(--card))" />
@@ -122,10 +122,10 @@ function BenchChartSvg({
 }
 
 /**
- * 组合净值 vs 基准 双线图,无第三方图表库依赖。
- * 组合(primary)实线+浅面积、基准虚线(中性色)、3条虚网格线 + 右侧 % 刻度、组合线两端点圆。
- * 用容器 clientWidth(ResizeObserver 实测)而非 CSS 缩放渲染 SVG,保证轴文字/线宽不随宽度变化而变形。
- * curve 为空/有效点数 < 2 时不渲染(由上层负责展示"计算中"等占位文案)。
+ * Portfolio NAV vs benchmark two-line chart, with no third-party chart library.
+ * Portfolio (primary) solid line + light area, benchmark dashed (neutral), 3 dashed grid lines + % ticks on the right, end-point circles on the portfolio line.
+ * Renders the SVG at the container's clientWidth (measured with ResizeObserver) rather than scaling with CSS, so axis text/line widths don't distort.
+ * Nothing renders when the curve is empty or has fewer than 2 valid points (the parent shows placeholder text such as "calculating").
  */
 export default function BenchChart({ curve, height = 150, className }: BenchChartProps) {
   const containerRef = useRef<HTMLDivElement>(null)

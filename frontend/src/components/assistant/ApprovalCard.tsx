@@ -8,10 +8,10 @@ interface ApprovalCardProps {
 }
 
 const RISK_LABELS: Record<AssistantApproval['risk'], string> = {
-  read: '读取',
-  write: '修改',
-  external: '外部操作',
-  destructive: '破坏性操作',
+  read: 'Read',
+  write: 'Change',
+  external: 'External action',
+  destructive: 'Destructive action',
 }
 
 export function ApprovalCard({ approval, onDecision }: ApprovalCardProps) {
@@ -32,9 +32,9 @@ export function ApprovalCard({ approval, onDecision }: ApprovalCardProps) {
   }
 
   const decisionStatus = approval.status === 'approved'
-    ? '已允许，已执行'
+    ? 'Allowed and run'
     : approval.status === 'rejected'
-      ? '已拒绝，不会执行'
+      ? "Rejected; won't run"
       : ''
   const decisionStatusClass = approval.status === 'rejected'
     ? 'text-destructive'
@@ -60,10 +60,10 @@ export function ApprovalCard({ approval, onDecision }: ApprovalCardProps) {
             </p>
           ) : approval.expires_at && (
             <p className="mt-1.5 text-[11px] text-muted-foreground/80">
-              请在 {new Date(approval.expires_at).toLocaleString()} 前决定
+              Decide before {new Date(approval.expires_at).toLocaleString()}
             </p>
           )}
-          {failed && <p className="mt-1.5 text-[11px] text-destructive">提交决定失败，请重试。</p>}
+          {failed && <p className="mt-1.5 text-[11px] text-destructive">Failed to submit the decision; please try again.</p>}
           {approval.status === 'pending' && (
             <div className="mt-3 flex items-center gap-2">
               <button
@@ -72,7 +72,7 @@ export function ApprovalCard({ approval, onDecision }: ApprovalCardProps) {
                 disabled={disabled}
                 className="rounded-lg bg-primary px-2.5 py-1.5 text-[12px] font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
               >
-                {decision === 'approved' ? '提交中…' : '本次允许'}
+                {decision === 'approved' ? 'Submitting…' : 'Allow once'}
               </button>
               <button
                 type="button"
@@ -80,7 +80,7 @@ export function ApprovalCard({ approval, onDecision }: ApprovalCardProps) {
                 disabled={disabled}
                 className="rounded-lg border border-border bg-background px-2.5 py-1.5 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
               >
-                {decision === 'rejected' ? '提交中…' : '拒绝'}
+                {decision === 'rejected' ? 'Submitting…' : 'Reject'}
               </button>
             </div>
           )}

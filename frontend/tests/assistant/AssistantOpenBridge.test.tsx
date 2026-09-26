@@ -19,7 +19,7 @@ describe('AssistantOpenBridge', () => {
     )
 
     window.dispatchEvent(new CustomEvent('panwatch-open-chat', {
-      detail: { symbol: '600519', market: 'CN', stockName: '贵州茅台', pageContext: '行情上下文' },
+      detail: { symbol: 'INFY', market: 'IN', stockName: 'Infosys', pageContext: 'quote context' },
     }))
 
     await waitFor(() => expect(screen.getByTestId('location').textContent).toBe('/assistant'))

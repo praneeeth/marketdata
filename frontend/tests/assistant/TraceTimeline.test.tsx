@@ -11,8 +11,8 @@ describe('TraceTimeline', () => {
         events={[
           { event: 'run_started', data: { task_id: 7 } },
           { event: 'context_prepared', data: { compressed: true } },
-          { event: 'tool_call_start', data: { name: 'get_portfolio', arguments: { market: 'CN' } } },
-          { event: 'tool_result', data: { name: 'get_portfolio', ok: true, preview: '持仓查询完成' } },
+          { event: 'tool_call_start', data: { name: 'get_portfolio', arguments: { market: 'IN' } } },
+          { event: 'tool_result', data: { name: 'get_portfolio', ok: true, preview: 'Holdings looked up' } },
           { event: 'model_usage', data: { input_tokens: 120, output_tokens: 30 } },
           { event: 'done', data: {} },
         ]}
@@ -20,10 +20,10 @@ describe('TraceTimeline', () => {
     )
 
     expect(screen.getByTestId('assistant-trace')).toBeTruthy()
-    expect(screen.getByText(/已完成/)).toBeTruthy()
-    expect(screen.queryByText('上下文已压缩并准备')).toBeNull()
-    expect(screen.queryByText('调用工具：get_portfolio')).toBeNull()
-    expect(screen.queryByText(/思考过程|chain of thought/i)).toBeNull()
+    expect(screen.getByText(/Done/)).toBeTruthy()
+    expect(screen.queryByText('Context compressed and prepared')).toBeNull()
+    expect(screen.queryByText('Calling tool: get_portfolio')).toBeNull()
+    expect(screen.queryByText(/chain of thought|thinking process/i)).toBeNull()
   })
 
   it('shows provider token usage as a factual runtime event', async () => {
@@ -37,8 +37,8 @@ describe('TraceTimeline', () => {
       />,
     )
 
-    await user.click(screen.getByRole('button', { name: /执行记录/ }))
-    expect(screen.getByText('模型用量：输入 120，输出 30')).toBeTruthy()
+    await user.click(screen.getByRole('button', { name: /Run log/ }))
+    expect(screen.getByText('Model usage: input 120, output 30')).toBeTruthy()
   })
 
   it('expands the factual steps from the compact summary', async () => {
@@ -46,8 +46,8 @@ describe('TraceTimeline', () => {
     render(
       <TraceTimeline
         events={[
-          { event: 'tool_call_start', data: { name: 'get_portfolio', arguments: { market: 'CN' } } },
-          { event: 'tool_result', data: { name: 'get_portfolio', ok: true, preview: '持仓查询完成' } },
+          { event: 'tool_call_start', data: { name: 'get_portfolio', arguments: { market: 'IN' } } },
+          { event: 'tool_result', data: { name: 'get_portfolio', ok: true, preview: 'Holdings looked up' } },
           {
             event: 'extension_event',
             data: {
@@ -61,12 +61,12 @@ describe('TraceTimeline', () => {
       />,
     )
 
-    await user.click(screen.getByRole('button', { name: /执行记录/ }))
+    await user.click(screen.getByRole('button', { name: /Run log/ }))
 
-    expect(screen.getByText('调用工具：get_portfolio')).toBeTruthy()
-    expect(screen.getByText('{"market":"CN"}')).toBeTruthy()
-    expect(screen.getByText('持仓查询完成')).toBeTruthy()
-    expect(screen.getByText('工具研究完成：选出 1 个')).toBeTruthy()
+    expect(screen.getByText('Calling tool: get_portfolio')).toBeTruthy()
+    expect(screen.getByText('{"market":"IN"}')).toBeTruthy()
+    expect(screen.getByText('Holdings looked up')).toBeTruthy()
+    expect(screen.getByText('Tool research done: 1 chosen')).toBeTruthy()
   })
 
   it('distinguishes tool exposure and model-side search from execution', async () => {
@@ -96,10 +96,10 @@ describe('TraceTimeline', () => {
       />,
     )
 
-    await user.click(screen.getByRole('button', { name: /执行记录/ }))
+    await user.click(screen.getByRole('button', { name: /Run log/ }))
 
-    expect(screen.getByText('工具目录已准备：1 个直达，0 个已加载')).toBeTruthy()
-    expect(screen.getByText('工具搜索完成：加载 1 个')).toBeTruthy()
-    expect(screen.getByText('调用工具：get_fundamentals')).toBeTruthy()
+    expect(screen.getByText('Tool catalogue ready: 1 direct, 0 loaded')).toBeTruthy()
+    expect(screen.getByText('Tool search done: 1 loaded')).toBeTruthy()
+    expect(screen.getByText('Calling tool: get_fundamentals')).toBeTruthy()
   })
 })

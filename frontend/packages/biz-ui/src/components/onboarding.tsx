@@ -68,12 +68,12 @@ export function Onboarding({ open, onComplete, hasStocks }: OnboardingProps) {
                 <TrendingUp className="w-8 h-8 text-white" />
               </div>
               <h2 className="text-[20px] font-bold text-foreground mb-2">
-                欢迎使用盯盘侠
+                Welcome to PanWatch
               </h2>
               <p className="text-[14px] text-muted-foreground mb-6">
                 {hasStocks
-                  ? '你的自选股已就绪，可以开始使用了'
-                  : '我们已为你添加了 5 只热门股票作为示例，你可以立即查看实时行情'
+                  ? 'Your watchlist is ready; you can start now'
+                  : "We've added 5 popular NSE stocks as examples so you can see live quotes right away"
                 }
               </p>
 
@@ -83,8 +83,8 @@ export function Onboarding({ open, onComplete, hasStocks }: OnboardingProps) {
                     <TrendingUp className="w-4 h-4 text-blue-500" />
                   </div>
                   <div>
-                    <p className="text-[13px] font-medium text-foreground">实时行情监控</p>
-                    <p className="text-[12px] text-muted-foreground">跟踪自选股价格变动，快速发现异动</p>
+                    <p className="text-[13px] font-medium text-foreground">Live quote monitoring</p>
+                    <p className="text-[12px] text-muted-foreground">Track watchlist prices and spot unusual moves quickly</p>
                   </div>
                 </div>
                 <div className="flex items-start gap-3 p-3 rounded-xl bg-accent/30">
@@ -92,8 +92,8 @@ export function Onboarding({ open, onComplete, hasStocks }: OnboardingProps) {
                     <Bot className="w-4 h-4 text-primary" />
                   </div>
                   <div>
-                    <p className="text-[13px] font-medium text-foreground">AI 智能分析</p>
-                    <p className="text-[12px] text-muted-foreground">盘后日报、异动观察、技术分析</p>
+                    <p className="text-[13px] font-medium text-foreground">AI analysis</p>
+                    <p className="text-[12px] text-muted-foreground">Daily close reports, move watch, technical analysis</p>
                   </div>
                 </div>
                 <div className="flex items-start gap-3 p-3 rounded-xl bg-accent/30">
@@ -101,22 +101,22 @@ export function Onboarding({ open, onComplete, hasStocks }: OnboardingProps) {
                     <Bell className="w-4 h-4 text-amber-500" />
                   </div>
                   <div>
-                    <p className="text-[13px] font-medium text-foreground">智能通知推送</p>
-                    <p className="text-[12px] text-muted-foreground">Telegram、企业微信等多渠道推送</p>
+                    <p className="text-[13px] font-medium text-foreground">Smart notifications</p>
+                    <p className="text-[12px] text-muted-foreground">Sent to Telegram, Discord and more</p>
                   </div>
                 </div>
               </div>
 
               <div className="flex items-center gap-3">
                 <Button className="flex-1" onClick={handleNext}>
-                  开始使用 <ChevronRight className="w-4 h-4" />
+                  Get started <ChevronRight className="w-4 h-4" />
                 </Button>
               </div>
               <button
                 onClick={handleSkip}
                 className="mt-3 text-[12px] text-muted-foreground hover:text-foreground transition-colors"
               >
-                跳过引导
+                Skip the tour
               </button>
             </div>
           )}
@@ -127,37 +127,37 @@ export function Onboarding({ open, onComplete, hasStocks }: OnboardingProps) {
                 <Bot className="w-8 h-8 text-white" />
               </div>
               <h2 className="text-[20px] font-bold text-foreground mb-2">
-                配置 AI 分析
+                Set up AI analysis
               </h2>
               <p className="text-[14px] text-muted-foreground mb-4">
-                连接 AI 服务后，可获得智能分析功能
+                Connect an AI service to turn on AI analysis
               </p>
 
               <div className="space-y-2 text-left mb-6 p-4 rounded-xl bg-accent/30">
                 <div className="flex items-center gap-2 text-[13px]">
                   <Sparkles className="w-4 h-4 text-primary" />
-                  <span className="text-foreground">盘后日报自动分析</span>
+                  <span className="text-foreground">Automatic daily close reports</span>
                 </div>
                 <div className="flex items-center gap-2 text-[13px]">
                   <Sparkles className="w-4 h-4 text-primary" />
-                  <span className="text-foreground">异动 AI 观察</span>
+                  <span className="text-foreground">AI watch on unusual moves</span>
                 </div>
                 <div className="flex items-center gap-2 text-[13px]">
                   <Sparkles className="w-4 h-4 text-primary" />
-                  <span className="text-foreground">技术图表分析</span>
+                  <span className="text-foreground">Technical chart analysis</span>
                 </div>
               </div>
 
               <p className="text-[12px] text-muted-foreground mb-4">
-                支持 OpenAI、智谱、DeepSeek 等服务商
+                Supports OpenAI, Anthropic, DeepSeek and more
               </p>
 
               <div className="flex items-center gap-3">
                 <Button variant="secondary" className="flex-1" onClick={handleNext}>
-                  稍后再说
+                  Later
                 </Button>
                 <Button className="flex-1" onClick={handleGoToSettings}>
-                  前往配置
+                  Set up
                 </Button>
               </div>
             </div>
@@ -169,37 +169,37 @@ export function Onboarding({ open, onComplete, hasStocks }: OnboardingProps) {
                 <Bell className="w-8 h-8 text-white" />
               </div>
               <h2 className="text-[20px] font-bold text-foreground mb-2">
-                配置通知渠道
+                Set up notification channels
               </h2>
               <p className="text-[14px] text-muted-foreground mb-4">
-                配置后可收到实时推送通知
+                Get live notifications once set up
               </p>
 
               <div className="space-y-2 text-left mb-6 p-4 rounded-xl bg-accent/30">
                 <div className="flex items-center gap-2 text-[13px]">
                   <Bell className="w-4 h-4 text-amber-500" />
-                  <span className="text-foreground">盘中异动提醒</span>
+                  <span className="text-foreground">Intraday move alerts</span>
                 </div>
                 <div className="flex items-center gap-2 text-[13px]">
                   <Bell className="w-4 h-4 text-amber-500" />
-                  <span className="text-foreground">AI 分析报告推送</span>
+                  <span className="text-foreground">AI report notifications</span>
                 </div>
                 <div className="flex items-center gap-2 text-[13px]">
                   <Bell className="w-4 h-4 text-amber-500" />
-                  <span className="text-foreground">止盈止损预警</span>
+                  <span className="text-foreground">Price level alerts</span>
                 </div>
               </div>
 
               <p className="text-[12px] text-muted-foreground mb-4">
-                支持 Telegram、企业微信等渠道
+                Supports Telegram, Discord and Pushover
               </p>
 
               <div className="flex items-center gap-3">
                 <Button variant="secondary" className="flex-1" onClick={handleNext}>
-                  稍后再说
+                  Later
                 </Button>
                 <Button className="flex-1" onClick={handleGoToSettings}>
-                  前往配置
+                  Set up
                 </Button>
               </div>
             </div>
@@ -211,18 +211,18 @@ export function Onboarding({ open, onComplete, hasStocks }: OnboardingProps) {
                 <CheckCircle2 className="w-8 h-8 text-white" />
               </div>
               <h2 className="text-[20px] font-bold text-foreground mb-2">
-                设置完成
+                All set
               </h2>
               <p className="text-[14px] text-muted-foreground mb-6">
-                你可以随时在「设置」页面修改配置
+                You can change these any time on the Settings page
               </p>
 
               <div className="space-y-3">
                 <Button className="w-full" onClick={() => onComplete()}>
-                  进入 Dashboard
+                  Go to the dashboard
                 </Button>
                 <Button variant="secondary" className="w-full" onClick={handleGoToPortfolio}>
-                  管理自选股
+                  Manage the watchlist
                 </Button>
               </div>
             </div>

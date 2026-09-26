@@ -23,7 +23,7 @@ export interface DashboardMarketIndex {
   change_pct: number | null
   change_amount: number | null
   prev_close: number | null
-  /** 近20日收盘价,用于首页指数走势 sparkline;取数失败/无映射(如美股指数)则为空数组 */
+  /** Last 20 closes, for the home page index sparkline; empty when the fetch fails or there is no mapping */
   spark?: number[]
 }
 
@@ -59,7 +59,7 @@ export interface DashboardAccountSummary {
   total_market_value: number
   total_pnl: number
   total_pnl_pct: number
-  /** 今日盈亏(账户内所有持仓 daily_pnl 汇总,元) */
+  /** Today's P&L (sum of daily_pnl for every position in the accounts, INR) */
   total_daily_pnl: number
   total_assets: number
   positions: DashboardPosition[]
@@ -72,7 +72,7 @@ export interface DashboardPortfolioSummary {
     total_cost: number
     total_pnl: number
     total_pnl_pct: number
-    /** 今日盈亏(全账户汇总,元) */
+    /** Today's P&L (all accounts, INR) */
     total_daily_pnl: number
     available_funds: number
     total_assets: number

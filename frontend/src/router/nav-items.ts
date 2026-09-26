@@ -10,17 +10,17 @@ export interface NavItem {
 }
 
 export const navItems: NavItem[] = [
-  { to: '/', icon: LayoutDashboard, label: '首页' },
-  { to: '/portfolio', icon: List, label: '持仓' },
-  { to: '/opportunities', icon: Sparkles, label: '机会', feature: 'entry_candidates' },
+  { to: '/', icon: LayoutDashboard, label: 'Home' },
+  { to: '/portfolio', icon: List, label: 'Holdings' },
+  { to: '/opportunities', icon: Sparkles, label: 'Opportunities', feature: 'entry_candidates' },
   { to: '/paper-trading', icon: Activity, label: 'Simulation' },
-  { to: '/assistant', icon: MessageCircle, label: '助手' },
-  { to: '/alerts', icon: BellRing, label: '提醒' },
+  { to: '/assistant', icon: MessageCircle, label: 'Assistant' },
+  { to: '/alerts', icon: BellRing, label: 'Alerts' },
   { to: '/agents', icon: Bot, label: 'Agent' },
-  { to: '/evaluations', icon: ClipboardCheck, label: '验证中心', feature: 'evaluations' },
-  { to: '/history', icon: Clock, label: '历史' },
-  { to: '/datasources', icon: Database, label: '数据源' },
-  { to: '/settings', icon: Settings, label: '设置' },
+  { to: '/evaluations', icon: ClipboardCheck, label: 'Evaluations', feature: 'evaluations' },
+  { to: '/history', icon: Clock, label: 'History' },
+  { to: '/datasources', icon: Database, label: 'Data sources' },
+  { to: '/settings', icon: Settings, label: 'Settings' },
 ]
 
 export function visibleNavItems(isEnabled: (feature: ComplianceFeature) => boolean): NavItem[] {

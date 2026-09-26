@@ -53,12 +53,12 @@ describe('ChatWidget layout', () => {
         pending_approvals: [],
       })
     vi.mocked(chatApi.getConversation).mockResolvedValue({
-      conversation: { id: 1, title: '恢复任务', stock_symbol: null, stock_market: null, created_at: '2026-09-12T00:00:00Z' },
-      messages: [{ id: 188, role: 'assistant', content: '后台任务已完成', created_at: '2026-09-12T00:00:00Z' }],
+      conversation: { id: 1, title: 'Resumed task', stock_symbol: null, stock_market: null, created_at: '2026-09-12T00:00:00Z' },
+      messages: [{ id: 188, role: 'assistant', content: 'Background task finished', created_at: '2026-09-12T00:00:00Z' }],
     })
     vi.mocked(chatApi.subscribeAssistantTaskStream).mockImplementation(async (_taskId, callbacks) => {
       callbacks.onToolCallStart?.({ name: 'create_price_alert', arguments: {} })
-      callbacks.onDone?.({ message_id: 188, content: '后台任务已完成', created_at: '2026-09-12T00:00:00Z' })
+      callbacks.onDone?.({ message_id: 188, content: 'Background task finished', created_at: '2026-09-12T00:00:00Z' })
     })
 
     render(<ChatWidget embedded conversationIdFromUrl={1} onConversationChange={vi.fn()} />)
@@ -68,19 +68,19 @@ describe('ChatWidget layout', () => {
       expect.any(Object),
       expect.any(AbortSignal),
     ))
-    await screen.findByText('后台任务已完成')
+    await screen.findByText('Background task finished')
     await waitFor(() => expect(sessionStorage.getItem('panwatch:assistant-task:1')).toBeNull())
   })
 
   it('does not restore an approval from a conversation that was left before the response arrived', async () => {
     let resolveTask: ((value: unknown) => void) | undefined
     vi.mocked(chatApi.listConversations).mockResolvedValue([
-      { id: 1, title: '旧会话', stock_symbol: null, stock_market: null, created_at: '2026-09-12T00:00:00Z' },
-      { id: 2, title: '新会话', stock_symbol: null, stock_market: null, created_at: '2026-09-12T00:00:00Z' },
+      { id: 1, title: 'Earlier chat', stock_symbol: null, stock_market: null, created_at: '2026-09-12T00:00:00Z' },
+      { id: 2, title: 'Later chat', stock_symbol: null, stock_market: null, created_at: '2026-09-12T00:00:00Z' },
     ])
     vi.mocked(chatApi.getConversation).mockImplementation(async (id) => ({
-      conversation: { id, title: id === 1 ? '旧会话' : '新会话', stock_symbol: null, stock_market: null, created_at: '2026-09-12T00:00:00Z' },
-      messages: [{ id: id * 10, role: 'assistant', content: `会话 ${id}`, created_at: '2026-09-12T00:00:00Z' }],
+      conversation: { id, title: id === 1 ? 'Earlier chat' : 'Later chat', stock_symbol: null, stock_market: null, created_at: '2026-09-12T00:00:00Z' },
+      messages: [{ id: id * 10, role: 'assistant', content: `Conversation ${id}`, created_at: '2026-09-12T00:00:00Z' }],
     }))
     vi.mocked(chatApi.getAssistantTask).mockImplementationOnce(() => new Promise((resolve) => {
       resolveTask = resolve
@@ -91,10 +91,10 @@ describe('ChatWidget layout', () => {
     const { rerender } = render(
       <ChatWidget embedded conversationIdFromUrl={1} onConversationChange={onConversationChange} />,
     )
-    await screen.findByText('会话 1')
+    await screen.findByText('Conversation 1')
 
     rerender(<ChatWidget embedded conversationIdFromUrl={2} onConversationChange={onConversationChange} />)
-    await screen.findByText('会话 2')
+    await screen.findByText('Conversation 2')
 
     resolveTask?.({
       id: 99,
@@ -104,29 +104,29 @@ describe('ChatWidget layout', () => {
         id: 'old-approval',
         tool_name: 'delete_price_alert',
         risk: 'write',
-        presentation: { tool_title: '旧会话操作', summary: '不应显示' },
+        presentation: { tool_title: 'Earlier chat action', summary: 'should not show' },
         expires_at: '2026-09-12T01:00:00Z',
       }],
     })
 
-    await waitFor(() => expect(screen.queryByText('不应显示')).toBeNull())
+    await waitFor(() => expect(screen.queryByText('should not show')).toBeNull())
     sessionStorage.removeItem('panwatch:assistant-task:1')
   })
 
   it('uses the sidebar new research entry instead of a duplicate header plus', async () => {
     render(<ChatWidget embedded />)
 
-    await waitFor(() => expect(screen.getByRole('button', { name: '新研究' })).toBeTruthy())
-    expect(screen.queryByRole('button', { name: '新建对话' })).toBeNull()
+    await waitFor(() => expect(screen.getByRole('button', { name: 'New research' })).toBeTruthy())
+    expect(screen.queryByRole('button', { name: 'New conversation' })).toBeNull()
   })
 
   it('keeps the composer at the bottom while only the message list scrolls', async () => {
     const user = userEvent.setup()
 
     render(<ChatWidget embedded />)
-    await user.click(screen.getByRole('button', { name: '诊断我的持仓' }))
+    await user.click(screen.getByRole('button', { name: 'Check my holdings' }))
 
-    await waitFor(() => expect(screen.getByPlaceholderText('输入问题...')).toBeTruthy())
+    await waitFor(() => expect(screen.getByPlaceholderText('Ask a question...')).toBeTruthy())
 
     const shell = screen.getByTestId('assistant-shell')
     const messageList = screen.getByTestId('assistant-message-list')
@@ -141,7 +141,7 @@ describe('ChatWidget layout', () => {
 
   it('ignores a second send fired before the first request updates React state', async () => {
     render(<ChatWidget embedded />)
-    const quickQuestion = await screen.findByRole('button', { name: '诊断我的持仓' })
+    const quickQuestion = await screen.findByRole('button', { name: 'Check my holdings' })
 
     fireEvent.click(quickQuestion)
     fireEvent.click(quickQuestion)
@@ -154,7 +154,7 @@ describe('ChatWidget layout', () => {
     const user = userEvent.setup()
 
     render(<ChatWidget embedded />)
-    await user.click(screen.getByRole('button', { name: '诊断我的持仓' }))
+    await user.click(screen.getByRole('button', { name: 'Check my holdings' }))
     const messageList = await screen.findByTestId('assistant-message-list')
 
     Object.defineProperties(messageList, {
@@ -164,13 +164,13 @@ describe('ChatWidget layout', () => {
     })
     fireEvent.scroll(messageList)
 
-    const scrollButton = await screen.findByRole('button', { name: '回到底部' })
-    expect(scrollButton.textContent).toContain('回到底部')
+    const scrollButton = await screen.findByRole('button', { name: 'Back to the bottom' })
+    expect(scrollButton.textContent).toContain('Back to the bottom')
     expect(scrollButton.className).toContain('left-1/2')
     expect(scrollButton.className).toContain('h-10')
 
     await user.click(scrollButton)
-    expect(screen.queryByRole('button', { name: '回到底部' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Back to the bottom' })).toBeNull()
   })
 
   it('renders GFM table syntax as a semantic table in assistant answers', async () => {
@@ -179,18 +179,18 @@ describe('ChatWidget layout', () => {
       callbacks.onRunStarted?.({ taskId: 43 })
       callbacks.onDone?.({
         message_id: 44,
-        content: '| 标的 | 涨跌幅 |\n| --- | ---: |\n| 贵州茅台 | +1.2% |',
+        content: '| Stock | Change |\n| --- | ---: |\n| Infosys | +1.2% |',
         created_at: '2026-09-12T00:00:00Z',
       })
     })
 
     render(<ChatWidget embedded />)
-    await user.click(screen.getByRole('button', { name: '诊断我的持仓' }))
+    await user.click(screen.getByRole('button', { name: 'Check my holdings' }))
 
     const table = await screen.findByRole('table')
     expect(table).toBeTruthy()
-    expect(screen.getByRole('columnheader', { name: '标的' })).toBeTruthy()
-    expect(screen.getByRole('cell', { name: '贵州茅台' })).toBeTruthy()
+    expect(screen.getByRole('columnheader', { name: 'Stock' })).toBeTruthy()
+    expect(screen.getByRole('cell', { name: 'Infosys' })).toBeTruthy()
     expect(screen.getByRole('cell', { name: '+1.2%' })).toBeTruthy()
   })
 
@@ -198,35 +198,35 @@ describe('ChatWidget layout', () => {
     const user = userEvent.setup()
     vi.mocked(chatApi.sendAssistantMessageStream).mockImplementation(async (_conversationId, _content, callbacks) => {
       callbacks.onRunStarted?.({ taskId: 46 })
-      callbacks.onTrace?.({ event: 'tool_call_start', data: { name: 'get_portfolio', arguments: { market: 'CN' } } })
-      callbacks.onTrace?.({ event: 'tool_result', data: { name: 'get_portfolio', ok: true, preview: '持仓查询完成' } })
-      callbacks.onDone?.({ message_id: 47, content: '已完成分析', created_at: '2026-09-12T00:00:00Z' })
+      callbacks.onTrace?.({ event: 'tool_call_start', data: { name: 'get_portfolio', arguments: { market: 'IN' } } })
+      callbacks.onTrace?.({ event: 'tool_result', data: { name: 'get_portfolio', ok: true, preview: 'Holdings looked up' } })
+      callbacks.onDone?.({ message_id: 47, content: 'Analysis complete', created_at: '2026-09-12T00:00:00Z' })
     })
 
     render(<ChatWidget embedded />)
-    await user.click(screen.getByRole('button', { name: '诊断我的持仓' }))
+    await user.click(screen.getByRole('button', { name: 'Check my holdings' }))
 
-    await screen.findByText('已完成分析')
+    await screen.findByText('Analysis complete')
     expect(screen.getAllByTestId('assistant-trace')).toHaveLength(1)
-    expect(screen.queryByText('调用工具：get_portfolio')).toBeNull()
+    expect(screen.queryByText('Calling tool: get_portfolio')).toBeNull()
 
-    await user.click(screen.getByRole('button', { name: /执行记录/ }))
-    expect(screen.getByText('调用工具：get_portfolio')).toBeTruthy()
+    await user.click(screen.getByRole('button', { name: /Run log/ }))
+    expect(screen.getByText('Calling tool: get_portfolio')).toBeTruthy()
   })
 
   it('does not render a generic retry card when a stream fails', async () => {
     const user = userEvent.setup()
     vi.mocked(chatApi.sendAssistantMessageStream).mockImplementation(async (_conversationId, _content, callbacks) => {
       callbacks.onRunStarted?.({ taskId: 45 })
-      callbacks.onError?.('助手没有执行写入操作，因为本轮没有收到对应工具的成功结果。')
-      throw new Error('助手没有执行写入操作，因为本轮没有收到对应工具的成功结果。')
+      callbacks.onError?.("The assistant didn't make the change because this round had no successful result from the tool.")
+      throw new Error("The assistant didn't make the change because this round had no successful result from the tool.")
     })
 
     render(<ChatWidget embedded />)
-    await user.click(screen.getByRole('button', { name: '诊断我的持仓' }))
+    await user.click(screen.getByRole('button', { name: 'Check my holdings' }))
 
-    await waitFor(() => expect(screen.queryByRole('button', { name: '重试执行' })).toBeNull())
-    expect(screen.queryByText(/尚未执行/)).toBeNull()
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Retry' })).toBeNull())
+    expect(screen.queryByText(/not run yet/)).toBeNull()
   })
 
   it('does not downgrade the embedded assistant to the legacy non-streaming endpoint', async () => {
@@ -234,10 +234,10 @@ describe('ChatWidget layout', () => {
     vi.mocked(chatApi.sendAssistantMessageStream).mockRejectedValueOnce(new Error('SSE unavailable'))
 
     render(<ChatWidget embedded />)
-    await user.click(screen.getByRole('button', { name: '诊断我的持仓' }))
+    await user.click(screen.getByRole('button', { name: 'Check my holdings' }))
 
-    await waitFor(() => expect((screen.getByPlaceholderText('输入问题...') as HTMLInputElement).disabled).toBe(false))
-    expect(screen.queryByText(/请求未完成/)).toBeNull()
+    await waitFor(() => expect((screen.getByPlaceholderText('Ask a question...') as HTMLInputElement).disabled).toBe(false))
+    expect(screen.queryByText(/request incomplete/i)).toBeNull()
     expect(chatApi.sendMessage).not.toHaveBeenCalled()
   })
 
@@ -247,24 +247,24 @@ describe('ChatWidget layout', () => {
       callbacks.onRunStarted?.({ taskId: 42 })
       callbacks.onApprovalRequired?.({
         id: 'approval-1',
-        tool_title: '创建提醒',
+        tool_title: 'Create alert',
         risk: 'write',
-        summary: '创建第一个提醒',
+        summary: 'Create the first alert',
         expires_at: '',
         status: 'pending',
       })
       callbacks.onApprovalRequired?.({
         id: 'approval-2',
-        tool_title: '创建提醒',
+        tool_title: 'Create alert',
         risk: 'write',
-        summary: '创建第二个提醒',
+        summary: 'Create the second alert',
         expires_at: '',
         status: 'pending',
       })
       callbacks.onPaused?.({ taskId: 42, reason: 'approval_required' })
     })
     vi.mocked(chatApi.decideAssistantApprovalStream).mockImplementation(async (_approvalId, _decision, callbacks) => {
-      callbacks.onToolResult?.({ name: 'create_price_alert', ok: true, preview: '已创建第一个提醒' })
+      callbacks.onToolResult?.({ name: 'create_price_alert', ok: true, preview: 'First alert created' })
       callbacks.onPaused?.({
         taskId: 42,
         reason: 'approval_required',
@@ -274,14 +274,14 @@ describe('ChatWidget layout', () => {
     })
 
     render(<ChatWidget embedded />)
-    await user.click(screen.getByRole('button', { name: '诊断我的持仓' }))
-    await screen.findByText('创建第一个提醒')
-    await screen.findByText('创建第二个提醒')
+    await user.click(screen.getByRole('button', { name: 'Check my holdings' }))
+    await screen.findByText('Create the first alert')
+    await screen.findByText('Create the second alert')
 
-    await user.click(screen.getAllByRole('button', { name: '本次允许' })[0])
+    await user.click(screen.getAllByRole('button', { name: 'Allow once' })[0])
 
-    await screen.findByText('已允许，已执行')
-    expect(screen.getAllByRole('button', { name: '本次允许' })).toHaveLength(1)
+    await screen.findByText('Allowed and run')
+    expect(screen.getAllByRole('button', { name: 'Allow once' })).toHaveLength(1)
     expect(chatApi.decideAssistantApprovalStream).toHaveBeenCalledWith(
       'approval-1',
       'approved',

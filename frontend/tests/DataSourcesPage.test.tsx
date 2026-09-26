@@ -12,6 +12,6 @@ describe('DataSourcesPage (India-only)', () => {
     const global = screen.getByTestId('global-cues-source')
     expect(global.textContent).toContain('Delayed / unofficial')
     expect(global.textContent).toContain('GLOBAL_CUES_SOURCE=off')
-    expect(document.body.textContent).not.toMatch(/东财|腾讯|雪球|Eastmoney|Tencent|Xueqiu/)
+    expect(document.body.textContent).not.toMatch(/Eastmoney|Tencent|Xueqiu|Sina Finance/)
   })
 })

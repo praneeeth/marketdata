@@ -13,7 +13,7 @@ const config = {
   hard_limit_tokens: 10200,
   keep_recent_messages: 8,
   models: [
-    { id: 6, name: 'DeepSeek V4 Flash', model: 'deepseek-ai/DeepSeek-V4-Flash', service_name: '硅基流动' },
+    { id: 6, name: 'DeepSeek V4 Flash', model: 'deepseek-ai/DeepSeek-V4-Flash', service_name: 'SiliconFlow' },
   ],
 }
 
@@ -28,9 +28,9 @@ describe('AssistantConfigPanel', () => {
 
     render(<AssistantConfigPanel />)
 
-    expect((await screen.findByLabelText('上下文压缩模型') as HTMLSelectElement).value).toBe('6')
-    fireEvent.change(screen.getByLabelText('最大上下文 Token'), { target: { value: '16000' } })
-    fireEvent.click(screen.getByRole('button', { name: '保存上下文配置' }))
+    expect((await screen.findByLabelText('Context compression model') as HTMLSelectElement).value).toBe('6')
+    fireEvent.change(screen.getByLabelText('Max context tokens'), { target: { value: '16000' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save context config' }))
 
     await waitFor(() => expect(update).toHaveBeenCalledWith({
       compression_model_id: 6,

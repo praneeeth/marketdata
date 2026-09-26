@@ -63,7 +63,7 @@ export function AssistantConfigPanel() {
         setForm(toForm(next))
       })
       .catch(() => {
-        if (active) setError('无法加载上下文配置，请稍后重试。')
+        if (active) setError("Couldn't load the context config; please try again later.")
       })
       .finally(() => {
         if (active) setLoading(false)
@@ -86,19 +86,19 @@ export function AssistantConfigPanel() {
       setForm(toForm(next))
       setSaved(true)
     } catch {
-      setError('保存上下文配置失败，请检查阈值后重试。')
+      setError('Failed to save the context config; check the thresholds and try again.')
     } finally {
       setSaving(false)
     }
   }
 
   return (
-    <section aria-label="上下文配置" className="border-t border-border/50 pt-5">
+    <section aria-label="Context config" className="border-t border-border/50 pt-5">
       <div className="mb-3 flex items-start gap-2">
         <Cpu className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
         <div>
-          <h3 className="text-[13px] font-semibold text-foreground">上下文工程</h3>
-          <p className="mt-1 text-[11px] text-muted-foreground">配置自动压缩所使用的模型和上下文预算。</p>
+          <h3 className="text-[13px] font-semibold text-foreground">Context engineering</h3>
+          <p className="mt-1 text-[11px] text-muted-foreground">Set the model and context budget used for automatic compression.</p>
         </div>
       </div>
 
@@ -106,19 +106,19 @@ export function AssistantConfigPanel() {
       {loading ? (
         <div className="flex items-center gap-2 py-6 text-[12px] text-muted-foreground">
           <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-current/30 border-t-current" />
-          正在加载上下文配置…
+          Loading the context config…
         </div>
       ) : config ? (
         <div className="space-y-3">
           <label className="block text-[11px] text-muted-foreground">
-            <span className="mb-1 block">上下文压缩模型</span>
+            <span className="mb-1 block">Context compression model</span>
             <select
-              aria-label="上下文压缩模型"
+              aria-label="Context compression model"
               value={form.compression_model_id}
               onChange={(event) => update('compression_model_id', event.target.value)}
               className="h-9 w-full rounded-lg border border-border/60 bg-background px-2 text-[12px] text-foreground outline-none focus:ring-1 focus:ring-primary/30"
             >
-              <option value="">跟随系统默认模型</option>
+              <option value="">Use the system default model</option>
               {config.models.map((model) => (
                 <option key={model.id} value={model.id}>
                   {model.service_name} / {model.name} ({model.model})
@@ -128,9 +128,9 @@ export function AssistantConfigPanel() {
           </label>
 
           <label className="block text-[11px] text-muted-foreground">
-            <span className="mb-1 block">压缩温度</span>
+            <span className="mb-1 block">Compression temperature</span>
             <input
-              aria-label="压缩温度"
+              aria-label="Compression temperature"
               type="number"
               min="0"
               max="2"
@@ -143,11 +143,11 @@ export function AssistantConfigPanel() {
 
           <div className="grid grid-cols-2 gap-2">
             {([
-              ['summary_max_tokens', '摘要最大 Token'],
-              ['max_tokens', '最大上下文 Token'],
-              ['soft_limit_tokens', '自动压缩阈值'],
-              ['hard_limit_tokens', '硬上限 Token'],
-              ['keep_recent_messages', '保留最近消息数'],
+              ['summary_max_tokens', 'Summary max tokens'],
+              ['max_tokens', 'Max context tokens'],
+              ['soft_limit_tokens', 'Auto-compression threshold'],
+              ['hard_limit_tokens', 'Hard limit tokens'],
+              ['keep_recent_messages', 'Recent messages to keep'],
             ] as const).map(([key, label]) => (
               <label key={key} className="block text-[11px] text-muted-foreground">
                 <span className="mb-1 block">{label}</span>
@@ -170,7 +170,7 @@ export function AssistantConfigPanel() {
             className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-primary px-3 text-[12px] font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
           >
             <Check className="h-3.5 w-3.5" />
-            {saving ? '保存中…' : saved ? '已保存' : '保存上下文配置'}
+            {saving ? 'Saving…' : saved ? 'Saved' : 'Save context config'}
           </button>
         </div>
       ) : null}

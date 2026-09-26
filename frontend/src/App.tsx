@@ -34,19 +34,19 @@ const {
   AssistantPage,
 } = routePages
 
-// 认证守卫组件
+// Auth guard component
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const [authState, setAuthState] = useState<'checking' | 'authenticated' | 'unauthenticated'>('checking')
   const location = useLocation()
 
   useEffect(() => {
-    // 检查本地 token
+    // Check for a local token
     if (isAuthenticated()) {
       setAuthState('authenticated')
       return
     }
 
-    // 没有 token，需要去登录页（设置密码或登录）
+    // No token: go to the login page (set a password or sign in)
     setAuthState('unauthenticated')
   }, [])
 
@@ -109,7 +109,7 @@ function App() {
       .catch(() => {})
   }, [version])
 
-  // 登录页面不显示导航
+  // No navigation on the login page
   if (location.pathname === '/login') {
     return (
       <RouteErrorBoundary>
@@ -178,19 +178,19 @@ function App() {
               })}
             </nav>
 
-            {/* action wrapper:GitHub + 日志 + 头像(头像下拉含更多导航/主题色/退出) */}
+            {/* action wrapper: GitHub + logs + avatar (the avatar dropdown has more navigation/theme/sign-out) */}
             <div className="flex items-center gap-1.5 px-1.5 py-1 rounded-2xl bg-accent/20 border border-border/40">
               <button
                 onClick={() => window.open(repoUrl, '_blank', 'noopener,noreferrer')}
                 className="w-9 h-9 rounded-xl flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-background/70 transition-all"
-                title="GitHub 项目"
+                title="GitHub project"
               >
                 <Github className="w-4 h-4" />
               </button>
               <button
                 onClick={() => setLogsOpen(true)}
                 className="w-9 h-9 rounded-xl flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-background/70 transition-all"
-                title="查看日志"
+                title="View logs"
               >
                 <ScrollText className="w-4 h-4" />
               </button>
@@ -220,14 +220,14 @@ function App() {
               <button
                 onClick={() => window.open(repoUrl, '_blank', 'noopener,noreferrer')}
                 className="w-8 h-8 rounded-xl flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-background/70 transition-all"
-                title="GitHub 项目"
+                title="GitHub project"
               >
                 <Github className="w-4 h-4" />
               </button>
               <button
                 onClick={() => setLogsOpen(true)}
                 className="w-8 h-8 rounded-xl flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-background/70 transition-all"
-                title="查看日志"
+                title="View logs"
               >
                 <ScrollText className="w-4 h-4" />
               </button>
@@ -307,13 +307,13 @@ function App() {
       <Dialog open={upgradeOpen} onOpenChange={setUpgradeOpen}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>发现新版本</DialogTitle>
+            <DialogTitle>New version available</DialogTitle>
             <DialogDescription>
-              当前版本 v{version}，可升级到 v{upgradeInfo?.latest}。
+              You're on v{version}; v{upgradeInfo?.latest} is available.
             </DialogDescription>
           </DialogHeader>
           <div className="text-[12px] text-muted-foreground">
-            建议升级以获取最新功能和修复。
+            Upgrading is recommended for the latest features and fixes.
           </div>
           <div className="flex items-center justify-end gap-2">
             <Button
@@ -323,7 +323,7 @@ function App() {
                 setUpgradeOpen(false)
               }}
             >
-              稍后提醒
+              Remind me later
             </Button>
             <Button
               onClick={() => {
@@ -331,7 +331,7 @@ function App() {
                 window.open(url, '_blank', 'noopener,noreferrer')
               }}
             >
-              去升级
+              Upgrade
             </Button>
           </div>
         </DialogContent>

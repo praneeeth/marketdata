@@ -7,9 +7,9 @@ export interface AnalysisSection {
 }
 
 /**
- * 从深度分析 raw_data 组装各部分(决策正文 / 四分析师 / 看多看空辩论 / 风控辩论)。
- * 弹窗的 tab 与详细阅读页的长文共用这一份组装逻辑,避免两处渲染漂移。
- * 顺序即详细页从上到下、弹窗 tab 从左到右的顺序。只返回有内容的部分。
+ * Assemble the sections from deep research raw_data (decision text / four analysts / bull vs bear debate / risk debate).
+ * The dialog's tabs and the detail reading page share this logic, so the two renderings don't drift apart.
+ * The order is the detail page's top-to-bottom and the dialog tabs' left-to-right order. Only sections with content are returned.
  */
 export function buildAnalysisSections(
   rawData: Partial<DeepAnalysisResult['raw_data']>,
@@ -27,42 +27,42 @@ export function buildAnalysisSections(
     sections.push({ id: 'summary', title: 'Research summary', markdown: rawData.research_summary })
   }
 
-  // 决策书:section 标题直接用「PM 最终决策书」(去掉原先重复的前置「最终决策」标题);
-  // 交易员执行计划作为子标题保留(与决策书区分)。
+  // Decision: the section title is simply "PM decision" (the old duplicated leading "Final decision" heading is gone);
+  // the trader's plan stays as a sub-heading (to set it apart from the decision).
   const decisionBody = includeDecision
     ? [
         rawData.final_decision || '',
-        rawData.trader_plan && `### 💼 交易员执行计划\n\n${rawData.trader_plan}`,
+        rawData.trader_plan && `### 💼 Trader's plan\n\n${rawData.trader_plan}`,
       ]
         .filter(Boolean)
         .join('\n\n')
     : ''
-  if (decisionBody) sections.push({ id: 'decision', title: 'PM 最终决策书', markdown: decisionBody })
+  if (decisionBody) sections.push({ id: 'decision', title: 'PM decision', markdown: decisionBody })
 
-  // 四位分析师
+  // The four analysts
   const analysts: [string, string][] = [
-    ['market', '技术分析师'],
-    ['social', '情绪分析师'],
-    ['news', '新闻分析师'],
-    ['fundamentals', '基本面分析师'],
+    ['market', 'Technical analyst'],
+    ['social', 'Sentiment analyst'],
+    ['news', 'News analyst'],
+    ['fundamentals', 'Fundamentals analyst'],
   ]
   for (const [k, title] of analysts) {
     const text = (reports as unknown as Record<string, string>)[k] || ''
     if (text) sections.push({ id: k, title, markdown: text })
   }
 
-  // 看多看空辩论(研究团队:辩论历史 + 研究主管裁决)
+  // Bull vs bear debate (research team: debate history + research manager's ruling)
   if (debate?.history) {
     let dc = debate.history
-    if (includeDecision && debate.judge_decision) dc += `\n\n### ⚖️ 研究主管裁决\n\n${debate.judge_decision}`
-    sections.push({ id: 'debate', title: '看多看空辩论', markdown: dc })
+    if (includeDecision && debate.judge_decision) dc += `\n\n### ⚖️ Research manager's ruling\n\n${debate.judge_decision}`
+    sections.push({ id: 'debate', title: 'Bull vs bear debate', markdown: dc })
   }
 
-  // 风控辩论(风控团队:激进/中立/保守辩论 + 风控裁决)
+  // Risk debate (risk team: aggressive/neutral/conservative debate + risk ruling)
   if (riskDebate?.history) {
     let rc = riskDebate.history
-    if (riskDebate.judge_decision) rc += `\n\n### 🛡️ 风控裁决\n\n${riskDebate.judge_decision}`
-    sections.push({ id: 'risk', title: '风控辩论', markdown: rc })
+    if (riskDebate.judge_decision) rc += `\n\n### 🛡️ Risk ruling\n\n${riskDebate.judge_decision}`
+    sections.push({ id: 'risk', title: 'Risk debate', markdown: rc })
   }
 
   return sections

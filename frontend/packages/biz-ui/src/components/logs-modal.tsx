@@ -40,35 +40,41 @@ const TIME_RANGES = [
   { label: '1h', value: 1 },
   { label: '6h', value: 6 },
   { label: '24h', value: 24 },
-  { label: '全部', value: 0 },
+  { label: 'All', value: 0 },
 ]
 const DOMAIN_OPTIONS: Array<{ label: string, value: 'business' | 'all' | 'infra' }> = [
-  { label: '业务优先', value: 'business' },
-  { label: '全部', value: 'all' },
-  { label: '基础设施', value: 'infra' },
+  { label: 'Business first', value: 'business' },
+  { label: 'All', value: 'all' },
+  { label: 'Infrastructure', value: 'infra' },
 ]
+const RUN_LOGGERS = [
+  'src.modules.automation.base',
+  'src.modules.automation.agent_scheduler',
+  'src.platform.notifications.notifier',
+]
+
 const FLOW_PRESETS: Array<{ key: string, label: string, loggers: string[] }> = [
-  { key: '', label: '全部链路', loggers: [] },
+  { key: '', label: 'All flows', loggers: [] },
   {
     key: 'premarket_outlook',
-    label: '盘前分析',
-    loggers: ['src.agents.premarket_outlook', 'src.agents.base', 'src.core.scheduler', 'src.core.notifier'],
+    label: 'Pre-market outlook',
+    loggers: ['src.modules.automation.premarket_outlook', ...RUN_LOGGERS],
   },
   {
     key: 'daily_report',
-    label: '收盘复盘',
-    loggers: ['src.agents.daily_report', 'src.agents.base', 'src.core.scheduler', 'src.core.notifier'],
+    label: 'Daily close report',
+    loggers: ['src.modules.automation.daily_report', ...RUN_LOGGERS],
   },
   {
     key: 'intraday_monitor',
-    label: '盘中监测',
-    loggers: ['src.agents.intraday_monitor', 'src.agents.base', 'src.core.scheduler', 'src.core.notifier'],
+    label: 'Intraday monitor',
+    loggers: ['src.modules.automation.intraday_monitor', ...RUN_LOGGERS],
   },
   {
     key: 'tradingagents',
-    label: '深度分析',
-    // 'tradingagents' 子串同时匹配 PanWatch 适配层 (src.agents.tradingagents.*) 和上游 (tradingagents.*)
-    loggers: ['tradingagents', 'src.agents.base', 'src.core.scheduler', 'src.core.notifier'],
+    label: 'Deep research',
+    // The 'tradingagents' substring matches both the adapter (src.modules.automation.tradingagents.*) and upstream (tradingagents.*)
+    loggers: ['tradingagents', ...RUN_LOGGERS],
   },
 ]
 
@@ -152,15 +158,15 @@ export default function LogsModal({ open, onOpenChange }: { open: boolean, onOpe
     void load({ append: false, cursor: 0 })
   }, [load])
 
-  // 初次打开或筛选变更时刷新（关键词搜索走防抖）
+  // Refresh on first open or when filters change (keyword search is debounced)
   useEffect(() => {
     if (!open) return
     loadLatest()
-    // query 由 handleSearchInput 防抖触发，避免每次键入都立即请求。
+    // query is debounced by handleSearchInput so not every keystroke fires a request.
   }, [open, selectedLevels, selectedLoggers, selectedFlow, domain, timeRange])
 
-  // 自动刷新：优先 SSE tail（服务端推增量，事件 id 即日志 id，断线自动续推），
-  // SSE 不可用/关流时降级为原 3s 轮询（轮询代码保留兜底）
+  // Auto refresh: SSE tail first (the server pushes new rows; event id = log id; reconnects resume),
+  // falling back to the old 3s polling when SSE is unavailable or closed (the polling code is kept as the fallback)
   useEffect(() => {
     if (!(open && autoRefresh)) {
       return () => { if (refreshTimer.current) clearInterval(refreshTimer.current) }
@@ -188,14 +194,14 @@ export default function LogsModal({ open, onOpenChange }: { open: boolean, onOpe
           const incoming = ev.data.items as LogEntry[]
           setLogs(prev => {
             const seen = new Set(prev.map(x => x.id))
-            // 服务端按 id 升序推，列表按最新在前展示 → 反转后插到最前
+            // The server pushes in ascending id order and the list shows newest first -> reverse and prepend
             const fresh = incoming.filter(x => !seen.has(x.id)).reverse()
             return fresh.length > 0 ? [...fresh, ...prev] : prev
           })
           setTotal(t => t + incoming.length)
         }
       },
-      // 服务端流超时正常关闭 / 连接重试用尽 → 降级轮询
+      // The server stream timed out and closed normally / reconnect retries exhausted -> fall back to polling
       onClosed: () => startPolling(),
       onFailed: () => startPolling(),
     })
@@ -236,7 +242,7 @@ export default function LogsModal({ open, onOpenChange }: { open: boolean, onOpe
   }
 
   const handleClear = async () => {
-    if (!confirm('确定清空所有日志？')) return
+    if (!confirm('Clear all logs?')) return
     await fetchAPI('/logs', { method: 'DELETE' })
     setLogs([])
     setTotal(0)
@@ -252,16 +258,16 @@ export default function LogsModal({ open, onOpenChange }: { open: boolean, onOpe
 
   const filterSummary = useMemo(() => {
     const parts: string[] = []
-    if (query) parts.push(`关键词:${query}`)
-    if (selectedLevels.length) parts.push(`级别:${selectedLevels.join(',')}`)
-    if (timeRange > 0) parts.push(`时间:${timeRange}h`)
-    if (domain !== 'all') parts.push(`范围:${domain === 'business' ? '业务优先' : '基础设施'}`)
+    if (query) parts.push(`keyword: ${query}`)
+    if (selectedLevels.length) parts.push(`level: ${selectedLevels.join(',')}`)
+    if (timeRange > 0) parts.push(`time: ${timeRange}h`)
+    if (domain !== 'all') parts.push(`scope: ${domain === 'business' ? 'business first' : 'infrastructure'}`)
     if (selectedFlow) {
       const flow = FLOW_PRESETS.find(x => x.key === selectedFlow)
-      if (flow) parts.push(`链路:${flow.label}`)
+      if (flow) parts.push(`flow: ${flow.label}`)
     }
-    if (selectedLoggers.length) parts.push(`自选Logger:${selectedLoggers.length}`)
-    return parts.length > 0 ? parts.join(' | ') : '当前无额外过滤'
+    if (selectedLoggers.length) parts.push(`custom loggers: ${selectedLoggers.length}`)
+    return parts.length > 0 ? parts.join(' | ') : 'No extra filters'
   }, [query, selectedLevels, timeRange, domain, selectedFlow, selectedLoggers])
 
   const loggerFilterOptions = loggerOptions()
@@ -271,16 +277,16 @@ export default function LogsModal({ open, onOpenChange }: { open: boolean, onOpe
       <DialogContent className="w-[90vw] max-w-[90vw] h-[90vh] max-h-[90vh] flex flex-col overflow-hidden" onInteractOutside={(e) => e.preventDefault()}>
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <span>日志</span>
+            <span>Logs</span>
             <Button variant={autoRefresh ? 'default' : 'secondary'} size="sm" className="h-7" onClick={() => setAutoRefresh(v => !v)}>
               <RefreshCw className={`w-3.5 h-3.5 ${autoRefresh ? 'animate-spin' : ''}`} />
-              自动刷新
+              Auto refresh
             </Button>
             <Button variant="outline" size="sm" className="h-7" onClick={loadLatest}>
-              刷新
+              Refresh
             </Button>
             <Button variant="ghost" size="sm" className="h-7 hover:text-destructive hover:bg-destructive/8 ml-auto" onClick={handleClear}>
-              <Trash2 className="w-3.5 h-3.5" /> 清空
+              <Trash2 className="w-3.5 h-3.5" /> Clear
             </Button>
           </DialogTitle>
         </DialogHeader>
@@ -288,7 +294,7 @@ export default function LogsModal({ open, onOpenChange }: { open: boolean, onOpe
         <div className="card p-3 md:p-4 mb-3 space-y-3">
           <div className="relative">
             <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground/50" />
-            <Input value={query} onChange={e => handleSearchInput(e.target.value)} placeholder="搜索日志内容 / trace_id / logger..." className="pl-10" />
+            <Input value={query} onChange={e => handleSearchInput(e.target.value)} placeholder="Search log text / trace_id / logger..." className="pl-10" />
           </div>
 
           <div className="flex flex-wrap items-center gap-1.5">
@@ -311,7 +317,7 @@ export default function LogsModal({ open, onOpenChange }: { open: boolean, onOpe
                 {range.label}
               </button>
             ))}
-            <span className="ml-auto text-[11px] text-muted-foreground font-medium">{total} 条记录</span>
+            <span className="ml-auto text-[11px] text-muted-foreground font-medium">{total} records</span>
           </div>
 
           <div className="flex flex-wrap items-center gap-1.5">
@@ -344,10 +350,10 @@ export default function LogsModal({ open, onOpenChange }: { open: boolean, onOpe
               onClick={() => setShowAllLoggerFilters(v => !v)}
               className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-medium bg-accent text-muted-foreground hover:text-foreground"
             >
-              Logger过滤
+              Logger filter
               <ChevronDown className={`w-3.5 h-3.5 transition-transform ${showAllLoggerFilters ? 'rotate-180' : ''}`} />
             </button>
-            <div className="text-[11px] text-muted-foreground">默认链路会自动包含 `src.agents.base` 决策日志</div>
+            <div className="text-[11px] text-muted-foreground">Flow presets include the agent run logs from `src.modules.automation.base`</div>
           </div>
           {showAllLoggerFilters && (
             <div className="flex flex-wrap items-center gap-1.5">
@@ -366,9 +372,9 @@ export default function LogsModal({ open, onOpenChange }: { open: boolean, onOpe
 
           <div className="flex items-center gap-2 text-[11px]">
             <div className="flex-1 rounded-md border border-border/50 px-2.5 py-1.5 text-muted-foreground bg-background/40">
-              过滤器：{filterSummary}
+              Filters: {filterSummary}
             </div>
-            <Button variant="ghost" size="sm" className="h-7" onClick={clearFilters}>清空过滤</Button>
+            <Button variant="ghost" size="sm" className="h-7" onClick={clearFilters}>Clear filters</Button>
           </div>
         </div>
 
@@ -382,8 +388,8 @@ export default function LogsModal({ open, onOpenChange }: { open: boolean, onOpe
               <div className="w-14 h-14 rounded-xl bg-primary/10 flex items-center justify-center mb-4">
                 <ScrollText className="w-6 h-6 text-primary" />
               </div>
-              <p className="text-[15px] font-semibold text-foreground">暂无日志</p>
-              <p className="text-[13px] text-muted-foreground mt-1.5">后台运行后日志会自动出现在这里</p>
+              <p className="text-[15px] font-semibold text-foreground">No logs</p>
+              <p className="text-[13px] text-muted-foreground mt-1.5">Logs appear here once the backend is running</p>
             </div>
           ) : (
             <div className="card overflow-hidden h-full flex flex-col">
@@ -391,11 +397,11 @@ export default function LogsModal({ open, onOpenChange }: { open: boolean, onOpe
                 <table className="w-full text-[12px] font-mono">
                   <thead className="sticky top-0 bg-card z-10 border-b border-border/50">
                     <tr>
-                      <th className="text-left px-4 py-3 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider w-32">时间</th>
-                      <th className="text-left px-4 py-3 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider w-20">级别</th>
+                      <th className="text-left px-4 py-3 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider w-32">Time</th>
+                      <th className="text-left px-4 py-3 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider w-20">Level</th>
                       <th className="text-left px-4 py-3 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider w-36">Logger</th>
-                      <th className="text-left px-4 py-3 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider w-44">链路</th>
-                      <th className="text-left px-4 py-3 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">消息</th>
+                      <th className="text-left px-4 py-3 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider w-44">Flow</th>
+                      <th className="text-left px-4 py-3 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Message</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -426,14 +432,14 @@ export default function LogsModal({ open, onOpenChange }: { open: boolean, onOpe
               </div>
 
               <div className="flex items-center justify-between px-5 py-3 border-t border-border/30">
-                <span className="text-[12px] text-muted-foreground">已加载 {logs.length} / {total}</span>
+                <span className="text-[12px] text-muted-foreground">Loaded {logs.length} / {total}</span>
                 <Button
                   variant="ghost"
                   size="sm"
                   disabled={!hasMore || loadingMore}
                   onClick={() => load({ append: true, cursor: beforeId })}
                 >
-                  {loadingMore ? '加载中...' : hasMore ? '加载更多' : '没有更多了'}
+                  {loadingMore ? 'Loading...' : hasMore ? 'Load more' : 'No more'}
                 </Button>
               </div>
             </div>

@@ -32,11 +32,11 @@ type GroupedSignal = {
 const marketLabel = (_m?: string) => 'NSE/BSE' // India is the only market
 
 const sourceAgentLabelMap: Record<string, string> = {
-  premarket_outlook: '盘前分析',
-  intraday_monitor: '盘中监测',
-  daily_report: '收盘复盘',
-  news_digest: '新闻速递',
-  market_scan: '市场扫描',
+  premarket_outlook: 'Pre-market outlook',
+  intraday_monitor: 'Intraday monitor',
+  daily_report: 'Daily close report',
+  news_digest: 'News digest',
+  market_scan: 'Market scan',
 }
 
 const sourceAgentLabel = (agent?: string) => {
@@ -105,8 +105,8 @@ const actionBadgeClass = (action?: string) => {
 
 const displayActionLabel = (item: StrategySignalItem) => {
   const action = (item.action || '').toLowerCase()
-  if (!item.is_holding_snapshot && action === 'hold') return '观望'
-  if (!item.is_holding_snapshot && action === 'add') return '建仓'
+  if (!item.is_holding_snapshot && action === 'hold') return 'Watch'
+  if (!item.is_holding_snapshot && action === 'add') return 'Open position'
   return item.action_label || item.action
 }
 
@@ -145,9 +145,9 @@ const shouldReplacePrimary = (next: StrategySignalItem, current: StrategySignalI
 
 const toSignalFromCandidate = (row: EntryCandidateItem): StrategySignalItem => {
   const source = row.candidate_source || 'watchlist'
-  const sourceLabel = row.candidate_source_label || (source === 'market_scan' ? '市场池' : source === 'mixed' ? '市场+关注' : '关注池')
+  const sourceLabel = row.candidate_source_label || (source === 'market_scan' ? 'Market pool' : source === 'mixed' ? 'Market + watchlist' : 'Watchlist')
   const riskLevel: 'low' | 'medium' | 'high' = Number(row.score || 0) >= 85 ? 'high' : Number(row.score || 0) >= 70 ? 'medium' : 'low'
-  const riskLabel = riskLevel === 'high' ? '高风险' : riskLevel === 'low' ? '低风险' : '中风险'
+  const riskLabel = riskLevel === 'high' ? 'High risk' : riskLevel === 'low' ? 'Low risk' : 'Medium risk'
   return {
     id: Number(row.id || 0),
     snapshot_date: row.snapshot_date || '',
@@ -155,7 +155,7 @@ const toSignalFromCandidate = (row: EntryCandidateItem): StrategySignalItem => {
     stock_market: row.stock_market || 'IN',
     stock_name: row.stock_name || row.stock_symbol,
     strategy_code: (row.strategy_tags && row.strategy_tags[0]) || 'watchlist_agent',
-    strategy_name: (row.strategy_labels && row.strategy_labels[0]) || '候选建议',
+    strategy_name: (row.strategy_labels && row.strategy_labels[0]) || 'Candidate',
     strategy_version: 'v1',
     risk_level: riskLevel,
     risk_level_label: riskLabel,
@@ -166,7 +166,7 @@ const toSignalFromCandidate = (row: EntryCandidateItem): StrategySignalItem => {
     confidence: row.confidence ?? null,
     status: row.status || 'inactive',
     action: row.action || 'watch',
-    action_label: row.action_label || '观望',
+    action_label: row.action_label || 'Watch',
     signal: row.signal || '',
     reason: row.reason || '',
     evidence: row.evidence || [],
@@ -207,8 +207,8 @@ const formatEntryDisplay = (action: string | undefined, entryLow: number | null,
     return `${formatPlanPrice(entryLow)} ~ ${formatPlanPrice(entryHigh)}`
   }
   const key = (action || '').toLowerCase()
-  if (key === 'buy' || key === 'add') return '待补充入场位'
-  return '当前不建议开仓'
+  if (key === 'buy' || key === 'add') return 'Entry level pending'
+  return 'No new position suggested'
 }
 
 const regimeToneClass = (regime?: string) => {
@@ -240,7 +240,7 @@ export default function OpportunitiesPage() {
   const [insightName, setInsightName] = useState<string | undefined>(undefined)
   const [insightHasPosition, setInsightHasPosition] = useState(false)
 
-  // 个股 AI 评分分享卡:当前分享的信号
+  // Per-stock AI score share card: the signal being shared
   const [shareSignal, setShareSignal] = useState<StrategySignalItem | null>(null)
 
   const openInsight = useCallback((item: StrategySignalItem) => {
@@ -302,7 +302,7 @@ export default function OpportunitiesPage() {
         })
       } catch (firstErr) {
         const msg = firstErr instanceof Error ? firstErr.message : ''
-        if (!msg.includes('超时')) throw firstErr
+        if (!msg.includes('timed out')) throw firstErr
         try {
           // Retry once for transient DB lock/contention.
           data = await recommendationsApi.listStrategySignals({
@@ -311,7 +311,7 @@ export default function OpportunitiesPage() {
           })
         } catch (secondErr) {
           const secondMsg = secondErr instanceof Error ? secondErr.message : ''
-          if (!secondMsg.includes('超时')) throw secondErr
+          if (!secondMsg.includes('timed out')) throw secondErr
           const fallback = await recommendationsApi.listEntryCandidates({
             market: req.market,
             status: 'active',
@@ -327,7 +327,7 @@ export default function OpportunitiesPage() {
             count: fallback.count || 0,
             items: (fallback.items || []).map(toSignalFromCandidate),
           }
-          setError('策略层请求超时，已降级展示候选快照')
+          setError('The strategy layer request timed out; showing the candidate snapshot instead')
         }
       }
       if ((!data.items || data.items.length === 0) && market !== 'ALL') {
@@ -337,17 +337,17 @@ export default function OpportunitiesPage() {
           timeoutMs: 45000,
         })
         if (fallback.items && fallback.items.length > 0) {
-          setError(`当前${marketLabel(market)}暂无满足条件机会，已展示全市场结果`)
+          setError(`No opportunities meet the conditions for ${marketLabel(market)}; showing results for all markets`)
           data = fallback
         }
       }
       setItems(data.items || [])
       setSnapshotDate(data.snapshot_date || '')
       if (!data.snapshot_date) {
-        setError('暂无机会快照，请点击“刷新”生成一次')
+        setError('No opportunity snapshot yet; click "Refresh" to generate one')
       }
     } catch (e) {
-      setError(e instanceof Error ? e.message : '加载失败')
+      setError(e instanceof Error ? e.message : 'Failed to load')
       setItems([])
     } finally {
       setLoading(false)
@@ -368,7 +368,7 @@ export default function OpportunitiesPage() {
         const state = await recommendationsApi.getStrategyRefreshStatus()
         if (!state.running) {
           if (state.last_error) {
-            setError(`后台刷新失败: ${state.last_error}`)
+            setError(`Background refresh failed: ${state.last_error}`)
           } else {
             setError('')
           }
@@ -381,7 +381,7 @@ export default function OpportunitiesPage() {
       await sleep(3000)
     }
     await Promise.all([load(), loadStats()])
-    setError((prev) => prev || '刷新任务仍在后台执行，请稍后重试')
+    setError((prev) => prev || 'The refresh is still running in the background; please try again later')
   }, [load, loadStats])
 
   const handleRefresh = async () => {
@@ -397,15 +397,15 @@ export default function OpportunitiesPage() {
         wait: false,
       })
       if (resp.queued) {
-        setError(resp.accepted ? '已提交后台刷新任务，完成后自动更新' : '刷新任务已在执行中，完成后自动更新')
+        setError(resp.accepted ? 'Background refresh queued; results update automatically when it finishes' : 'A refresh is already running; results update automatically when it finishes')
         void pollRefreshCompletion()
         return
       }
       await Promise.all([load(), loadStats()])
     } catch (e) {
-      const msg = e instanceof Error ? e.message : '刷新失败'
-      if (msg.includes('超时')) {
-        setError('刷新任务耗时较长，已在后台继续执行，请稍后再点刷新')
+      const msg = e instanceof Error ? e.message : 'Refresh failed'
+      if (msg.includes('timed out')) {
+        setError('The refresh is taking a while and continues in the background; click Refresh again later')
         await load()
       } else {
         setError(msg)
@@ -499,7 +499,7 @@ export default function OpportunitiesPage() {
   const regimeSummary = useMemo(() => {
     return (stats?.regimes || []).map((r) => ({
       market: r.market,
-      label: r.regime_label || r.regime || '震荡',
+      label: r.regime_label || r.regime || 'Range-bound',
       regime: r.regime || 'neutral',
       confidence: Number(r.confidence || 0),
       score: Number(r.regime_score || 0),
@@ -521,14 +521,14 @@ export default function OpportunitiesPage() {
         <div>
           <h1 className="text-[20px] md:text-[22px] font-bold text-foreground tracking-tight flex items-center gap-2">
             <Sparkles className="w-5 h-5 text-primary" />
-            机会页
+            Opportunities
           </h1>
           <p className="text-[12px] text-muted-foreground mt-1">
-            市场池优先，候选必须具备可执行入场计划
+            Market pool first; candidates must have an actionable entry plan
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <span className="text-[11px] text-muted-foreground">{snapshotDate || '最新快照'}</span>
+          <span className="text-[11px] text-muted-foreground">{snapshotDate || 'Latest snapshot'}</span>
           <Button
             variant="secondary"
             size="sm"
@@ -537,38 +537,38 @@ export default function OpportunitiesPage() {
             disabled={refreshing}
           >
             {refreshing ? <span className="w-3.5 h-3.5 border-2 border-current/30 border-t-current rounded-full animate-spin" /> : <RefreshCw className="w-3.5 h-3.5 mr-1" />}
-            刷新
+            Refresh
           </Button>
         </div>
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
         <div className="card p-3">
-          <div className="text-[11px] text-muted-foreground">当前候选(全局)</div>
+          <div className="text-[11px] text-muted-foreground">Current candidates (all)</div>
           <div className="text-[18px] font-bold mt-1">{globalCoverage?.total_signals ?? '--'}</div>
           <div className="text-[10px] text-muted-foreground mt-1">
-            可执行: {globalCoverage?.active_signals ?? '--'}，观察: {(globalCoverage?.total_signals != null && globalCoverage?.active_signals != null) ? Math.max(0, globalCoverage.total_signals - globalCoverage.active_signals) : '--'}
+            Actionable: {globalCoverage?.active_signals ?? '--'}, watching: {(globalCoverage?.total_signals != null && globalCoverage?.active_signals != null) ? Math.max(0, globalCoverage.total_signals - globalCoverage.active_signals) : '--'}
           </div>
         </div>
         <div className="card p-3">
-          <div className="text-[11px] text-muted-foreground">市场池占比</div>
+          <div className="text-[11px] text-muted-foreground">Market pool share</div>
           <div className="text-[18px] font-bold mt-1">{globalCoverage?.market_scan_share_pct != null ? `${globalCoverage.market_scan_share_pct.toFixed(1)}%` : '--'}</div>
           <div className="text-[10px] text-muted-foreground mt-1">
-            市场池: {globalCoverage?.market_scan_signals ?? '--'}，关注池: {globalCoverage?.watchlist_signals ?? '--'}，融合: {globalCoverage?.mixed_signals ?? '--'}
+            Market pool: {globalCoverage?.market_scan_signals ?? '--'}, watchlist: {globalCoverage?.watchlist_signals ?? '--'}, combined: {globalCoverage?.mixed_signals ?? '--'}
           </div>
         </div>
         <div className="card p-3">
-          <div className="text-[11px] text-muted-foreground">本次筛选结果</div>
+          <div className="text-[11px] text-muted-foreground">This filter</div>
           <div className="text-[18px] font-bold mt-1">{filteredSummary.total}</div>
           <div className="text-[10px] text-muted-foreground mt-1">
-            未持仓: {filteredSummary.unheld}，市场池: {filteredSummary.marketPool}
+            Not held: {filteredSummary.unheld}, market pool: {filteredSummary.marketPool}
           </div>
         </div>
         <div className="card p-3">
-          <div className="text-[11px] text-muted-foreground">3日胜率(自动评估)</div>
+          <div className="text-[11px] text-muted-foreground">3-day win rate (auto-evaluated)</div>
           <div className="text-[18px] font-bold mt-1">{outcome3d ? `${outcome3d.win_rate.toFixed(1)}%` : '--'}</div>
           <div className="text-[10px] text-muted-foreground mt-1">
-            自动样本: {outcome3d ? `${outcome3d.total}` : '--'}
+            Auto samples: {outcome3d ? `${outcome3d.total}` : '--'}
           </div>
         </div>
       </div>
@@ -576,44 +576,44 @@ export default function OpportunitiesPage() {
       {(factorStats || constraintStats) && (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
           <div className="card p-3">
-            <div className="text-[11px] text-muted-foreground">平均Alpha因子</div>
+            <div className="text-[11px] text-muted-foreground">Average alpha factor</div>
             <div className="text-[18px] font-bold mt-1">{factorStats ? factorStats.avg_alpha_score.toFixed(1) : '--'}</div>
-            <div className="text-[10px] text-muted-foreground mt-1">样本 {factorStats?.sample_size ?? '--'}</div>
+            <div className="text-[10px] text-muted-foreground mt-1">Samples {factorStats?.sample_size ?? '--'}</div>
           </div>
           <div className="card p-3">
-            <div className="text-[11px] text-muted-foreground">平均事件催化</div>
+            <div className="text-[11px] text-muted-foreground">Average event catalyst</div>
             <div className="text-[18px] font-bold mt-1">{factorStats ? factorStats.avg_catalyst_score.toFixed(1) : '--'}</div>
             <div className="text-[10px] text-muted-foreground mt-1">
-              拥挤惩罚 {factorStats ? factorStats.avg_crowd_penalty.toFixed(1) : '--'}
+              Crowding penalty {factorStats ? factorStats.avg_crowd_penalty.toFixed(1) : '--'}
             </div>
           </div>
           <div className="card p-3">
-            <div className="text-[11px] text-muted-foreground">平均质量/风险</div>
+            <div className="text-[11px] text-muted-foreground">Average quality/risk</div>
             <div className="text-[18px] font-bold mt-1">
               {factorStats ? `${factorStats.avg_quality_score.toFixed(1)} / ${factorStats.avg_risk_penalty.toFixed(1)}` : '--'}
             </div>
-            <div className="text-[10px] text-muted-foreground mt-1">质量分越高越好</div>
+            <div className="text-[10px] text-muted-foreground mt-1">Higher quality is better</div>
           </div>
           <div className="card p-3">
-            <div className="text-[11px] text-muted-foreground">组合约束降级</div>
+            <div className="text-[11px] text-muted-foreground">Demoted by portfolio limits</div>
             <div className="text-[18px] font-bold mt-1">{constraintStats?.constrained_top20 ?? 0}</div>
-            <div className="text-[10px] text-muted-foreground mt-1">Top20 被风控降级数量</div>
+            <div className="text-[10px] text-muted-foreground mt-1">Top 20 demoted by risk control</div>
           </div>
         </div>
       )}
 
       {(regimeSummary.length > 0 || riskSummary.length > 0) && (
         <div className="card p-3 mb-4">
-          <div className="text-[11px] text-muted-foreground mb-2">市场状态与组合风险</div>
+          <div className="text-[11px] text-muted-foreground mb-2">Market regime and portfolio risk</div>
           <div className="flex flex-wrap gap-2">
             {regimeSummary.map((r) => (
               <span key={`regime-${r.market}`} className={`text-[11px] px-2.5 py-1 rounded ${regimeToneClass(r.regime)}`}>
-                {marketLabel(r.market)}: {r.label} · 置信 {Math.round(r.confidence * 100)}%
+                {marketLabel(r.market)}: {r.label} · confidence {Math.round(r.confidence * 100)}%
               </span>
             ))}
             {riskSummary.map((r) => (
               <span key={`risk-${r.market}`} className="text-[11px] px-2.5 py-1 rounded bg-accent/70 text-muted-foreground border border-border/60">
-                {marketLabel(r.market)}风险: {r.riskLevel} · 集中度{(r.concentration * 100).toFixed(0)}% · 高风险占比{(r.highRiskRatio * 100).toFixed(0)}%
+                {marketLabel(r.market)} risk: {r.riskLevel} · concentration {(r.concentration * 100).toFixed(0)}% · high-risk share {(r.highRiskRatio * 100).toFixed(0)}%
               </span>
             ))}
           </div>
@@ -625,31 +625,31 @@ export default function OpportunitiesPage() {
           <Select value={market} onValueChange={(v) => setMarket(v as 'ALL' | 'IN')}>
             <SelectTrigger className="h-8 text-[12px]"><SelectValue /></SelectTrigger>
             <SelectContent>
-              <SelectItem value="ALL">全部市场</SelectItem>
+              <SelectItem value="ALL">All markets</SelectItem>
               <SelectItem value="IN">NSE/BSE</SelectItem>
             </SelectContent>
           </Select>
           <Select value={source} onValueChange={(v) => setSource(v as SourceFilter)}>
             <SelectTrigger className="h-8 text-[12px]"><SelectValue /></SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">全部来源</SelectItem>
-              <SelectItem value="market_scan">市场池</SelectItem>
-              <SelectItem value="mixed">融合池</SelectItem>
-              <SelectItem value="watchlist">关注池</SelectItem>
+              <SelectItem value="all">All sources</SelectItem>
+              <SelectItem value="market_scan">Market pool</SelectItem>
+              <SelectItem value="mixed">Combined pool</SelectItem>
+              <SelectItem value="watchlist">Watchlist</SelectItem>
             </SelectContent>
           </Select>
           <Select value={holding} onValueChange={(v) => setHolding(v as HoldingFilter)}>
             <SelectTrigger className="h-8 text-[12px]"><SelectValue /></SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">全部持仓状态</SelectItem>
-              <SelectItem value="unheld">仅未持仓</SelectItem>
-              <SelectItem value="held">仅持仓中</SelectItem>
+              <SelectItem value="all">Any holding status</SelectItem>
+              <SelectItem value="unheld">Not held only</SelectItem>
+              <SelectItem value="held">Held only</SelectItem>
             </SelectContent>
           </Select>
           <Select value={strategy} onValueChange={setStrategy}>
             <SelectTrigger className="h-8 text-[12px]"><SelectValue /></SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">全部策略</SelectItem>
+              <SelectItem value="all">All strategies</SelectItem>
               {strategyOptions.map((op) => (
                 <SelectItem key={op.value} value={op.value}>{op.label}</SelectItem>
               ))}
@@ -658,28 +658,28 @@ export default function OpportunitiesPage() {
           <Select value={risk} onValueChange={(v) => setRisk(v as RiskFilter)}>
             <SelectTrigger className="h-8 text-[12px]"><SelectValue /></SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">全部风险等级</SelectItem>
-              <SelectItem value="low">低风险</SelectItem>
-              <SelectItem value="medium">中风险</SelectItem>
-              <SelectItem value="high">高风险</SelectItem>
+              <SelectItem value="all">All risk levels</SelectItem>
+              <SelectItem value="low">Low risk</SelectItem>
+              <SelectItem value="medium">Medium risk</SelectItem>
+              <SelectItem value="high">High risk</SelectItem>
             </SelectContent>
           </Select>
           <Select value={minScore} onValueChange={setMinScore}>
             <SelectTrigger className="h-8 text-[12px]"><SelectValue /></SelectTrigger>
             <SelectContent>
-              <SelectItem value="90">评分90+</SelectItem>
-              <SelectItem value="80">评分80+</SelectItem>
-              <SelectItem value="70">评分70+</SelectItem>
-              <SelectItem value="60">评分60+</SelectItem>
-              <SelectItem value="50">评分50+</SelectItem>
-              <SelectItem value="0">评分不过滤</SelectItem>
+              <SelectItem value="90">Score 90+</SelectItem>
+              <SelectItem value="80">Score 80+</SelectItem>
+              <SelectItem value="70">Score 70+</SelectItem>
+              <SelectItem value="60">Score 60+</SelectItem>
+              <SelectItem value="50">Score 50+</SelectItem>
+              <SelectItem value="0">Any score</SelectItem>
             </SelectContent>
           </Select>
           <Button size="sm" className="h-8 text-[12px]" onClick={load} disabled={loading}>
-            {loading ? '加载中...' : '应用筛选'}
+            {loading ? 'Loading...' : 'Apply filters'}
           </Button>
           <Button variant="ghost" size="sm" className="h-8 text-[12px]" onClick={resetFilters}>
-            清空筛选
+            Clear filters
           </Button>
         </div>
       </div>
@@ -714,12 +714,12 @@ export default function OpportunitiesPage() {
           const eventScore = toNumberOrNull(newsMetric.event_score)
           const eventCount = Number(newsMetric.news_count || 0)
           const sourceFlags: string[] = []
-          if (group.hasMarketScan) sourceFlags.push('市场候选')
-          if (inWatchlist) sourceFlags.push('已关注标的')
-          if (sourceFlags.length <= 0) sourceFlags.push('关注池')
+          if (group.hasMarketScan) sourceFlags.push('Market candidate')
+          if (inWatchlist) sourceFlags.push('On watchlist')
+          if (sourceFlags.length <= 0) sourceFlags.push('Watchlist')
           const sourcePoolLabel = group.hasMarketScan
-            ? (group.members.some((x) => x.source_pool === 'mixed') ? '市场+关注' : '市场池')
-            : (item.source_pool_label || '关注池')
+            ? (group.members.some((x) => x.source_pool === 'mixed') ? 'Market + watchlist' : 'Market pool')
+            : (item.source_pool_label || 'Watchlist')
           return (
             <div key={stateKey} className={`card p-4 transition-colors ${toneClass(item)}`}>
               <button className="w-full text-left" onClick={() => openInsight(item)}>
@@ -735,7 +735,7 @@ export default function OpportunitiesPage() {
                       </span>
                     </div>
                     <div className={`text-[12px] font-mono mt-1 ${Number(item.rank_score || item.score || 0) >= 80 ? 'text-primary' : 'text-muted-foreground'}`}>
-                      评分 {Math.round(item.rank_score || item.score || 0)}
+                      Score {Math.round(item.rank_score || item.score || 0)}
                     </div>
                     {item.ai_score != null && (
                       <div className="mt-1 flex items-center justify-end gap-1">
@@ -749,31 +749,31 @@ export default function OpportunitiesPage() {
                 </div>
                 <div className="mt-2 text-[12px] text-foreground line-clamp-2">{item.signal || item.reason || '--'}</div>
                 <div className="mt-2 grid grid-cols-2 gap-2 text-[11px] text-muted-foreground">
-                  <div>入场: {formatEntryDisplay(item.action, entryLow, entryHigh)}</div>
-                  <div>止损: {formatPlanPrice(stopLoss)}</div>
-                  <div>目标: {formatPlanPrice(targetPrice)}</div>
-                  <div>失效: {item.invalidation || '--'}</div>
+                  <div>Entry: {formatEntryDisplay(item.action, entryLow, entryHigh)}</div>
+                  <div>Stop: {formatPlanPrice(stopLoss)}</div>
+                  <div>Target: {formatPlanPrice(targetPrice)}</div>
+                  <div>Invalidation: {item.invalidation || '--'}</div>
                   <div>
-                    策略: {strategyHead}
+                    Strategy: {strategyHead}
                     {strategyTailCount > 0 ? ` +${strategyTailCount}` : ''}
                   </div>
-                  <div>来源池: {sourcePoolLabel}</div>
+                  <div>Source pool: {sourcePoolLabel}</div>
                   <div>
-                    来源Agent: {sourceAgentHead}
+                    Source agent: {sourceAgentHead}
                     {sourceAgentTailCount > 0 ? ` +${sourceAgentTailCount}` : ''}
                   </div>
-                  <div>风险: {item.risk_level_label || item.risk_level || '--'}</div>
-                  <div>市场状态: {marketRegime.regime_label || marketRegime.regime || '--'}</div>
-                  <div>持仓: {item.is_holding_snapshot ? '持仓中' : '未持仓'}</div>
-                  <div>市场: {marketLabel(item.stock_market)}</div>
+                  <div>Risk: {item.risk_level_label || item.risk_level || '--'}</div>
+                  <div>Market regime: {marketRegime.regime_label || marketRegime.regime || '--'}</div>
+                  <div>Holding: {item.is_holding_snapshot ? 'Held' : 'Not held'}</div>
+                  <div>Market: {marketLabel(item.stock_market)}</div>
                 </div>
                 <div className="mt-2 grid grid-cols-2 gap-2 text-[10px] text-muted-foreground">
                   <div>Alpha: {formatMetric(breakdown.alpha_score)}</div>
-                  <div>催化: {formatMetric(breakdown.catalyst_score)}</div>
-                  <div>质量: {formatMetric(breakdown.quality_score)}</div>
-                  <div>风险惩罚: {formatMetric(breakdown.risk_penalty)}</div>
-                  <div>相对强弱: {crossFeature.relative_strength_pct != null ? `${Number(crossFeature.relative_strength_pct).toFixed(0)}分位` : '--'}</div>
-                  <div>事件催化: {eventScore != null ? eventScore.toFixed(1) : '--'}{eventCount > 0 ? `（${eventCount}条）` : '（无命中）'}</div>
+                  <div>Catalyst: {formatMetric(breakdown.catalyst_score)}</div>
+                  <div>Quality: {formatMetric(breakdown.quality_score)}</div>
+                  <div>Risk penalty: {formatMetric(breakdown.risk_penalty)}</div>
+                  <div>Relative strength: {crossFeature.relative_strength_pct != null ? `${Number(crossFeature.relative_strength_pct).toFixed(0)}th percentile` : '--'}</div>
+                  <div>Event catalyst: {eventScore != null ? eventScore.toFixed(1) : '--'}{eventCount > 0 ? ` (${eventCount} items)` : ' (no matches)'}</div>
                 </div>
                 {item.factor_explain && (((item.factor_explain.positive?.length ?? 0) > 0) || ((item.factor_explain.negative?.length ?? 0) > 0)) && (
                   <div className="mt-2 flex flex-wrap gap-1">
@@ -791,26 +791,26 @@ export default function OpportunitiesPage() {
                 )}
                 {item.constrained && (
                   <div className="mt-2 text-[10px] text-amber-400">
-                    组合约束: {(item.constraint_reasons || []).join('；') || '已自动降级'}
+                    Portfolio limits: {(item.constraint_reasons || []).join('; ') || 'Demoted automatically'}
                   </div>
                 )}
               </button>
 
               <div className="mt-3 flex items-center justify-between">
                 <div className="text-[10px] text-muted-foreground">
-                  来源: {sourceFlags.join(' + ')}
+                  Source: {sourceFlags.join(' + ')}
                 </div>
                 <div className="flex items-center gap-3">
                   <button
                     type="button"
                     onClick={() => setShareSignal(item)}
                     className="inline-flex items-center gap-1 text-[10px] text-muted-foreground transition-colors hover:text-primary"
-                    title="生成 AI 评分分享图"
+                    title="Generate an AI score share image"
                   >
                     <Share2 className="h-3 w-3" />
-                    分享图
+                    Share image
                   </button>
-                  <div className="text-[10px] text-muted-foreground">评估: 自动后验</div>
+                  <div className="text-[10px] text-muted-foreground">Evaluation: automatic</div>
                 </div>
               </div>
             </div>
@@ -819,13 +819,13 @@ export default function OpportunitiesPage() {
       </div>
 
       {!loading && groupedItems.length === 0 && (
-        <div className="card p-8 text-center text-[12px] text-muted-foreground mt-4">暂无满足条件的机会</div>
+        <div className="card p-8 text-center text-[12px] text-muted-foreground mt-4">No opportunities meet the conditions</div>
       )}
 
       <details className="mt-6 group">
         <summary className="cursor-pointer list-none flex items-center gap-2 text-[12px] font-medium text-muted-foreground hover:text-foreground transition-colors">
           <span className="text-[11px] opacity-60 transition-transform group-open:rotate-90">▶</span>
-          因子权重与战绩
+          Factor weights and track record
         </summary>
         <div className="mt-3">
           <FactorWeightsPanel />

@@ -11,16 +11,16 @@ function describeExtensionEvent(event: AssistantTraceEvent): { label: string; ic
   if (event.data.extension !== 'tool_research') return null
   const data = event.data.data || {}
   switch (event.data.event) {
-    case 'started': return { label: '研究可用工具', icon: Search }
+    case 'started': return { label: 'Researching available tools', icon: Search }
     case 'exposure': return {
-      label: `工具目录已准备：${data.direct_tools?.length || 0} 个直达，${data.loaded_tools?.length || 0} 个已加载`,
+      label: `Tool catalogue ready: ${data.direct_tools?.length || 0} direct, ${data.loaded_tools?.length || 0} loaded`,
       icon: Search,
     }
-    case 'candidates_scored': return { label: `筛选工具候选：${data.candidates?.length || 0} 个`, icon: Search }
-    case 'completed': return { label: `工具研究完成：选出 ${data.selected_tools?.length || 0} 个`, icon: Search }
-    case 'searched': return { label: `工具搜索完成：加载 ${data.selected_tools?.length || 0} 个`, icon: Search }
-    case 'fallback': return { label: '工具研究回退，继续使用默认工具集', icon: AlertCircle }
-    default: return { label: `扩展事件：${event.data.event || 'unknown'}`, icon: FileClock }
+    case 'candidates_scored': return { label: `Screening tool candidates: ${data.candidates?.length || 0}`, icon: Search }
+    case 'completed': return { label: `Tool research done: ${data.selected_tools?.length || 0} chosen`, icon: Search }
+    case 'searched': return { label: `Tool search done: ${data.selected_tools?.length || 0} loaded`, icon: Search }
+    case 'fallback': return { label: 'Tool research fell back; using the default tool set', icon: AlertCircle }
+    default: return { label: `Extension event: ${event.data.event || 'unknown'}`, icon: FileClock }
   }
 }
 
@@ -29,16 +29,16 @@ function describe(event: AssistantTraceEvent): { label: string; icon: typeof Fil
   const extension = event.event === 'extension_event' ? describeExtensionEvent(event) : null
   if (extension) return extension
   switch (event.event) {
-    case 'context_prepared': return { label: event.data.compressed ? '上下文已压缩并准备' : '上下文已准备', icon: FileClock }
-    case 'step_updated': return { label: `执行步骤 ${event.data.step || ''}`, icon: ListTree }
-    case 'tool_call_start': return { label: `调用工具：${name}`, icon: Wrench }
-    case 'tool_result': return { label: event.data.ok ? `工具完成：${name}` : `工具失败：${name}`, icon: event.data.ok ? CheckCircle2 : AlertCircle }
-    case 'model_usage': return { label: `模型用量：输入 ${event.data.input_tokens || 0}，输出 ${event.data.output_tokens || 0}`, icon: Gauge }
-    case 'approval_required': return { label: '等待用户审批', icon: PauseCircle }
-    case 'paused': return { label: '任务已暂停', icon: PauseCircle }
-    case 'done': return { label: '任务完成', icon: CheckCircle2 }
-    case 'error': return { label: '任务失败', icon: AlertCircle }
-    default: return { label: '任务已启动', icon: FileClock }
+    case 'context_prepared': return { label: event.data.compressed ? 'Context compressed and prepared' : 'Context prepared', icon: FileClock }
+    case 'step_updated': return { label: `Step ${event.data.step || ''}`, icon: ListTree }
+    case 'tool_call_start': return { label: `Calling tool: ${name}`, icon: Wrench }
+    case 'tool_result': return { label: event.data.ok ? `Tool done: ${name}` : `Tool failed: ${name}`, icon: event.data.ok ? CheckCircle2 : AlertCircle }
+    case 'model_usage': return { label: `Model usage: input ${event.data.input_tokens || 0}, output ${event.data.output_tokens || 0}`, icon: Gauge }
+    case 'approval_required': return { label: 'Waiting for your approval', icon: PauseCircle }
+    case 'paused': return { label: 'Task paused', icon: PauseCircle }
+    case 'done': return { label: 'Task complete', icon: CheckCircle2 }
+    case 'error': return { label: 'Task failed', icon: AlertCircle }
+    default: return { label: 'Task started', icon: FileClock }
   }
 }
 
@@ -56,13 +56,13 @@ function summary(events: AssistantTraceEvent[]): string {
   const toolCalls = events.filter((event) => event.event === 'tool_call_start').length
   const latest = [...events].reverse().find((event) => ['done', 'error', 'paused'].includes(event.event))
   const status = latest?.event === 'done'
-    ? '已完成'
+    ? 'Done'
     : latest?.event === 'error'
-    ? '已失败'
+    ? 'Failed'
     : latest?.event === 'paused'
-    ? '等待继续'
-    : '执行中'
-  return toolCalls > 0 ? `${status} · ${toolCalls} 次工具调用` : status
+    ? 'Waiting to continue'
+    : 'Running'
+  return toolCalls > 0 ? `${status} · ${toolCalls} tool calls` : status
 }
 
 export function TraceTimeline({ events, live = false }: TraceTimelineProps) {
@@ -77,7 +77,7 @@ export function TraceTimeline({ events, live = false }: TraceTimelineProps) {
         onClick={() => setExpanded((value) => !value)}
       >
         <FileClock className="h-3.5 w-3.5 shrink-0" />
-        <span>执行记录</span>
+        <span>Run log</span>
         <span className="min-w-0 flex-1 truncate text-[10px] font-normal">{summary(events)}</span>
         <ChevronDown className={`h-3.5 w-3.5 shrink-0 transition-transform ${expanded ? 'rotate-180' : ''}`} />
       </button>

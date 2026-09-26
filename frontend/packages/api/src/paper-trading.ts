@@ -14,9 +14,9 @@ export interface PaperTradingAccountResponse {
   peak_capital: number
   enabled: boolean
   excluded_markets: string[]
-  /** 各市场投资比例 {CN/HK/US: 0~1} */
+  /** Investment ratio per market {IN: 0~1} */
   market_allocations: Record<string, number>
-  /** 仅按单市场口径返回时存在 */
+  /** Only present when returned for a single market */
   market?: string
   allocation_ratio?: number
   created_at: string

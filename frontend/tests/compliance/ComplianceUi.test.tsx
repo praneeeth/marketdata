@@ -69,8 +69,8 @@ async function renderLoaded(ui: ReactNode, enabled: ComplianceFeature[] = []) {
 }
 
 const KLINE: KlineSummary = {
-  trend: '多头排列',
-  macd_status: '金叉',
+  trend: 'bullish alignment',
+  macd_status: 'golden cross',
   recent_5_up: 4,
   change_5d: 3.2,
   change_20d: 8.1,
@@ -78,7 +78,7 @@ const KLINE: KlineSummary = {
   ma10: 9.5,
   ma20: 9,
   rsi6: 65,
-  rsi_status: '偏强',
+  rsi_status: 'strong',
   support: 9.2,
   resistance: 11.5,
 }
@@ -86,12 +86,12 @@ const KLINE: KlineSummary = {
 const AI_SUGGESTION: SuggestionInfo = {
   id: 7,
   action: 'buy',
-  action_label: '买入',
+  action_label: 'Buy',
   signal: 'Breakout',
   reason: 'Momentum',
   should_alert: true,
   agent_name: 'daily_report',
-  agent_label: '盘后日报',
+  agent_label: 'Daily close report',
 }
 
 beforeEach(() => {
@@ -227,8 +227,8 @@ describe('action badges', () => {
     await renderLoaded(
       <SuggestionBadge suggestion={AI_SUGGESTION} kline={KLINE} stockSymbol="INFY" stockName="Infosys" />,
     )
-    expect(screen.getByText('指标')).toBeTruthy()
-    for (const label of ['买入', '加仓', '持有', '卖出', '减仓', '观望', '回避']) {
+    expect(screen.getByText('Indicators')).toBeTruthy()
+    for (const label of ['Buy', 'Add', 'Hold', 'Sell', 'Reduce', 'Watch', 'Avoid']) {
       expect(screen.queryByText(label)).toBeNull()
     }
   })
@@ -244,7 +244,7 @@ describe('action badges', () => {
 
   it('show the action when the suggestion pool is enabled', async () => {
     await renderLoaded(<SuggestionBadge suggestion={AI_SUGGESTION} kline={KLINE} />, ['suggestion_pool'])
-    expect(screen.getAllByText('买入').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('Buy').length).toBeGreaterThan(0)
   })
 })
 
@@ -253,9 +253,9 @@ describe('K-line dialog', () => {
     await renderLoaded(
       <KlineSummaryDialog open onOpenChange={() => {}} symbol="INFY" market="IN" initialSummary={KLINE} />,
     )
-    expect(await screen.findByText('K线 / 技术指标')).toBeTruthy()
+    expect(await screen.findByText('K-line / technical indicators')).toBeTruthy()
     expect(screen.queryByText(/score/)).toBeNull()
-    expect(screen.queryByText(/建议\/评分规则说明/)).toBeNull()
+    expect(screen.queryByText(/How the score works/)).toBeNull()
   })
 
   it('shows the scoring when the suggestion pool is enabled', async () => {
@@ -263,7 +263,7 @@ describe('K-line dialog', () => {
       <KlineSummaryDialog open onOpenChange={() => {}} symbol="INFY" market="IN" initialSummary={KLINE} />,
       ['suggestion_pool'],
     )
-    expect(await screen.findByText(/建议\/评分规则说明/)).toBeTruthy()
+    expect(await screen.findByText(/How the score works/)).toBeTruthy()
   })
 })
 
@@ -295,12 +295,12 @@ describe('onboarding', () => {
     const expectDisclaimer = () =>
       expect(screen.getByTestId('onboarding-disclaimer').textContent).toBe(SERVER_SHORT)
     expectDisclaimer()
-    await user.click(screen.getByRole('button', { name: /开始使用/ }))
+    await user.click(screen.getByRole('button', { name: /Get started/ }))
     expectDisclaimer()
-    await user.click(screen.getByRole('button', { name: '稍后再说' }))
+    await user.click(screen.getByRole('button', { name: 'Later' }))
     expectDisclaimer()
-    await user.click(screen.getByRole('button', { name: '稍后再说' }))
-    expect(screen.getByText('设置完成')).toBeTruthy()
+    await user.click(screen.getByRole('button', { name: 'Later' }))
+    expect(screen.getByText('All set')).toBeTruthy()
     expectDisclaimer()
   })
 })

@@ -11,9 +11,9 @@ describe('AssistantWelcome', () => {
 
     render(<AssistantWelcome onSubmit={onSubmit} />)
 
-    expect(screen.getByRole('heading', { name: '今天想研究什么？' })).toBeTruthy()
-    await user.click(screen.getByRole('button', { name: '诊断我的持仓' }))
+    expect(screen.getByRole('heading', { name: 'What do you want to research today?' })).toBeTruthy()
+    await user.click(screen.getByRole('button', { name: 'Check my holdings' }))
 
-    expect(onSubmit).toHaveBeenCalledWith('诊断我的持仓风险和关键关注点')
+    expect(onSubmit).toHaveBeenCalledWith('Give my portfolio a full portfolio check: risks and key points to watch')
   })
 })

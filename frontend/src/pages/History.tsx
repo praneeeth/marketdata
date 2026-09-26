@@ -26,11 +26,11 @@ interface HistoryRecord {
 }
 
 const AGENT_LABELS: Record<string, string> = {
-  daily_report: '收盘复盘',
-  premarket_outlook: '盘前分析',
-  intraday_monitor: '盘中监测',
-  news_digest: '新闻速递',
-  tradingagents: 'TradingAgents 深度',
+  daily_report: 'Daily close report',
+  premarket_outlook: 'Pre-market outlook',
+  intraday_monitor: 'Intraday monitor',
+  news_digest: 'News digest',
+  tradingagents: 'TradingAgents deep research',
 }
 
 const WORKFLOW_AGENT_KEYS = ['daily_report', 'premarket_outlook', 'intraday_monitor', 'tradingagents']
@@ -90,7 +90,7 @@ export default function HistoryPage() {
       const data = await fetchAPI<HistoryRecord[]>(`/history?${params.toString()}`)
       setRecords(data || [])
     } catch (e) {
-      toast(e instanceof Error ? e.message : '加载失败', 'error')
+      toast(e instanceof Error ? e.message : 'Failed to load', 'error')
     } finally {
       setLoading(false)
     }
@@ -120,17 +120,17 @@ export default function HistoryPage() {
   }, [records, selectedId])
 
   const deleteRecord = async (id: number) => {
-    if (!confirm('确定删除这条记录吗？')) return
+    if (!confirm('Delete this record?')) return
     try {
       await fetchAPI(`/history/${id}`, { method: 'DELETE' })
-      toast('已删除', 'success')
+      toast('Deleted', 'success')
       load()
     } catch (e) {
-      toast(e instanceof Error ? e.message : '删除失败', 'error')
+      toast(e instanceof Error ? e.message : 'Delete failed', 'error')
     }
   }
 
-  // 格式化标题（带日期）
+  // Format the title (with date)
   const formatTitle = (record: HistoryRecord) => {
     const agentLabel = AGENT_LABELS[record.agent_name] || record.agent_name
     if (record.title) {
@@ -165,31 +165,31 @@ export default function HistoryPage() {
             <Clock className="w-4 h-4 md:w-5 md:h-5 text-white" />
           </div>
           <div>
-            <h1 className="text-lg md:text-xl font-bold">分析历史</h1>
-            <p className="text-[12px] md:text-[13px] text-muted-foreground">报告式阅读：目录 + 正文</p>
+            <h1 className="text-lg md:text-xl font-bold">Analysis history</h1>
+            <p className="text-[12px] md:text-[13px] text-muted-foreground">Read like a report: contents + body</p>
           </div>
           <div className="hidden md:flex px-2.5 py-1 rounded-full bg-background/70 border border-border/50 text-[11px] text-muted-foreground">
-            共 <span className="font-mono text-foreground/90">{records.length}</span> 条
+            <span className="font-mono text-foreground/90">{records.length}</span> records
           </div>
         </div>
 
         <div className="flex items-center gap-2">
           <Select value={historyKind} onValueChange={(v) => setHistoryKind(v as 'workflow' | 'capability' | 'all')}>
             <SelectTrigger className="w-full sm:w-[150px] h-9">
-              <SelectValue placeholder="历史范围" />
+              <SelectValue placeholder="History scope" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="workflow">主流程</SelectItem>
-              <SelectItem value="capability">能力层</SelectItem>
-              <SelectItem value="all">全部</SelectItem>
+              <SelectItem value="workflow">Main flow</SelectItem>
+              <SelectItem value="capability">Capabilities</SelectItem>
+              <SelectItem value="all">All</SelectItem>
             </SelectContent>
           </Select>
           <Select value={selectedAgent} onValueChange={setSelectedAgent}>
             <SelectTrigger className="w-full sm:w-[180px] h-9">
-              <SelectValue placeholder="全部 Agent" />
+              <SelectValue placeholder="All agents" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">全部 Agent</SelectItem>
+              <SelectItem value="all">All agents</SelectItem>
               {agentOptions.map((key) => (
                 <SelectItem key={key} value={key}>{AGENT_LABELS[key] || key}</SelectItem>
               ))}
@@ -205,7 +205,7 @@ export default function HistoryPage() {
       ) : records.length === 0 ? (
         <div className="card p-12 text-center">
           <FileText className="w-12 h-12 text-muted-foreground/30 mx-auto mb-3" />
-          <p className="text-muted-foreground">暂无分析记录</p>
+          <p className="text-muted-foreground">No analysis records</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
@@ -216,14 +216,14 @@ export default function HistoryPage() {
                 onClick={() => setMobileView('list')}
                 className={`h-9 rounded-lg text-[12px] font-medium transition-colors ${mobileView === 'list' ? 'bg-primary text-white' : 'bg-accent/30 text-muted-foreground hover:bg-accent/50'}`}
               >
-                目录
+                Contents
               </button>
               <button
                 onClick={() => setMobileView('reader')}
                 className={`h-9 rounded-lg text-[12px] font-medium transition-colors ${mobileView === 'reader' ? 'bg-primary text-white' : 'bg-accent/30 text-muted-foreground hover:bg-accent/50'}`}
                 disabled={!selectedRecord}
               >
-                正文
+                Body
               </button>
             </div>
           </div>
@@ -231,7 +231,7 @@ export default function HistoryPage() {
           {/* List */}
           <div className={`md:col-span-5 card overflow-hidden ${mobileView === 'reader' ? 'hidden md:block' : ''}`}>
             <div className="px-4 py-3 bg-accent/20 border-b border-border/50 text-[12px] text-muted-foreground">
-              目录（点击查看）
+              Contents (click to view)
             </div>
             <div className="max-h-[70vh] md:max-h-[70vh] overflow-y-auto scrollbar divide-y divide-border/50">
               {records.map(r => {
@@ -246,7 +246,7 @@ export default function HistoryPage() {
                       <Badge variant="outline" className="text-[10px] flex-shrink-0">
                         {AGENT_LABELS[r.agent_name] || r.agent_name}
                       </Badge>
-                      <span className={`text-[13px] font-medium truncate ${active ? 'text-foreground' : 'text-foreground/90'}`}>{r.title || '分析报告'}</span>
+                      <span className={`text-[13px] font-medium truncate ${active ? 'text-foreground' : 'text-foreground/90'}`}>{r.title || 'Analysis report'}</span>
                     </div>
                     <div className="mt-1 flex items-center justify-between text-[11px] text-muted-foreground">
                       <span className="font-mono">{r.analysis_date}</span>
@@ -272,7 +272,7 @@ export default function HistoryPage() {
                         onClick={() => setMobileView('list')}
                       >
                         <ArrowLeft className="w-4 h-4" />
-                        目录
+                        Contents
                       </Button>
                       <Badge variant="outline" className="text-[10px]">{AGENT_LABELS[selectedRecord.agent_name] || selectedRecord.agent_name}</Badge>
                       <span className="text-[11px] text-muted-foreground font-mono">{formatDateTime(displayTime(selectedRecord))}</span>
@@ -286,7 +286,7 @@ export default function HistoryPage() {
                       variant="outline"
                       size="sm"
                       onClick={() => {
-                        // TradingAgents 深度记录 → 独立详细阅读页;其余 agent 维持原详情弹窗
+                        // TradingAgents deep research records -> the dedicated reading page; other agents keep the detail dialog
                         if (selectedRecord.agent_name === 'tradingagents' && selectedRecord.stock_symbol) {
                           navigate(`/analysis/${selectedRecord.stock_symbol}/${selectedRecord.analysis_date}`)
                         } else {
@@ -294,14 +294,14 @@ export default function HistoryPage() {
                         }
                       }}
                     >
-                      查看详情
+                      View details
                     </Button>
                     <Button
                       variant="ghost"
                       size="icon"
                       className="h-9 w-9 hover:text-destructive"
                       onClick={() => deleteRecord(selectedRecord.id)}
-                      title="删除"
+                      title="Delete"
                     >
                       <Trash2 className="w-4 h-4" />
                     </Button>
@@ -313,7 +313,7 @@ export default function HistoryPage() {
                 </div>
               </div>
             ) : (
-              <div className="text-[13px] text-muted-foreground">请选择一条记录</div>
+              <div className="text-[13px] text-muted-foreground">Choose a record</div>
             )}
           </div>
         </div>
@@ -323,7 +323,7 @@ export default function HistoryPage() {
       <Dialog open={!!detailRecord} onOpenChange={open => !open && setDetailRecord(null)}>
         <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>{detailRecord ? formatTitle(detailRecord) : '分析详情'}</DialogTitle>
+            <DialogTitle>{detailRecord ? formatTitle(detailRecord) : 'Analysis details'}</DialogTitle>
             <DialogDescription>
               {detailRecord && (
                 <span className="flex items-center gap-2">
@@ -337,25 +337,25 @@ export default function HistoryPage() {
           </div>
           {detailRecord?.prompt_stats ? (
             <div className="mt-3 rounded-lg border border-border/50 p-3">
-              <div className="text-[12px] font-medium mb-1">Prompt 统计</div>
+              <div className="text-[12px] font-medium mb-1">Prompt stats</div>
               <pre className="text-[11px] text-muted-foreground whitespace-pre-wrap break-words overflow-x-auto">{JSON.stringify(detailRecord.prompt_stats, null, 2)}</pre>
             </div>
           ) : null}
           {detailRecord?.context_payload ? (
             <div className="mt-3 rounded-lg border border-border/50 p-3">
-              <div className="text-[12px] font-medium mb-1">上下文快照</div>
+              <div className="text-[12px] font-medium mb-1">Context snapshot</div>
               <pre className="text-[11px] text-muted-foreground whitespace-pre-wrap break-words overflow-x-auto max-h-[280px] overflow-y-auto">{JSON.stringify(detailRecord.context_payload, null, 2)}</pre>
             </div>
           ) : null}
           {detailRecord?.news_debug ? (
             <div className="mt-3 rounded-lg border border-border/50 p-3">
-              <div className="text-[12px] font-medium mb-1">新闻注入明细</div>
+              <div className="text-[12px] font-medium mb-1">News included</div>
               <pre className="text-[11px] text-muted-foreground whitespace-pre-wrap break-words overflow-x-auto">{JSON.stringify(detailRecord.news_debug, null, 2)}</pre>
             </div>
           ) : null}
           {detailRecord?.prompt_context ? (
             <div className="mt-3 rounded-lg border border-border/50 p-3">
-              <div className="text-[12px] font-medium mb-1">Prompt 原文</div>
+              <div className="text-[12px] font-medium mb-1">Prompt text</div>
               <pre className="text-[11px] text-muted-foreground whitespace-pre-wrap break-words overflow-x-auto max-h-[280px] overflow-y-auto">{detailRecord.prompt_context}</pre>
             </div>
           ) : null}

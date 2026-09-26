@@ -15,7 +15,7 @@ export interface AddPositionCalc {
   isAdd: boolean
 }
 
-/** 加仓后摊薄成本(正算)。无效输入返回 null。 */
+/** Cost after averaging (forward). Returns null for invalid input. */
 export function calcAddPosition(
   curQty: number,
   curCost: number,
@@ -32,7 +32,7 @@ export function calcAddPosition(
   return { newQty, newCost, diluteAbs, dilutePct, totalInvested: newQty * newCost, isAdd }
 }
 
-/** 反推:把成本降到 target 需要按 addPrice 加多少股。仅当 addPrice < target < curCost 可行。 */
+/** Reverse: how many shares at addPrice bring the cost down to target. Only possible when addPrice < target < curCost. */
 export function calcSharesForTargetCost(
   curQty: number,
   curCost: number,
@@ -56,10 +56,10 @@ function fmtInt(n: number | null | undefined): string {
 }
 
 const VERDICT_STYLE: Record<string, string> = {
-  适合: 'bg-emerald-500/15 text-emerald-500 border-emerald-500/30',
-  谨慎: 'bg-amber-500/15 text-amber-600 border-amber-500/30',
-  不适合: 'bg-rose-500/15 text-rose-500 border-rose-500/30',
-  未知: 'bg-muted text-muted-foreground border-border',
+  Suitable: 'bg-emerald-500/15 text-emerald-500 border-emerald-500/30',
+  Cautious: 'bg-amber-500/15 text-amber-600 border-amber-500/30',
+  'Not suitable': 'bg-rose-500/15 text-rose-500 border-rose-500/30',
+  Unknown: 'bg-muted text-muted-foreground border-border',
 }
 
 interface Props {
@@ -99,7 +99,7 @@ function AddPositionCalculatorInner({
     return currentPrice && currentPrice > 0 ? currentPrice : 0
   }, [priceRaw, currentPrice])
 
-  // 输入(股数/金额)→ 加仓股数
+  // Input (shares/amount) -> shares to add
   const addQty = useMemo(() => {
     const v = parseFloat(addRaw)
     if (!isFinite(v) || v <= 0) return 0
@@ -120,7 +120,7 @@ function AddPositionCalculatorInner({
 
   const runAi = async () => {
     if (!calc || addQty <= 0 || addPrice <= 0) {
-      toast('请先填写有效的加仓股数/金额与价格', 'error')
+      toast('Enter a valid quantity/amount to add and a price first', 'error')
       return
     }
     setAiLoading(true)
@@ -136,13 +136,13 @@ function AddPositionCalculatorInner({
       })
       setAiResult(res)
     } catch (e: any) {
-      toast(e?.message || 'AI 评估失败', 'error')
+      toast(e?.message || 'AI assessment failed', 'error')
     } finally {
       setAiLoading(false)
     }
   }
 
-  const pricePlaceholder = currentPrice && currentPrice > 0 ? String(currentPrice) : '加仓价'
+  const pricePlaceholder = currentPrice && currentPrice > 0 ? String(currentPrice) : 'Add price'
   const hasHolding = currentQuantity > 0 && currentCost > 0
 
   return (
@@ -152,8 +152,8 @@ function AddPositionCalculatorInner({
         onClick={() => setOpen((v) => !v)}
         className="flex w-full items-center justify-between text-[11px] text-muted-foreground"
       >
-        <span>加仓测算{hasHolding ? '' : '（当前空仓 · 建仓测算）'}</span>
-        <span>{open ? '收起 ▾' : '展开 ▸'}</span>
+        <span>Averaging calculator{hasHolding ? '' : ' (no position yet · new position)'}</span>
+        <span>{open ? 'Collapse ▾' : 'Expand ▸'}</span>
       </button>
 
       {open && (
@@ -170,7 +170,7 @@ function AddPositionCalculatorInner({
                     : 'border-border text-muted-foreground'
                 }`}
               >
-                {m === 'shares' ? '按股数' : '按金额'}
+                {m === 'shares' ? 'By shares' : 'By amount'}
               </button>
             ))}
           </div>
@@ -178,17 +178,17 @@ function AddPositionCalculatorInner({
           <div className="grid grid-cols-2 gap-2">
             <label className="space-y-1">
               <div className="text-[10px] text-muted-foreground">
-                {mode === 'shares' ? '加仓股数' : '加仓金额(元)'}
+                {mode === 'shares' ? 'Shares to add' : 'Amount to add (₹)'}
               </div>
               <Input
                 value={addRaw}
                 onChange={(e) => setAddRaw(e.target.value)}
                 inputMode="decimal"
-                placeholder={mode === 'shares' ? '如 200' : '如 10000'}
+                placeholder={mode === 'shares' ? 'e.g. 200' : 'e.g. 10000'}
               />
             </label>
             <label className="space-y-1">
-              <div className="text-[10px] text-muted-foreground">加仓价</div>
+              <div className="text-[10px] text-muted-foreground">Add price</div>
               <Input
                 value={priceRaw}
                 onChange={(e) => setPriceRaw(e.target.value)}
@@ -200,40 +200,40 @@ function AddPositionCalculatorInner({
 
           {mode === 'amount' && addQty > 0 && (
             <div className="text-[10px] text-muted-foreground">
-              ≈ {fmtInt(addQty)} 股
+              ≈ {fmtInt(addQty)} shares
             </div>
           )}
 
           {calc ? (
             <div className="space-y-1 rounded bg-accent/15 p-2">
               <div className="flex justify-between">
-                <span className="text-muted-foreground">{calc.isAdd ? '加仓后成本' : '建仓成本'}</span>
+                <span className="text-muted-foreground">{calc.isAdd ? 'Cost after adding' : 'Entry cost'}</span>
                 <span className="font-mono">{fmt(calc.newCost)}</span>
               </div>
               {calc.isAdd && (
                 <div className="flex justify-between">
-                  <span className="text-muted-foreground">摊薄</span>
+                  <span className="text-muted-foreground">Averaged</span>
                   <span className={`font-mono ${calc.diluteAbs >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
                     {calc.diluteAbs >= 0 ? '↓' : '↑'}
-                    {fmt(Math.abs(calc.diluteAbs))}（{fmt(Math.abs(calc.dilutePct))}%）
+                    {fmt(Math.abs(calc.diluteAbs))} ({fmt(Math.abs(calc.dilutePct))}%)
                   </span>
                 </div>
               )}
               <div className="flex justify-between">
-                <span className="text-muted-foreground">合计股数 / 投入</span>
+                <span className="text-muted-foreground">Total shares / invested</span>
                 <span className="font-mono">
                   {fmtInt(calc.newQty)} / {fmtInt(calc.totalInvested)}
                 </span>
               </div>
             </div>
           ) : (
-            <div className="text-[11px] text-muted-foreground">填写加仓股数/金额与价格后自动计算</div>
+            <div className="text-[11px] text-muted-foreground">Fills in automatically once you enter the quantity/amount and price</div>
           )}
 
           {hasHolding && (
             <div className="grid grid-cols-2 items-end gap-2">
               <label className="space-y-1">
-                <div className="text-[10px] text-muted-foreground">反推:目标成本</div>
+                <div className="text-[10px] text-muted-foreground">Reverse: target cost</div>
                 <Input
                   value={targetRaw}
                   onChange={(e) => setTargetRaw(e.target.value)}
@@ -243,14 +243,14 @@ function AddPositionCalculatorInner({
               </label>
               <div className="pb-1 text-[11px]">
                 {targetRaw.trim() === '' ? (
-                  <span className="text-muted-foreground">按加仓价反推所需股数</span>
+                  <span className="text-muted-foreground">Shares needed at the add price</span>
                 ) : reverseShares != null ? (
                   <span>
-                    需加 <span className="font-mono text-foreground">{fmtInt(reverseShares)}</span> 股
-                    <br />约 <span className="font-mono">{fmtInt(reverseShares * addPrice)}</span> 元
+                    Add <span className="font-mono text-foreground">{fmtInt(reverseShares)}</span> shares
+                    <br />about ₹<span className="font-mono">{fmtInt(reverseShares * addPrice)}</span>
                   </span>
                 ) : (
-                  <span className="text-amber-600">需 加仓价 &lt; 目标 &lt; 现成本 才能降到该成本</span>
+                  <span className="text-amber-600">Needs add price &lt; target &lt; current cost to reach that cost</span>
                 )}
               </div>
             </div>
@@ -264,7 +264,7 @@ function AddPositionCalculatorInner({
               disabled={aiLoading || !calc}
               onClick={runAi}
             >
-              {aiLoading ? 'AI 评估中…' : '让 AI 评估适不适合加仓'}
+              {aiLoading ? 'AI assessing…' : 'Ask AI whether adding is suitable'}
             </Button>
           </div>
 
@@ -273,12 +273,12 @@ function AddPositionCalculatorInner({
               <div className="flex items-center gap-2">
                 <span
                   className={`rounded border px-2 py-0.5 text-[11px] ${
-                    VERDICT_STYLE[aiResult.verdict] || VERDICT_STYLE['未知']
+                    VERDICT_STYLE[aiResult.verdict] || VERDICT_STYLE['Unknown']
                   }`}
                 >
                   {aiResult.verdict}
                 </span>
-                <span className="text-[10px] text-muted-foreground">AI 结论 · 仅供参考</span>
+                <span className="text-[10px] text-muted-foreground">AI verdict · for reference only</span>
               </div>
               <div className="prose prose-sm dark:prose-invert max-w-none break-words text-[12px] leading-relaxed [&_p]:my-1 [&_ul]:my-1">
                 <ReactMarkdown>{aiResult.content}</ReactMarkdown>

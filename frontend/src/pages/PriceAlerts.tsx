@@ -69,11 +69,11 @@ function fmt(iso?: string | null): string {
 
 function conditionText(item: AlertConditionItem): string {
   const TYPE_LABEL: Record<string, string> = {
-    price: '价格',
-    change_pct: '涨跌幅%',
-    turnover: '成交额',
-    volume: '成交量',
-    volume_ratio: '量比',
+    price: 'Price',
+    change_pct: 'Change %',
+    turnover: 'Turnover',
+    volume: 'Volume',
+    volume_ratio: 'Volume ratio',
   }
   if (item.op === 'between' && Array.isArray(item.value)) {
     return `${TYPE_LABEL[item.type] || item.type} ∈ [${item.value[0]}, ${item.value[1]}]`
@@ -112,7 +112,7 @@ export default function PriceAlertsPage() {
       setStocks(stockData || [])
       setChannels(channelData || [])
     } catch (e) {
-      toast(e instanceof Error ? e.message : '加载失败', 'error')
+      toast(e instanceof Error ? e.message : 'Failed to load', 'error')
     } finally {
       setLoading(false)
     }
@@ -149,7 +149,7 @@ export default function PriceAlertsPage() {
       setForm({
         ...DEFAULT_FORM,
         stock_id: target?.id || stockOptions[0]?.id || 0,
-        name: target ? `${target.name} 价格提醒` : (qName ? `${qName} 价格提醒` : ''),
+        name: target ? `${target.name} price alert` : (qName ? `${qName} price alert` : ''),
       })
       setFormOpen(true)
       setPrefillDone(true)
@@ -196,11 +196,11 @@ export default function PriceAlertsPage() {
       notify_channel_ids: form.notify_channel_ids || [],
     }
     if (!payload.stock_id) {
-      toast('请选择股票', 'error')
+      toast('Please choose a stock', 'error')
       return
     }
     if (!payload.condition_group?.items?.length) {
-      toast('至少添加一个条件', 'error')
+      toast('Add at least one condition', 'error')
       return
     }
     setSaving(true)
@@ -212,9 +212,9 @@ export default function PriceAlertsPage() {
       }
       setFormOpen(false)
       await load()
-      toast('规则已保存', 'success')
+      toast('Rule saved', 'success')
     } catch (e) {
-      toast(e instanceof Error ? e.message : '保存失败', 'error')
+      toast(e instanceof Error ? e.message : 'Save failed', 'error')
     } finally {
       setSaving(false)
     }
@@ -225,18 +225,18 @@ export default function PriceAlertsPage() {
       await fetchAPI(`/price-alerts/${r.id}/toggle`, { method: 'POST', body: JSON.stringify({ enabled: !r.enabled }) })
       await load()
     } catch (e) {
-      toast(e instanceof Error ? e.message : '切换失败', 'error')
+      toast(e instanceof Error ? e.message : 'Toggle failed', 'error')
     }
   }
 
   const removeRule = async (r: AlertRule) => {
-    if (!window.confirm(`确认删除规则「${r.name || r.stock_name}」？`)) return
+    if (!window.confirm(`Delete the rule "${r.name || r.stock_name}"?`)) return
     try {
       await fetchAPI(`/price-alerts/${r.id}`, { method: 'DELETE' })
       await load()
-      toast('已删除', 'success')
+      toast('Deleted', 'success')
     } catch (e) {
-      toast(e instanceof Error ? e.message : '删除失败', 'error')
+      toast(e instanceof Error ? e.message : 'Delete failed', 'error')
     }
   }
 
@@ -244,10 +244,10 @@ export default function PriceAlertsPage() {
     setScanRunning(true)
     try {
       const res = await fetchAPI<any>('/price-alerts/scan', { method: 'POST' })
-      toast(`扫描完成：触发 ${res?.triggered || 0}，跳过 ${res?.skipped || 0}`, 'success')
+      toast(`Scan done: triggered ${res?.triggered || 0}, skipped ${res?.skipped || 0}`, 'success')
       await load()
     } catch (e) {
-      toast(e instanceof Error ? e.message : '扫描失败', 'error')
+      toast(e instanceof Error ? e.message : 'Scan failed', 'error')
     } finally {
       setScanRunning(false)
     }
@@ -257,9 +257,9 @@ export default function PriceAlertsPage() {
     try {
       const res = await fetchAPI<any>(`/price-alerts/${r.id}/test`, { method: 'POST' })
       const st = (res?.items || [])[0]?.status || 'unknown'
-      toast(`测试完成：${st}`, 'info')
+      toast(`Test done: ${st}`, 'info')
     } catch (e) {
-      toast(e instanceof Error ? e.message : '测试失败', 'error')
+      toast(e instanceof Error ? e.message : 'Test failed', 'error')
     }
   }
 
@@ -270,7 +270,7 @@ export default function PriceAlertsPage() {
       const data = await fetchAPI<AlertHit[]>(`/price-alerts/${r.id}/hits?limit=50`)
       setHits(data || [])
     } catch (e) {
-      toast(e instanceof Error ? e.message : '加载命中失败', 'error')
+      toast(e instanceof Error ? e.message : 'Failed to load triggers', 'error')
       setHits([])
     }
   }
@@ -278,20 +278,20 @@ export default function PriceAlertsPage() {
   return (
     <div>
       <div className="mb-4 md:mb-8">
-        <h1 className="text-[20px] md:text-[22px] font-bold text-foreground tracking-tight">价格提醒</h1>
-        <p className="text-[12px] md:text-[13px] text-muted-foreground mt-0.5 md:mt-1">到价/量能触发，支持冷却、每日上限与交易时段门禁</p>
+        <h1 className="text-[20px] md:text-[22px] font-bold text-foreground tracking-tight">Price alerts</h1>
+        <p className="text-[12px] md:text-[13px] text-muted-foreground mt-0.5 md:mt-1">Triggered by price/volume, with cooldowns, daily limits and a market-hours gate</p>
       </div>
 
       <div className="card p-4 mb-4 flex items-center justify-between gap-2">
-        <div className="text-[12px] text-muted-foreground">规则数：{rules.length}</div>
+        <div className="text-[12px] text-muted-foreground">Rules: {rules.length}</div>
         <div className="flex items-center gap-2">
           <Button variant="secondary" size="sm" className="h-8" onClick={runScan} disabled={scanRunning}>
             {scanRunning ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Play className="w-3.5 h-3.5" />}
-            立即扫描
+            Scan now
           </Button>
           <Button size="sm" className="h-8" onClick={openCreate}>
             <Plus className="w-3.5 h-3.5" />
-            新建规则
+            New rule
           </Button>
         </div>
       </div>
@@ -301,8 +301,8 @@ export default function PriceAlertsPage() {
       ) : rules.length === 0 ? (
         <div className="card p-8 text-center">
           <BellRing className="w-6 h-6 mx-auto text-muted-foreground" />
-          <div className="mt-2 text-[14px] text-foreground">暂无价格提醒规则</div>
-          <div className="mt-1 text-[12px] text-muted-foreground">创建规则后，系统会每分钟自动扫描并触发通知</div>
+          <div className="mt-2 text-[14px] text-foreground">No price alert rules</div>
+          <div className="mt-1 text-[12px] text-muted-foreground">Once you create a rule, the app scans every minute and sends notifications when it triggers</div>
         </div>
       ) : (
         <div className="space-y-3">
@@ -311,33 +311,33 @@ export default function PriceAlertsPage() {
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <span className="text-[14px] font-semibold">{r.name || `${r.stock_name} 提醒`}</span>
+                    <span className="text-[14px] font-semibold">{r.name || `${r.stock_name} alert`}</span>
                     <span className="text-[11px] px-2 py-0.5 rounded bg-accent/50 text-muted-foreground">{r.market}:{r.stock_symbol}</span>
-                    <span className={`text-[11px] px-2 py-0.5 rounded ${r.enabled ? 'bg-emerald-500/15 text-emerald-500' : 'bg-muted text-muted-foreground'}`}>{r.enabled ? '启用' : '暂停'}</span>
+                    <span className={`text-[11px] px-2 py-0.5 rounded ${r.enabled ? 'bg-emerald-500/15 text-emerald-500' : 'bg-muted text-muted-foreground'}`}>{r.enabled ? 'On' : 'Paused'}</span>
                   </div>
                   <div className="mt-2 text-[12px] text-muted-foreground">
-                    {(r.condition_group?.items || []).map(conditionText).join(r.condition_group?.op === 'or' ? ' 或 ' : ' 且 ')}
+                    {(r.condition_group?.items || []).map(conditionText).join(r.condition_group?.op === 'or' ? ' or ' : ' and ')}
                   </div>
                   <div className="mt-1 text-[11px] text-muted-foreground/80">
-                    冷却 {r.cooldown_minutes} 分钟 · 日上限 {r.max_triggers_per_day} 次 · 最近触发 {fmt(r.last_trigger_at)}
+                    Cooldown {r.cooldown_minutes} min · daily limit {r.max_triggers_per_day} · last triggered {fmt(r.last_trigger_at)}
                   </div>
                 </div>
                 {/* Desktop: buttons on the right */}
                 <div className="hidden md:flex items-center gap-1.5 shrink-0">
-                  <Button variant="secondary" size="sm" className="h-8 px-2.5" onClick={() => testRule(r)}>测试</Button>
+                  <Button variant="secondary" size="sm" className="h-8 px-2.5" onClick={() => testRule(r)}>Test</Button>
                   <Button variant="secondary" size="sm" className="h-8 px-2.5" onClick={() => openHits(r)}><BarChart3 className="w-3.5 h-3.5" /></Button>
-                  <Button variant="secondary" size="sm" className="h-8 px-2.5" onClick={() => openEdit(r)}>编辑</Button>
-                  <Button variant={r.enabled ? 'destructive' : 'default'} size="sm" className="h-8 px-2.5" onClick={() => toggleRule(r)}>{r.enabled ? '停用' : '启用'}</Button>
+                  <Button variant="secondary" size="sm" className="h-8 px-2.5" onClick={() => openEdit(r)}>Edit</Button>
+                  <Button variant={r.enabled ? 'destructive' : 'default'} size="sm" className="h-8 px-2.5" onClick={() => toggleRule(r)}>{r.enabled ? 'Disable' : 'Enable'}</Button>
                   <Button variant="secondary" size="sm" className="h-8 px-2.5" onClick={() => removeRule(r)}><Trash2 className="w-3.5 h-3.5" /></Button>
                 </div>
               </div>
               {/* Mobile: buttons at bottom */}
               <div className="flex md:hidden items-center gap-1.5 mt-3 pt-3 border-t border-border/30">
-                <Button variant="secondary" size="sm" className="h-7 px-2 text-[11px]" onClick={() => testRule(r)}>测试</Button>
+                <Button variant="secondary" size="sm" className="h-7 px-2 text-[11px]" onClick={() => testRule(r)}>Test</Button>
                 <Button variant="secondary" size="sm" className="h-7 px-2 text-[11px]" onClick={() => openHits(r)}><BarChart3 className="w-3 h-3" /></Button>
-                <Button variant="secondary" size="sm" className="h-7 px-2 text-[11px]" onClick={() => openEdit(r)}>编辑</Button>
+                <Button variant="secondary" size="sm" className="h-7 px-2 text-[11px]" onClick={() => openEdit(r)}>Edit</Button>
                 <div className="flex-1" />
-                <Button variant={r.enabled ? 'destructive' : 'default'} size="sm" className="h-7 px-2 text-[11px]" onClick={() => toggleRule(r)}>{r.enabled ? '停用' : '启用'}</Button>
+                <Button variant={r.enabled ? 'destructive' : 'default'} size="sm" className="h-7 px-2 text-[11px]" onClick={() => toggleRule(r)}>{r.enabled ? 'Disable' : 'Enable'}</Button>
                 <Button variant="secondary" size="sm" className="h-7 px-2 text-[11px]" onClick={() => removeRule(r)}><Trash2 className="w-3 h-3" /></Button>
               </div>
             </div>
@@ -348,31 +348,31 @@ export default function PriceAlertsPage() {
       <PriceAlertFormDialog
         open={formOpen}
         onOpenChange={setFormOpen}
-        title={editingId ? '编辑提醒规则' : '新建提醒规则'}
-        description="支持价格、涨跌幅、成交额、量比条件，支持 AND / OR 组合"
+        title={editingId ? 'Edit alert rule' : 'New alert rule'}
+        description="Price, change %, turnover and volume ratio conditions, combined with AND / OR"
         stocks={stockOptions}
         channels={channels}
         initial={form}
         submitting={saving}
-        submitLabel="保存规则"
+        submitLabel="Save rule"
         onSubmit={submitForm}
       />
 
       <Dialog open={hitsOpen} onOpenChange={setHitsOpen}>
         <DialogContent className="max-w-3xl">
           <DialogHeader>
-            <DialogTitle>命中历史</DialogTitle>
+            <DialogTitle>Trigger history</DialogTitle>
             <DialogDescription>{hitRule?.name || '--'}</DialogDescription>
           </DialogHeader>
           <div className="max-h-[60vh] overflow-y-auto scrollbar space-y-2">
             {hits.length === 0 ? (
-              <div className="text-[12px] text-muted-foreground text-center py-6">暂无命中记录</div>
+              <div className="text-[12px] text-muted-foreground text-center py-6">No triggers yet</div>
             ) : hits.map(h => (
               <div key={h.id} className="rounded border border-border/40 p-3">
                 <div className="flex items-center justify-between gap-2">
                   <div className="text-[12px] text-muted-foreground">{fmt(h.trigger_time)}</div>
                   <div className={`text-[11px] ${h.notify_success ? 'text-emerald-500' : 'text-rose-500'}`}>
-                    {h.notify_success ? '通知成功' : `通知失败 ${h.notify_error || ''}`}
+                    {h.notify_success ? 'Notified' : `Notification failed ${h.notify_error || ''}`}
                   </div>
                 </div>
                 <div className="mt-2 text-[11px] bg-accent/20 rounded p-2 font-mono overflow-x-auto scrollbar">

@@ -3,8 +3,8 @@ import { fetchAPI } from '@panwatch/api'
 
 const EVENT = 'panwatch:avatar-changed'
 
-// 仅 SPA 会话内的内存缓存(避免一次会话内重复请求)。
-// 真正的持久化在后端 DB(data/panwatch.db 的 ui_avatar),刷新后会重新从后端拉取。
+// In-memory cache for the SPA session only (avoids repeat requests within a session).
+// The real persistence is in the backend DB (ui_avatar in data/panwatch.db); it is fetched again after a refresh.
 let cache: string | null = null
 let inflight: Promise<string> | null = null
 
@@ -28,8 +28,8 @@ function load(): Promise<string> {
 }
 
 /**
- * 保存头像(传空字符串=清空):后端把图片落成 data/avatars 文件、DB 仅记文件名;
- * 本地广播即时更新。注意 cache 存的是 data URL(GET 也返回 data URL)。
+ * Save the avatar (an empty string clears it): the backend writes the image to data/avatars and the DB stores only the file name;
+ * a local broadcast updates it at once. Note the cache holds a data URL (GET also returns a data URL).
  */
 export async function saveAvatar(value: string): Promise<void> {
   await fetchAPI('/settings/avatar', { method: 'PUT', body: JSON.stringify({ value }) })
@@ -37,7 +37,7 @@ export async function saveAvatar(value: string): Promise<void> {
   window.dispatchEvent(new CustomEvent<string>(EVENT, { detail: value }))
 }
 
-/** 当前头像(data URL 或图片地址)。来源为后端 DB;跨组件即时同步。 */
+/** The current avatar (a data URL or image address). Comes from the backend DB; synced across components at once. */
 export function useAvatar(): string {
   const [avatar, setAvatar] = useState<string>(cache ?? '')
   useEffect(() => {
@@ -56,23 +56,23 @@ export function useAvatar(): string {
 }
 
 /**
- * 把上传的图片文件压缩为 size×size 的方形 JPEG data URL(居中裁剪),
- * 控制体积(约 10-20KB),避免大 base64 撑爆 DB 存储。
+ * Compress an uploaded image into a size×size square JPEG data URL (centre-cropped),
+ * keeping it small (about 10-20KB) so large base64 doesn't bloat DB storage.
  */
 export function fileToAvatarDataUrl(file: File, size = 128): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader()
-    reader.onerror = () => reject(new Error('读取文件失败'))
+    reader.onerror = () => reject(new Error('Failed to read the file'))
     reader.onload = () => {
       const img = new Image()
-      img.onerror = () => reject(new Error('图片解析失败'))
+      img.onerror = () => reject(new Error('Failed to decode the image'))
       img.onload = () => {
         const canvas = document.createElement('canvas')
         canvas.width = size
         canvas.height = size
         const ctx = canvas.getContext('2d')
         if (!ctx) {
-          reject(new Error('canvas 不可用'))
+          reject(new Error('canvas unavailable'))
           return
         }
         const scale = Math.max(size / img.width, size / img.height)

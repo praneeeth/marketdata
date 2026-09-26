@@ -1,10 +1,10 @@
 /**
- * 深度分析弹窗(TradingAgents)。
+ * Deep research dialog (TradingAgents).
  *
- * 三种状态:
- * 1. 触发中 — 显示「分析需 3-5 分钟,确认开始?」+ 成本预估
- * 2. 运行中 — polling /agents/runs/{trace_id}/progress,显示阶段进度
- * 3. 完成 — 顶层摘要 + Markdown 推理 + 可展开 4 分析师报告 + 辩论
+ * Three states:
+ * 1. Starting: shows "the analysis takes 3-5 minutes; start?" + a cost estimate
+ * 2. Running: polls /agents/runs/{trace_id}/progress and shows stage progress
+ * 3. Done: top summary + Markdown reasoning + expandable 4 analyst reports + debate
  */
 import { useEffect, useState, useCallback, useRef } from 'react'
 import ReactMarkdown from 'react-markdown'
@@ -31,16 +31,16 @@ import {
 } from '../../../../src/lib/tradingagents-progress'
 
 const STAGE_LABEL: Record<string, string> = {
-  data_collection: '数据准备',
-  market_analyst: '技术分析师',
-  social_analyst: '情绪分析师',
-  news_analyst: '新闻分析师',
-  fundamentals_analyst: '基本面分析师',
-  bull_bear_debate: '看多看空辩论',
-  research_manager: '研究主管',
-  trader: '交易员决策',
-  risk_judge: '风控判定',
-  final_decision: 'PM 整合',
+  data_collection: 'Data preparation',
+  market_analyst: 'Technical analyst',
+  social_analyst: 'Sentiment analyst',
+  news_analyst: 'News analyst',
+  fundamentals_analyst: 'Fundamentals analyst',
+  bull_bear_debate: 'Bull vs bear debate',
+  research_manager: 'Research manager',
+  trader: 'Trader decision',
+  risk_judge: 'Risk verdict',
+  final_decision: 'PM synthesis',
 }
 
 const DECISION_COLOR: Record<string, string> = {
@@ -51,10 +51,10 @@ const DECISION_COLOR: Record<string, string> = {
 
 const POLL_INTERVAL_MS = 2000
 
-/** localStorage 里记录某只股票最近一次触发的 trace_id;关闭重开弹窗时恢复 polling */
+/** The trace_id of a stock's latest run, kept in localStorage; polling resumes when the dialog is reopened */
 const STORAGE_KEY_PREFIX = 'panwatch:tradingagents:running:'
-/** trace_id 持续多久后认为可能已不再运行(避免显示过期 trace 的 idle) */
-const TRACE_MAX_AGE_MS = 60 * 60 * 1000  // 与后端 running 生命周期窗口保持一致并留出恢复余量
+/** After how long a trace_id may no longer be running (avoids showing an expired trace as idle) */
+const TRACE_MAX_AGE_MS = 60 * 60 * 1000  // matches the backend running lifecycle window, with room for recovery
 
 function loadRunningTrace(stockSymbol: string): string | null {
   try {
@@ -79,7 +79,7 @@ function saveRunningTrace(stockSymbol: string, traceId: string): void {
       JSON.stringify({ traceId, startedAt: Date.now() }),
     )
   } catch {
-    /* 忽略 quota 等错误 */
+    /* ignore quota and similar errors */
   }
 }
 
@@ -97,7 +97,7 @@ export interface DeepAnalysisModalProps {
   stockId: number
   stockName: string
   stockSymbol: string
-  /** 历史分析(若有,直接展示) */
+  /** Past analysis (shown directly if there is one) */
   initialResult?: DeepAnalysisResult | null
 }
 
@@ -117,10 +117,10 @@ export function DeepAnalysisModal({
   const [error, setError] = useState<string>('')
   const [budget, setBudget] = useState<BudgetInfo | null>(null)
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
-  // SSE 订阅取消函数(进度优先走 SSE,失败降级 polling)
+  // SSE unsubscribe function (progress uses SSE first, falling back to polling on failure)
   const sseCloseRef = useRef<(() => void) | null>(null)
 
-  /** 停止一切进度监听(SSE + polling) */
+  /** Stop all progress listening (SSE + polling) */
   const stopWatching = useCallback(() => {
     if (timerRef.current) {
       clearInterval(timerRef.current)
@@ -132,12 +132,12 @@ export function DeepAnalysisModal({
     }
   }, [])
 
-  // 弹窗关闭时清理进度监听
+  // Clean up progress listening when the dialog closes
   useEffect(() => {
     if (!open) stopWatching()
   }, [open, stopWatching])
 
-  // 重置初始状态 + 后端查询是否有正在跑/已完成的任务
+  // Reset the initial state + ask the backend whether a run is in progress or done
   useEffect(() => {
     if (!open) return
 
@@ -147,18 +147,18 @@ export function DeepAnalysisModal({
       return
     }
 
-    // 先重置为 idle (避免上次 state 残留),然后异步查后端
+    // Reset to idle first (so the previous state doesn't linger), then query the backend asynchronously
     setStage('idle')
     setResult(null)
     setError('')
     setProgress(null)
     setTraceId(null)
 
-    // 并发查 3 个数据:
-    //   - findRunning:这只股票最近 30 分钟有没有运行中的任务
-    //   - getLatestForStock:有没有当日已完成的结果(过 30 分钟也算)
-    //   - getBudget:本月预算(idle 状态展示)
-    // 优先级:running > done(已有结果)> idle
+    // Query 3 things concurrently:
+    //   - findRunning: is there a run for this stock in the last 30 minutes
+    //   - getLatestForStock: is there a result finished today (even after 30 minutes)
+    //   - getBudget: this month's budget (shown in the idle state)
+    // Priority: running > done (a result exists) > idle
     Promise.all([
       tradingAgentsApi.findRunning(stockSymbol).catch(() => ({ trace_id: null, status: 'none' as const })),
       tradingAgentsApi.getLatestForStock(stockSymbol).catch(() => null),
@@ -166,29 +166,29 @@ export function DeepAnalysisModal({
     ]).then(([runningInfo, latestResult, budgetInfo]) => {
       setBudget(budgetInfo)
 
-      // 优先级:running(真在跑) > done(当日缓存,允许重新分析) > idle
-      //   - stale / failed / success / none 都视为"不在跑"
-      //   - 任何状态下,只要有当日缓存就展示 DoneView(含「忽略缓存重新分析」按钮)
-      //   - 任何状态下,IdleView 的「开始分析」按钮永远可用,后端会做幂等去重
+      // Priority: running (really running) > done (today's cache; re-analysis allowed) > idle
+      //   - stale / failed / success / none all count as "not running"
+      //   - in any state, today's cache shows DoneView (with the "ignore cache and re-analyse" button)
+      //   - in any state, IdleView's "Start analysis" button always works; the backend deduplicates
 
-      // 1) 真正在跑(后端权威源)→ 进入 running
+      // 1) Really running (the backend is the authority) -> running
       if (runningInfo.status === 'running' && runningInfo.trace_id) {
         const tid = runningInfo.trace_id
         setTraceId(tid)
         setStage('running')
-        // 后端确认在跑；即使采集阶段暂时没有日志，也继续由 SSE/polling 接力
+        // The backend confirms it's running; even if the collection stage has no logs yet, SSE/polling take over
         tradingAgentsApi.getProgress(tid).then(resp => setProgress(resp))
         startWatching(tid)
         return
       }
 
-      // 2) 后端 stale/failed → 老任务死掉/失败,清掉本地痕迹,继续走缓存判断
-      //    不再回到 running,允许用户重新触发
+      // 2) Backend stale/failed -> the old run died/failed; clear local traces and continue with the cache check
+      //    Never back to running; the user may trigger again
       if (runningInfo.status === 'stale' || runningInfo.status === 'failed') {
         clearRunningTrace(stockSymbol)
       }
 
-      // 3) localStorage 兜底(刚触发后端还没写 log)— 仅在后端 'none' 时尝试
+      // 3) localStorage fallback (just triggered and the backend hasn't logged yet); only when the backend says 'none'
       if (runningInfo.status === 'none') {
         const localTrace = loadRunningTrace(stockSymbol)
         if (localTrace) {
@@ -200,7 +200,7 @@ export function DeepAnalysisModal({
         }
       }
 
-      // 4) 有当日已完成结果 → done 视图(用户可点「忽略缓存重新分析」)
+      // 4) A result finished today -> done view (the user can click "ignore cache and re-analyse")
       if (latestResult) {
         latestResult.raw_data.from_cache = true
         setResult(latestResult)
@@ -209,18 +209,18 @@ export function DeepAnalysisModal({
         return
       }
 
-      // 5) 都没有 → idle(开始分析按钮可用,后端幂等保护)
+      // 5) Nothing -> idle (the start button works; the backend guards idempotency)
       clearRunningTrace(stockSymbol)
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, initialResult, stockSymbol])
 
-  /** 处理一次进度快照(SSE 推送与轮询共用同一套状态机) */
+  /** Handle one progress snapshot (the same state machine for SSE pushes and polling) */
   const handleProgressResponse = useCallback(
     async (resp: ProgressResponse) => {
       setProgress(resp)
       if (resp.status === 'success') {
-        // 完成,拉历史结果
+        // Done; fetch the saved result
         stopWatching()
         clearRunningTrace(stockSymbol)
         const latest = await tradingAgentsApi.getLatestForStock(stockSymbol)
@@ -228,25 +228,25 @@ export function DeepAnalysisModal({
           setResult(latest)
           setStage('done')
         } else {
-          setError('结果未落库,请稍后到「AI 历史」查看')
+          setError('The result was not saved; check "AI history" later')
           setStage('error')
         }
       } else if (resp.status === 'failed') {
         stopWatching()
         clearRunningTrace(stockSymbol)
-        setError(resp.run?.error || '分析失败')
+        setError(resp.run?.error || 'Analysis failed')
         setStage('error')
       } else if (resp.status === 'stale') {
-        // 后端检测到僵尸 running（超过整个任务生命周期窗口）
-        // → 自动重置到 idle,用户可以重新触发
+        // The backend detected a zombie running state (past the whole run lifecycle window)
+        // -> reset to idle automatically; the user can trigger again
         stopWatching()
         clearRunningTrace(stockSymbol)
         setTraceId('')
         setProgress(null)
         setStage('idle')
       } else if (resp.status === 'not_found') {
-        // SSE/轮询暂时没有快照不等于任务不存在；后端 running 记录可能还在采集。
-        // 保留 trace，让下一轮 polling 或刷新页面继续接管。
+        // No snapshot from SSE/polling for now doesn't mean the run is gone; the backend running record may still be collecting.
+        // Keep the trace so the next poll or a page refresh can take over.
         return
       }
     },
@@ -259,14 +259,14 @@ export function DeepAnalysisModal({
         const resp = await tradingAgentsApi.getProgress(tid)
         await handleProgressResponse(resp)
       } catch (e) {
-        // polling 失败不立即终止,记一次错误
+        // A polling failure doesn't stop at once; count one error
         console.warn('progress poll error:', e)
       }
     },
     [handleProgressResponse],
   )
 
-  /** 降级方案:setInterval 轮询(SSE 不可用时) */
+  /** Fallback: setInterval polling (when SSE isn't available) */
   const startPolling = useCallback(
     (tid: string) => {
       if (timerRef.current) clearInterval(timerRef.current)
@@ -276,7 +276,7 @@ export function DeepAnalysisModal({
     [pollProgress],
   )
 
-  /** 开始监听进度:优先 SSE(服务端推送),失败/关流降级轮询(轮询代码保留兜底) */
+  /** Start listening for progress: SSE first (server push); on failure/stream close, fall back to polling (kept as the fallback) */
   const startWatching = useCallback(
     (tid: string) => {
       stopWatching()
@@ -289,17 +289,17 @@ export function DeepAnalysisModal({
             void handleProgressResponse(resp)
           } else if (ev.event === 'done' && ev.data?.status && ev.data.status !== 'timeout') {
             terminal = !shouldContinueProgressWatch(ev.data.status, 'done')
-            // done 事件只携带状态，不带完整 run/result；终态也要补拉一次快照，
-            // 避免最后一条 progress 被代理丢弃时弹窗停在 running。
+            // The done event only carries the status, not the full run/result; fetch one more snapshot at the end
+            // so the dialog doesn't stay on running if a proxy dropped the last progress event.
             if (terminal) void pollProgress(tid)
           }
         },
         onClosed: () => {
-          // 服务端正常关流:终态则结束;非终态(如流超时)降级轮询接力
+          // The server closed the stream normally: stop if final; otherwise (e.g. stream timeout) fall back to polling
           if (!terminal) startPolling(tid)
         },
         onFailed: () => {
-          // SSE 不可用(旧代理缓冲/网络问题)→ 降级轮询
+          // SSE unavailable (old proxy buffering / network problem) -> fall back to polling
           startPolling(tid)
         },
       })
@@ -316,20 +316,20 @@ export function DeepAnalysisModal({
       const tid = triggerResp.trace_id || ''
       setTraceId(tid)
       if (!tid) {
-        // 后端未返回 trace_id,只显示 message
+        // The backend returned no trace_id; just show the message
         setStage('done')
-        toast(triggerResp.message || '已触发', 'success')
+        toast(triggerResp.message || 'Triggered', 'success')
         return
       }
-      // 持久化 trace_id 让关闭重开能恢复进度
+      // Persist the trace_id so closing and reopening can resume progress
       saveRunningTrace(stockSymbol, tid)
-      // 启动进度监听(SSE 优先,失败降级轮询)
+      // Start listening for progress (SSE first, falling back to polling)
       startWatching(tid)
-      // 立即拉一次,尽快渲染初始进度
+      // Fetch once right away to render the initial progress quickly
       pollProgress(tid)
     } catch (e) {
       setStage('error')
-      setError(e instanceof Error ? e.message : '触发失败')
+      setError(e instanceof Error ? e.message : 'Trigger failed')
     }
   }, [stockId, stockSymbol, startWatching, pollProgress, toast])
 
@@ -343,10 +343,10 @@ export function DeepAnalysisModal({
       <DialogContent className="w-[92vw] max-w-6xl max-h-[85vh] overflow-y-auto scrollbar">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            🧠 深度分析 · {stockName} ({stockSymbol})
+            🧠 Deep research · {stockName} ({stockSymbol})
           </DialogTitle>
           <DialogDescription>
-            TradingAgents 多 Agent 决策框架 · 仅供学习研究参考,不构成投资建议
+            TradingAgents multi-agent framework · for research and education only; not investment advice
           </DialogDescription>
         </DialogHeader>
 
@@ -372,12 +372,12 @@ export function DeepAnalysisModal({
         {stage === 'error' && (
           <div className="space-y-3 text-[13px]">
             <div className="rounded-lg bg-rose-500/10 border border-rose-500/30 p-3 text-rose-600">
-              <div className="font-semibold mb-1">分析失败</div>
+              <div className="font-semibold mb-1">Analysis failed</div>
               <div className="text-[12px]">{error}</div>
             </div>
             <div className="flex justify-end gap-2">
-              <Button variant="outline" onClick={handleClose}>关闭</Button>
-              <Button onClick={() => handleStart(false)}>重试</Button>
+              <Button variant="outline" onClick={handleClose}>Close</Button>
+              <Button onClick={() => handleStart(false)}>Retry</Button>
             </div>
           </div>
         )}
@@ -402,42 +402,42 @@ function IdleView({
   return (
     <div className="space-y-4 text-[13px]">
       <div className="rounded-lg bg-accent/30 p-3 space-y-1.5">
-        <div className="font-medium">即将分析:{stockSymbol}</div>
+        <div className="font-medium">About to analyse: {stockSymbol}</div>
         <div className="text-muted-foreground">
-          调用 4 类分析师(技术 / 情绪 / 新闻 / 基本面) + 看多看空辩论 + 风控 + PM 整合
+          Runs 4 kinds of analyst (technical / sentiment / news / fundamentals) + bull vs bear debate + risk + PM synthesis
         </div>
         <div className="text-[11px] text-muted-foreground mt-2 space-y-0.5">
-          <div>⏱ 预计耗时:3-8 分钟</div>
+          <div>⏱ Estimated time: 3-8 minutes</div>
           {est ? (
-            <div>💰 预估成本:${est.cost_low_usd.toFixed(2)} - ${est.cost_high_usd.toFixed(2)} ({est.model})</div>
+            <div>💰 Estimated cost: ${est.cost_low_usd.toFixed(2)} - ${est.cost_high_usd.toFixed(2)} ({est.model})</div>
           ) : (
-            <div>💰 预估成本:加载中...</div>
+            <div>💰 Estimated cost: loading...</div>
           )}
-          <div>ℹ️ 异步执行,可关闭弹窗,完成时通过通知渠道推送</div>
+          <div>ℹ️ Runs in the background; you can close this dialog, and a notification is sent when it finishes</div>
         </div>
       </div>
 
-      {/* 本月预算 */}
+      {/* This month's budget */}
       {budget && (
         <div className={`rounded-lg p-3 text-[12px] ${overBudget ? 'bg-rose-500/10 border border-rose-500/30' : 'bg-accent/20'}`}>
           <div className="flex items-center justify-between">
-            <span className="font-medium">本月预算</span>
+            <span className="font-medium">This month's budget</span>
             <span className={overBudget ? 'text-rose-600' : 'text-muted-foreground'}>
               ${budget.used.toFixed(2)} / ${budget.limit.toFixed(2)}
-              {budget.runs_this_month > 0 && ` · ${budget.runs_this_month} 次`}
+              {budget.runs_this_month > 0 && ` · ${budget.runs_this_month} runs`}
             </span>
           </div>
           {overBudget && (
             <div className="text-[11px] text-rose-600 mt-1">
-              ⚠️ 本月预算已用尽。如需继续,请到「设置 → Agent → TradingAgents」调高 `monthly_budget_usd`。
+              ⚠️ This month's budget is used up. To continue, raise `monthly_budget_usd` under "Agents → TradingAgents → Deep config".
             </div>
           )}
         </div>
       )}
 
       <div className="flex justify-end gap-2">
-        <Button variant="outline" onClick={onCancel}>取消</Button>
-        <Button onClick={onStart} disabled={overBudget}>开始分析</Button>
+        <Button variant="outline" onClick={onCancel}>Cancel</Button>
+        <Button onClick={onStart} disabled={overBudget}>Start analysis</Button>
       </div>
     </div>
   )
@@ -461,19 +461,19 @@ function RunningView({
       <div className="rounded-lg bg-accent/30 p-3 space-y-2">
         <div className="flex items-center gap-2">
           <span className="inline-block w-3 h-3 rounded-full bg-primary animate-pulse" />
-          <span className="font-medium">分析进行中...</span>
+          <span className="font-medium">Analysis in progress...</span>
           <span className="ml-auto text-[11px] text-muted-foreground">
-            已用 {formatElapsed(elapsed)} · ${cost.toFixed(4)}
+            {formatElapsed(elapsed)} elapsed · ${cost.toFixed(4)}
           </span>
         </div>
         {progress?.active_operation && (
           <div className="text-[11px] text-muted-foreground">
             {progress.active_operation.agent && (
               <>
-                当前 Agent：<span className="font-mono">{progress.active_operation.agent}</span> ·{' '}
+                Current agent: <span className="font-mono">{progress.active_operation.agent}</span> ·{' '}
               </>
             )}
-            当前操作：{progress.active_operation.kind === 'tool' ? '数据工具 ' : ''}
+            Current operation: {progress.active_operation.kind === 'tool' ? 'data tool ' : ''}
             <span className="font-mono">{progress.active_operation.name}</span>
           </div>
         )}
@@ -481,7 +481,7 @@ function RunningView({
           {stages.length > 0 ? stages.map((s) => (
             <StageRow key={s.name} stage={s} />
           )) : (
-            <div className="text-[12px] text-muted-foreground">准备中...</div>
+            <div className="text-[12px] text-muted-foreground">Preparing...</div>
           )}
         </div>
         <div className="text-[10px] text-muted-foreground/70 mt-3 font-mono">
@@ -500,7 +500,7 @@ function RunningView({
 
       <div className="flex justify-end gap-2">
         <Button variant="outline" onClick={onClose}>
-          后台运行 (完成时推送通知)
+          Run in the background (notify when done)
         </Button>
       </div>
     </div>
@@ -509,18 +509,18 @@ function RunningView({
 
 function DataCollectionDiagnostics({ sources }: { sources: ProgressDataSource[] }) {
   const labels: Record<string, string> = {
-    quote: '行情',
-    klines: 'K 线',
-    capital_flow: '资金流',
-    events: '事件',
-    financial: '财报',
-    technical: '技术指标',
+    quote: 'Quote',
+    klines: 'K-lines',
+    capital_flow: 'Money flow',
+    events: 'Events',
+    financial: 'Financials',
+    technical: 'Technical indicators',
   }
   const statusLabels: Record<ProgressDataSource['status'], string> = {
-    pending: '等待',
-    running: '请求中',
-    done: '完成',
-    error: '失败降级',
+    pending: 'Waiting',
+    running: 'Requesting',
+    done: 'Done',
+    error: 'Failed (degraded)',
   }
   const statusClasses: Record<ProgressDataSource['status'], string> = {
     pending: 'text-muted-foreground',
@@ -531,7 +531,7 @@ function DataCollectionDiagnostics({ sources }: { sources: ProgressDataSource[] 
 
   return (
     <div className="rounded-lg border border-border/40 bg-accent/10 p-3 text-[12px]">
-      <div className="font-medium mb-1">数据准备明细</div>
+      <div className="font-medium mb-1">Data preparation details</div>
       <div className="flex flex-wrap gap-x-4 gap-y-1">
         {sources.map((source) => (
           <span key={source.name} className={statusClasses[source.status]} title={source.error}>
@@ -589,27 +589,27 @@ export function ToolkitDiagnostics({
   return (
     <details className="rounded-lg border border-border/40 bg-accent/10 p-3 text-[12px]" open={defaultOpen}>
       <summary className="cursor-pointer flex items-center gap-2 flex-wrap">
-        <span className="font-medium">数据注入诊断</span>
+        <span className="font-medium">Data injection diagnostics</span>
         <span className="text-[11px] text-muted-foreground">
-          (PanWatch 数据 → TradingAgents 工具)
+          (PanWatch data → TradingAgents tools)
         </span>
         <span className="ml-auto text-[11px] whitespace-nowrap">
           <span className={ACTION_CLS.HIT}>HIT {hit}</span>
           <span className="text-muted-foreground"> · MISS {miss}</span>
-          <span className={ACTION_CLS.PASSTHROUGH}> · 透传 {pass}</span>
-          {fall > 0 && <span className={ACTION_CLS.FALLTHROUGH}> · 兜底 {fall}</span>}
-          {err > 0 && <span className="text-rose-600"> · 错误 {err}</span>}
+          <span className={ACTION_CLS.PASSTHROUGH}> · passthrough {pass}</span>
+          {fall > 0 && <span className={ACTION_CLS.FALLTHROUGH}> · fallback {fall}</span>}
+          {err > 0 && <span className="text-rose-600"> · errors {err}</span>}
         </span>
       </summary>
       <div className="text-[10.5px] text-muted-foreground/80 mt-2 leading-relaxed">
-        <span className={ACTION_CLS.HIT}>HIT</span>: 用 PanWatch 数据 ·{' '}
-        <span className={ACTION_CLS.MISS}>MISS</span>: 命中但 PanWatch 未实现 ·{' '}
-        <span className={ACTION_CLS.PASSTHROUGH}>透传</span>: 非 A 股直接走上游 vendor ·{' '}
-        <span className={ACTION_CLS.FALLTHROUGH}>兜底</span>: A 股但 cache 为空,走了上游
+        <span className={ACTION_CLS.HIT}>HIT</span>: PanWatch data used ·{' '}
+        <span className={ACTION_CLS.MISS}>MISS</span>: matched but not implemented by PanWatch ·{' '}
+        <span className={ACTION_CLS.PASSTHROUGH}>Passthrough</span>: not served by PanWatch; went to the upstream vendor ·{' '}
+        <span className={ACTION_CLS.FALLTHROUGH}>Fallback</span>: PanWatch symbol but empty cache; went upstream
       </div>
       {total === 0 ? (
         <div className="text-[11px] text-muted-foreground mt-2">
-          ⚠️ 还没有任何工具调用记录(可能 TradingAgents 还在准备阶段)。
+          ⚠️ No tool calls recorded yet (TradingAgents may still be preparing).
         </div>
       ) : (
         <div className="mt-2 space-y-1 max-h-64 overflow-y-auto">
@@ -623,7 +623,7 @@ export function ToolkitDiagnostics({
                 <span className="text-foreground/80 truncate flex-1 text-left">
                   {h.method} ({h.symbol || '-'})
                   {h.reason && <span className="text-muted-foreground"> · {h.reason}</span>}
-                  {h.chars != null && <span className="text-muted-foreground"> · {h.chars} 字符</span>}
+                  {h.chars != null && <span className="text-muted-foreground"> · {h.chars} characters</span>}
                   {h.source && <span className="text-muted-foreground/70"> · {h.source}</span>}
                 </span>
               </div>
@@ -656,7 +656,7 @@ export function ToolkitDiagnostics({
                         {h.snippet}
                         {h.chars != null && h.chars > h.snippet.length && (
                           <span className="text-muted-foreground/60">
-                            {'\n\n'}...(共 {h.chars} 字符,仅展示前 {h.snippet.length})
+                            {'\n\n'}...({h.chars} characters in total; showing the first {h.snippet.length})
                           </span>
                         )}
                       </pre>
@@ -723,14 +723,14 @@ function DoneView({
     <div className="space-y-4 text-[13px]">
       {fromCache && (
         <div className="rounded-lg bg-amber-500/10 border border-amber-500/30 p-2 text-[12px] text-amber-700 dark:text-amber-400 flex items-center justify-between">
-          <span>ℹ️ 当日缓存:今天已经分析过这只股票,展示缓存结果(无新成本)</span>
+          <span>ℹ️ Today's cache: this stock was already analysed today; showing the cached result (no new cost)</span>
           <Button variant="outline" size="sm" onClick={onRerun} className="ml-3 h-7 text-[11px]">
-            忽略缓存重新分析
+            Ignore cache and re-analyse
           </Button>
         </div>
       )}
 
-      {/* 顶层摘要(精简成一行:决策 + 置信度 + 成本;完整理由在"最终决策" tab) */}
+      {/* Top summary (one line: decision + confidence + cost; the full reasoning is in the "Final decision" tab) */}
       <div className="rounded-lg bg-accent/30 px-4 py-2.5 flex items-center gap-3 flex-wrap">
         {sug ? (
           <>
@@ -738,7 +738,7 @@ function DoneView({
               {sug.action_label}
             </span>
             <span className="text-[12px] text-muted-foreground">
-              置信度 {sug.confidence?.toFixed(1) ?? '-'} / 10
+              Confidence {sug.confidence?.toFixed(1) ?? '-'} / 10
             </span>
           </>
         ) : (
@@ -752,17 +752,17 @@ function DoneView({
           className="h-7 text-[11px] ml-auto"
           onClick={() => window.open(`/analysis/${stockSymbol}/${analysisDate}`, '_blank')}
         >
-          查看详细页
+          View the detail page
         </Button>
         <span className="text-[10px] text-muted-foreground">
-          成本:${costUsd?.toFixed(4) ?? '-'}
+          Cost: ${costUsd?.toFixed(4) ?? '-'}
         </span>
       </div>
 
-      {/* 统一 tab:最终决策 + 四位分析师 + 看多看空辩论 + 风控辩论(完整 + GFM 表格) */}
+      {/* Shared tabs: final decision + four analysts + bull vs bear debate + risk debate (in full, with GFM tables) */}
       <AnalysisTabs sections={sections} />
 
-      {/* 数据注入诊断(历史报告):从 raw_data.toolkit_diagnostic 拿 */}
+      {/* Data injection diagnostics (past reports): from raw_data.toolkit_diagnostic */}
       {rawData.toolkit_diagnostic && (
         <ToolkitDiagnostics
           summary={rawData.toolkit_diagnostic.summary}
@@ -770,7 +770,7 @@ function DoneView({
         />
       )}
 
-      {/* 免责声明 */}
+      {/* Disclaimer */}
       <div className="text-[10px] text-muted-foreground/70 italic border-t border-border/30 pt-2">
         {shortDisclaimer}
       </div>
@@ -778,7 +778,7 @@ function DoneView({
   )
 }
 
-/** 决策与分析统一 tab。内容由 buildAnalysisSections 组装(弹窗与详细页共用),只渲染有内容的 tab。 */
+/** Shared decision and analysis tabs. Content is assembled by buildAnalysisSections (shared by the dialog and the detail page); only tabs with content render. */
 function AnalysisTabs({ sections }: { sections: AnalysisSection[] }) {
   if (sections.length === 0) return null
   return (

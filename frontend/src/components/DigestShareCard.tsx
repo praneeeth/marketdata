@@ -1,6 +1,6 @@
 import ShareCardDialog from './ShareCardDialog'
 
-/** digest 单条:与 Dashboard 的 feed(CurateCandidate & { why }）同构。 */
+/** One digest item: the same shape as the Dashboard feed (CurateCandidate & { why }). */
 export interface DigestItem {
   type: string // alert | holding | watch | risk | opportunity
   name?: string
@@ -16,8 +16,8 @@ interface DigestShareCardProps {
   items: DigestItem[]
 }
 
-const UP = '#e11d48'
-const DOWN = '#059669'
+const UP = '#059669'
+const DOWN = '#e11d48'
 
 function moveColor(v?: number | null): string {
   if (v == null || !isFinite(v)) return '#94a3b8'
@@ -30,34 +30,34 @@ function pct(v?: number | null): string {
   return `${v > 0 ? '+' : ''}${v.toFixed(2)}%`
 }
 
-/** 各类型的徽标:文字 + 配色(emoji 作图标,纯文本可被 PNG 正确渲染,无外部图片)。 */
+/** Badge per type: text + colours (emoji as the icon; plain text renders correctly in the PNG, no external images). */
 const TYPE_BADGE: Record<string, { label: string; icon: string; color: string; bg: string }> = {
-  alert: { label: '提醒命中', icon: '🔔', color: '#e11d48', bg: '#fff1f2' },
-  holding: { label: '持仓', icon: '📊', color: '#059669', bg: '#ecfdf5' },
-  watch: { label: '自选', icon: '👀', color: '#475569', bg: '#f1f5f9' },
-  risk: { label: '风险', icon: '⚠️', color: '#d97706', bg: '#fffbeb' },
-  opportunity: { label: '机会', icon: '✨', color: '#6366f1', bg: '#eef2ff' },
+  alert: { label: 'Alert triggered', icon: '🔔', color: '#e11d48', bg: '#fff1f2' },
+  holding: { label: 'Holding', icon: '📊', color: '#059669', bg: '#ecfdf5' },
+  watch: { label: 'Watchlist', icon: '👀', color: '#475569', bg: '#f1f5f9' },
+  risk: { label: 'Risk', icon: '⚠️', color: '#d97706', bg: '#fffbeb' },
+  opportunity: { label: 'Opportunity', icon: '✨', color: '#6366f1', bg: '#eef2ff' },
 }
-const FALLBACK_BADGE = { label: '要点', icon: '•', color: '#475569', bg: '#f1f5f9' }
+const FALLBACK_BADGE = { label: 'Key point', icon: '•', color: '#475569', bg: '#f1f5f9' }
 
 /**
- * 每日 digest 卡:今日盯盘要点(持仓异动 / 机会 / 风险 / 提醒)。保持可扫读。
+ * Daily digest card: today's watch points (holding moves / opportunities / risks / alerts). Kept scannable.
  */
 export default function DigestShareCard({ open, onClose, date, items }: DigestShareCardProps) {
   const list = (items || []).slice(0, 8)
 
   return (
-    <ShareCardDialog open={open} onClose={onClose} filename={`今日盯盘-${date}`}>
+    <ShareCardDialog open={open} onClose={onClose} filename={`todays-watch-${date}`}>
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12 }}>
-        <div style={{ fontSize: 22, fontWeight: 800, lineHeight: 1.2, color: '#0f172a' }}>今日盯盘</div>
+        <div style={{ fontSize: 22, fontWeight: 800, lineHeight: 1.2, color: '#0f172a' }}>Today's watch</div>
         <div style={{ fontSize: 14, color: '#94a3b8', fontWeight: 500, flexShrink: 0 }}>{date}</div>
       </div>
       <div style={{ marginTop: 6, fontSize: 13, color: '#64748b' }}>
-        持仓异动 / 机会 / 风险提醒 · AI 为你梳理的今日要点
+        Holding moves / opportunities / risk alerts · today's key points, sorted by AI
       </div>
 
-      {/* 要点列表 */}
+      {/* Key points */}
       <div style={{ marginTop: 16, display: 'flex', flexDirection: 'column', gap: 10 }}>
         {list.length === 0 ? (
           <div
@@ -70,7 +70,7 @@ export default function DigestShareCard({ open, onClose, date, items }: DigestSh
               color: '#065f46',
             }}
           >
-            ✓ 今日暂无明显异动或触发信号
+            ✓ No notable moves or triggered signals today
           </div>
         ) : (
           list.map((it, i) => {

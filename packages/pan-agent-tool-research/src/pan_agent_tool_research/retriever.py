@@ -16,6 +16,20 @@ _FIELD_WEIGHTS = {
 }
 
 
+# English words too common to say anything about which tool fits.
+_STOPWORDS = frozenset(
+    """a an and are as at be by can do does for from get give has have how i in is it its me my
+    of on or show tell that the this to up what when which with you your""".split()
+)
+
+
+def _normalize_word(word: str) -> str:
+    """Fold simple English plurals so "alerts" matches "alert"."""
+    if len(word) > 3 and word.endswith("s") and not word.endswith("ss"):
+        return word[:-1]
+    return word
+
+
 def _terms(text: str) -> set[str]:
     result: set[str] = set()
     for segment in _TOKEN_RE.findall(text.casefold()):
@@ -24,8 +38,8 @@ def _terms(text: str) -> set[str]:
                 result.add(segment)
             result.update(segment[index : index + 2] for index in range(len(segment) - 1))
             result.update(segment[index : index + 3] for index in range(len(segment) - 2))
-        else:
-            result.add(segment)
+        elif segment not in _STOPWORDS:
+            result.add(_normalize_word(segment))
     return {item for item in result if item}
 
 
@@ -39,7 +53,7 @@ def _coverage(query_terms: set[str], text: str, query: str) -> float:
     if not overlap:
         return 0.0
     # Two meaningful query terms are enough to make a field strongly
-    # relevant. This keeps Chinese bigram matching useful without allowing a
+    # relevant. This keeps bigram matching (for CJK queries) useful without allowing a
     # long sentence to dilute every individual match into near-zero scores.
     return min(1.0, len(overlap) / 2)
 
@@ -86,7 +100,7 @@ class KeywordToolRetriever:
                 for field in fields
             )
             reasons = [
-                f"命中{field}"
+                f"matched {field}"
                 for field in matched_fields
             ]
             ranked.append(

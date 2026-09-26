@@ -1,4 +1,4 @@
-"""新闻 API - 基于数据源配置"""
+"""News API."""
 from datetime import datetime, timedelta
 
 from fastapi import APIRouter, Depends, Query
@@ -7,16 +7,12 @@ from pydantic import BaseModel
 
 from src.platform.persistence.database import get_db
 from src.platform.persistence.models import Stock
-from src.platform.marketdata.collectors.news_collector import NewsCollector, NewsItem
+from src.platform.marketdata.collectors.news_collector import ANNOUNCEMENT_SOURCE, NewsCollector, NewsItem
 
 router = APIRouter()
 
-# 来源显示名称
-SOURCE_LABELS = {
-    "xueqiu": "雪球",
-    "eastmoney_news": "东财资讯",
-    "eastmoney": "东财公告",
-}
+# Source display names (news sources arrive in Phase 4a; unknown sources show their raw id)
+SOURCE_LABELS: dict[str, str] = {}
 
 
 class NewsItemResponse(BaseModel):
@@ -33,35 +29,35 @@ class NewsItemResponse(BaseModel):
 
 @router.get("", response_model=list[NewsItemResponse])
 async def get_news(
-    symbols: str = Query(default="", description="股票代码，逗号分隔"),
-    names: str = Query(default="", description="股票名称，逗号分隔（优先使用，比 symbols 更稳定）"),
-    hours: int = Query(default=168, ge=1, le=720, description="时间范围（小时，默认7天）"),
-    limit: int = Query(default=50, ge=1, le=200, description="返回数量"),
-    filter_related: bool = Query(default=True, description="只显示相关新闻"),
-    source: str = Query(default="", description="来源过滤，逗号分隔：xueqiu/eastmoney_news/eastmoney"),
+    symbols: str = Query(default="", description="Stock symbols, comma-separated"),
+    names: str = Query(default="", description="Stock names, comma-separated (preferred; more stable than symbols)"),
+    hours: int = Query(default=168, ge=1, le=720, description="Time window in hours (default 7 days)"),
+    limit: int = Query(default=50, ge=1, le=200, description="Number of items"),
+    filter_related: bool = Query(default=True, description="Only show related news"),
+    source: str = Query(default="", description="Source filter, comma-separated"),
     db: Session = Depends(get_db),
 ):
     """
-    获取新闻列表（基于数据源配置）
+    List news.
 
-    - symbols: 股票代码过滤，逗号分隔，空则获取所有自选股相关新闻
-    - names: 股票名称过滤，逗号分隔（前端直接传递名称，更稳定）
-    - hours: 时间范围
-    - limit: 返回数量限制
-    - filter_related: 是否只显示与自选股相关的新闻
+    - symbols: symbol filter, comma-separated; empty means news for every watchlist stock
+    - names: stock name filter, comma-separated (the frontend passes names directly; more stable)
+    - hours: time window
+    - limit: maximum number of items
+    - filter_related: only news about watchlist stocks
     """
-    # 获取所有自选股（用于匹配）
+    # All watchlist stocks (for matching)
     all_stocks = db.query(Stock).all()
     stock_map = {s.symbol: s.name for s in all_stocks}
     name_to_symbol = {s.name: s.symbol for s in all_stocks}
 
-    # 解析股票 - 优先使用 names 参数
+    # Resolve stocks, preferring the names parameter
     if names:
-        # 前端直接传递股票名称
+        # The frontend passes stock names directly
         name_list = [n.strip() for n in names.split(",") if n.strip()]
-        # 转换为 symbol 列表（用于匹配和返回）
+        # Convert to a symbol list (for matching and the response)
         symbol_list = [name_to_symbol.get(n) for n in name_list if name_to_symbol.get(n)]
-        # 直接使用传入的名称构建 symbol_names
+        # Build symbol_names from the given names
         passed_symbol_names = {name_to_symbol.get(n, ""): n for n in name_list if name_to_symbol.get(n)}
     elif symbols:
         symbol_list = [s.strip() for s in symbols.split(",") if s.strip()]
@@ -75,29 +71,29 @@ async def get_news(
 
     source_filters = {s.strip() for s in source.split(",") if s.strip()} if source else set()
 
-    # 构建匹配关键词（股票代码 + 股票名称）
+    # Match keywords (symbols + names)
     keywords = set(symbol_list)
     for sym in symbol_list:
         if sym in stock_map:
             keywords.add(stock_map[sym])
 
-    # 基于数据源配置构建采集器，直接传递股票名称映射避免重复查库
+    # Build the collector, passing the symbol-name map to avoid another DB query
     collector = NewsCollector.from_database()
     news_items = await collector.fetch_all(
         symbols=symbol_list,
         since_hours=hours,
-        symbol_names=passed_symbol_names,  # 直接传递已有的股票名称映射
+        symbol_names=passed_symbol_names,  # pass the existing symbol-name map
     )
 
     def is_related(item: NewsItem) -> bool:
-        """判断新闻是否与自选股相关"""
-        # 公告类天然与股票相关
-        if item.source == "eastmoney":
+        """Whether an item is about a watchlist stock."""
+        # Announcements are always stock-related
+        if item.source == ANNOUNCEMENT_SOURCE:
             return True
-        # 已标记相关股票
+        # Already tagged with related stocks
         if item.symbols and any(s in symbol_list for s in item.symbols):
             return True
-        # 标题或内容包含关键词
+        # Title or content contains a keyword
         text = item.title + (item.content or "")
         return any(kw in text for kw in keywords)
 
@@ -105,11 +101,11 @@ async def get_news(
     for item in news_items:
         if source_filters and item.source not in source_filters:
             continue
-        # 过滤不相关的新闻
+        # Drop unrelated news
         if filter_related and not is_related(item):
             continue
 
-        # 标记匹配的股票
+        # Tag the matched stocks
         matched_symbols = []
         text = item.title + (item.content or "")
         for sym, name in stock_map.items():

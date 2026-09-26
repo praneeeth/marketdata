@@ -1,4 +1,4 @@
-"""日志中心 API"""
+"""Log centre API."""
 import asyncio
 import logging
 import time
@@ -10,7 +10,7 @@ from sqlalchemy import func, or_
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-# 端点入参里有名为 logger 的 query 参数，模块级 logger 用别名避免遮蔽
+# An endpoint has a query parameter named logger, so the module-level logger uses an alias to avoid shadowing
 _module_logger = logging.getLogger(__name__)
 
 from src.platform.persistence.database import get_db
@@ -19,7 +19,7 @@ from src.platform.observability.log_handler import get_log_handler_stats
 
 
 def _format_datetime(dt) -> str:
-    """格式化时间为带时区的 ISO 格式"""
+    """Format a time as an ISO string with a time zone."""
     if not dt:
         return ""
     if dt.tzinfo is None:
@@ -92,7 +92,7 @@ def _apply_log_filters(
     since: str = "",
     until: str = "",
 ):
-    """把查询过滤条件应用到 LogEntry query 上（列表与 SSE tail 共用）。"""
+    """Apply the query filters to a LogEntry query (shared by the list and the SSE tail)."""
     if level:
         levels = [l.strip().upper() for l in level.split(",") if l.strip()]
         if levels:
@@ -160,7 +160,7 @@ def _apply_log_filters(
 
 
 def _to_log_response(item: LogEntry) -> LogEntryResponse:
-    """把 ORM 行转成响应模型（列表与 SSE tail 共用）。"""
+    """Convert an ORM row into the response model (shared by the list and the SSE tail)."""
     return LogEntryResponse(
         id=item.id,
         timestamp=_format_datetime(item.timestamp),
@@ -179,20 +179,20 @@ def _to_log_response(item: LogEntry) -> LogEntryResponse:
 
 @router.get("", response_model=LogListResponse)
 def list_logs(
-    level: str = Query("", description="日志级别过滤，逗号分隔"),
-    q: str = Query("", description="关键词搜索"),
-    logger: str = Query("", description="Logger 名称过滤"),
-    trace_id: str = Query("", description="链路追踪ID"),
-    run_id: str = Query("", description="运行ID"),
-    agent_name: str = Query("", description="Agent 名称过滤"),
-    event: str = Query("", description="事件过滤"),
-    notify_status: str = Query("", description="通知状态过滤: attempted/skipped/sent/failed"),
-    domain: str = Query("all", description="日志域: all/business/infra"),
-    since: str = Query("", description="起始时间 ISO 格式"),
-    until: str = Query("", description="结束时间 ISO 格式"),
+    level: str = Query("", description="Log level filter, comma-separated"),
+    q: str = Query("", description="Keyword search"),
+    logger: str = Query("", description="Logger name filter"),
+    trace_id: str = Query("", description="Trace ID"),
+    run_id: str = Query("", description="Run ID"),
+    agent_name: str = Query("", description="Agent name filter"),
+    event: str = Query("", description="Event filter"),
+    notify_status: str = Query("", description="Notification status filter: attempted/skipped/sent/failed"),
+    domain: str = Query("all", description="Log domain: all/business/infra"),
+    since: str = Query("", description="Start time, ISO format"),
+    until: str = Query("", description="End time, ISO format"),
     limit: int = Query(200, ge=1, le=1000),
     offset: int = Query(0, ge=0),
-    before_id: int = Query(0, ge=0, description="cursor 分页: 取该 id 之前的日志"),
+    before_id: int = Query(0, ge=0, description="Cursor pagination: logs before this id"),
     db: Session = Depends(get_db),
 ):
     query = _apply_log_filters(
@@ -246,7 +246,7 @@ def list_logs(
     )
 
 
-# 日志 SSE tail 的轮询/推送节奏
+# Poll/push rhythm of the log SSE tail
 LOGS_SSE_POLL_SEC = 2.0
 LOGS_SSE_MAX_DURATION_SEC = 30 * 60
 LOGS_SSE_BATCH_LIMIT = 200
@@ -255,19 +255,19 @@ LOGS_SSE_BATCH_LIMIT = 200
 @router.get("/stream")
 async def stream_logs(
     request: Request,
-    level: str = Query("", description="日志级别过滤，逗号分隔"),
-    q: str = Query("", description="关键词搜索"),
-    logger_name: str = Query("", alias="logger", description="Logger 名称过滤"),
-    domain: str = Query("all", description="日志域: all/business/infra"),
-    since: str = Query("", description="起始时间 ISO 格式"),
-    last_event_id: int = Query(0, ge=0, description="断线前收到的最后日志 id"),
+    level: str = Query("", description="Log level filter, comma-separated"),
+    q: str = Query("", description="Keyword search"),
+    logger_name: str = Query("", alias="logger", description="Logger name filter"),
+    domain: str = Query("all", description="Log domain: all/business/infra"),
+    since: str = Query("", description="Start time, ISO format"),
+    last_event_id: int = Query(0, ge=0, description="Last log id received before the disconnect"),
 ):
-    """日志 SSE tail：按过滤条件持续推送新增日志（替代前端 3s 轮询）。
+    """Log SSE tail: keeps pushing new logs matching the filters (replaces the frontend's 3s polling).
 
-    - 事件 id 直接用日志行 id（天然单调递增），断线重连带 Last-Event-ID
-      （header 优先，query 兜底）即可从缺口处续推；
-    - 首次连接（无 Last-Event-ID）从当前最新 id 开始只推增量，
-      存量由既有 GET /api/logs 列表端点负责（保留不动，降级兜底）。
+    - The event id is the log row id (naturally increasing), so a reconnect with Last-Event-ID
+      (header first, query as fallback) resumes from the gap;
+    - a first connection (no Last-Event-ID) starts at the current latest id and pushes only new rows;
+      existing rows come from the GET /api/logs list endpoint (kept as is, as the fallback).
     """
     from src.platform.events.sse import format_sse_comment, format_sse_event
     from src.platform.persistence.database import SessionLocal
@@ -276,7 +276,7 @@ async def stream_logs(
     resume_id = int(header_id) if header_id.isdigit() else last_event_id
 
     def _fetch_after(cursor: int) -> list[LogEntryResponse]:
-        """开独立会话查 id > cursor 的新日志（升序，限量防洪峰）。"""
+        """Open a separate session for new logs with id > cursor (ascending, capped to absorb bursts)."""
         db = SessionLocal()
         try:
             query = _apply_log_filters(
@@ -306,7 +306,7 @@ async def stream_logs(
             db.close()
 
     async def gen():
-        # 有 Last-Event-ID → 从缺口续推；否则从当前最新开始只 tail 增量
+        # With Last-Event-ID -> resume from the gap; otherwise tail only new rows from the current latest
         cursor = resume_id if resume_id > 0 else await asyncio.to_thread(_current_max_id)
         started = time.monotonic()
         idle_ticks = 0
@@ -314,7 +314,7 @@ async def stream_logs(
             try:
                 items = await asyncio.to_thread(_fetch_after, cursor)
             except Exception as e:
-                _module_logger.warning(f"日志 SSE 查询失败: {e}")
+                _module_logger.warning(f"Log SSE query failed: {e}")
                 await asyncio.sleep(LOGS_SSE_POLL_SEC)
                 continue
 
@@ -324,7 +324,7 @@ async def stream_logs(
                 yield format_sse_event(
                     cursor, "logs", {"items": [i.model_dump() for i in items]}
                 )
-                # 一批打满说明还有积压，立即继续拉
+                # A full batch means there's a backlog; fetch again at once
                 if len(items) >= LOGS_SSE_BATCH_LIMIT:
                     continue
             else:
@@ -353,8 +353,8 @@ def clear_logs(db: Session = Depends(get_db)):
 
 @router.get("/meta")
 def logs_meta(
-    domain: str = Query("all", description="日志域: all/business/infra"),
-    since: str = Query("", description="起始时间 ISO 格式"),
+    domain: str = Query("all", description="Log domain: all/business/infra"),
+    since: str = Query("", description="Start time, ISO format"),
     db: Session = Depends(get_db),
 ):
     query = db.query(LogEntry)

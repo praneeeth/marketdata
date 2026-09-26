@@ -32,14 +32,14 @@ def test_context_snapshot_versions_increment_and_keep_messages_unchanged():
     engine, session = _session()
     service = AssistantService(AssistantRepository(session))
     conversation = service.create_conversation(CreateConversationCommand())
-    service.record_user_message(conversation.id, "保留这个目标")
+    service.record_user_message(conversation.id, "keep this goal")
     original = [row.content for row in service._repository.list_messages(conversation.id)]
 
     repo = service._repository
     first = repo.save_context_snapshot(
         conversation.id,
         mode=ContextCompressionMode.BALANCED,
-        summary=ContextSummary(goal=["保留这个目标"]),
+        summary=ContextSummary(goal=["keep this goal"]),
         covered_until_message_id=1,
         source_message_count=1,
         usage_before=_usage(9000),
@@ -48,7 +48,7 @@ def test_context_snapshot_versions_increment_and_keep_messages_unchanged():
     second = repo.save_context_snapshot(
         conversation.id,
         mode=ContextCompressionMode.PRESERVE_DETAILS,
-        summary=ContextSummary(goal=["保留这个目标", "继续分析"]),
+        summary=ContextSummary(goal=["keep this goal", "continue the analysis"]),
         covered_until_message_id=2,
         source_message_count=2,
         usage_before=_usage(10000),

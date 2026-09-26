@@ -9,7 +9,7 @@ from src.platform.marketdata.models import MarketCode
 
 
 def test_market_get_retries_and_logs_source(monkeypatch, caplog):
-    """market_get 失败应退避重试,并在日志带上 [src=...] 调用来源。"""
+    """market_get retries with backoff on failure and logs the [src=...] caller."""
     calls = {"n": 0}
 
     class _FakeClient:
@@ -32,11 +32,11 @@ def test_market_get_retries_and_logs_source(monkeypatch, caplog):
     with caplog.at_level(logging.WARNING):
         with market_http.fetch_source("unit_src"):
             out = market_http.market_get(
-                "http://x", host_key="x", retries=2, log_label="测试"
+                "http://x", host_key="x", retries=2, log_label="test"
             )
 
     assert out is None
-    assert calls["n"] == 3, f"应 1 次 + 重试 2 次 = 3 次,实际 {calls['n']}"
+    assert calls["n"] == 3, f"should be 1 call + 2 retries = 3, got {calls['n']}"
     assert any(
         "[src=unit_src]" in r.getMessage() for r in caplog.records
     ), caplog.text

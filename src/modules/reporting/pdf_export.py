@@ -1,10 +1,10 @@
-"""详情报告导出 PDF —— HTML 保真排版。
+"""Export a detailed report to PDF, with faithful HTML layout.
 
-markdown → HTML(python-markdown)→ PDF。
-- 主引擎 **WeasyPrint**:真 CSS 排版引擎,自动换行/分页/页码,中文走系统字体,排版接近网页。
-- WeasyPrint 不可用(缺系统库 pango 等)时回退 **xhtml2pdf**(纯库、排版朴素但保底,
-  中文用 reportlab 内置 STSong-Light CID 字体)。
-(Chromium/page.pdf 可作为将来更高保真的备选,但需安装浏览器,这里不默认依赖。)
+markdown -> HTML (python-markdown) -> PDF.
+- Main engine **WeasyPrint**: a real CSS layout engine with wrapping, pagination and page numbers; uses system fonts; close to the web page.
+- Falls back to **xhtml2pdf** when WeasyPrint is unavailable (missing system libraries such as pango): pure Python, plainer layout but always works
+  (CJK text, if any, uses reportlab's built-in STSong-Light CID font).
+(Chromium/page.pdf could give higher fidelity later, but needs a browser installed, so it isn't a default dependency.)
 """
 
 from __future__ import annotations
@@ -20,7 +20,7 @@ from src.platform.compliance import LONG_DISCLAIMER, ensure_guarded, guard_title
 logger = logging.getLogger(__name__)
 
 
-# ---- WeasyPrint(主)----
+# ---- WeasyPrint (main) ----
 
 _REPORT_CSS = """
 @page {
@@ -62,14 +62,14 @@ def _render_weasyprint(title: str, body_html: str) -> bytes:
 
     doc = (
         '<html><head><meta charset="utf-8"><style>' + _REPORT_CSS + "</style></head><body>"
-        + f'<div class="doc-title">{escape((title or "深度分析").strip())}</div>'
+        + f'<div class="doc-title">{escape((title or "Deep research").strip())}</div>'
         + body_html
         + "</body></html>"
     )
     return HTML(string=doc).write_pdf()
 
 
-# ---- xhtml2pdf(回退,纯库无系统依赖)----
+# ---- xhtml2pdf (fallback; pure Python, no system dependencies) ----
 
 _FALLBACK_CSS = """
 @page { size: A4; margin: 1.6cm 1.5cm; }
@@ -106,18 +106,18 @@ def _render_xhtml2pdf(title: str, body_html: str) -> bytes:
 
 
 _ANALYST_SECTIONS = [
-    ("market", "技术分析师"),
-    ("social", "情绪分析师"),
-    ("news", "新闻分析师"),
-    ("fundamentals", "基本面分析师"),
+    ("market", "Technical analyst"),
+    ("social", "Sentiment analyst"),
+    ("news", "News analyst"),
+    ("fundamentals", "Fundamentals analyst"),
 ]
 
 
 def assemble_report_markdown(raw_data: dict) -> str:
-    """从 raw_data 拼出与详情页(buildAnalysisSections)同款分节的完整报告 markdown。
+    """Build the full report markdown from raw_data, with the same sections as the details page (buildAnalysisSections).
 
-    顺序对齐详情页:决策摘要 → PM 决策书(+交易员)→ 4 分析师全文 → 看多看空辩论全文(+研究主管裁决)
-    → 风控辩论全文(+风控裁决)。比 `content` 字段更全(content 省略了 4 分析师与辩论全文)。
+    Same order as the details page: decision summary -> PM decision (+ trader) -> the 4 analysts in full -> bull/bear debate in full (+ research manager's ruling)
+    -> risk debate in full (+ risk ruling). Fuller than the `content` field (which omits the 4 analysts and the debates).
     """
     rd = raw_data or {}
     if "suggestion" not in rd:
@@ -128,23 +128,23 @@ def assemble_report_markdown(raw_data: dict) -> str:
     risk = rd.get("risk_debate") or {}
     parts: list[str] = []
 
-    label = sug.get("action_label") or "持有"
+    label = sug.get("action_label") or "Hold"
     head = f"**{label}**"
     conf = sug.get("confidence")
     if conf is not None:
         try:
-            head += f" · 置信度 {float(conf):.1f}/10"
+            head += f" · confidence {float(conf):.1f}/10"
         except (TypeError, ValueError):
             pass
-    parts.append(f"## 最终决策\n\n{head}\n")
+    parts.append(f"## Final decision\n\n{head}\n")
 
     final_decision = (rd.get("final_decision") or "").strip()
     trader = (rd.get("trader_plan") or "").strip()
     if final_decision or trader:
         body = final_decision
         if trader:
-            body = (body + "\n\n" if body else "") + f"### 💼 交易员执行计划\n\n{trader}"
-        parts.append(f"## PM 最终决策书\n\n{body}\n")
+            body = (body + "\n\n" if body else "") + f"### 💼 Trader's plan\n\n{trader}"
+        parts.append(f"## PM decision\n\n{body}\n")
 
     for key, title in _ANALYST_SECTIONS:
         txt = (reports.get(key) or "").strip()
@@ -156,16 +156,16 @@ def assemble_report_markdown(raw_data: dict) -> str:
         seg = dh
         jd = (debate.get("judge_decision") or "").strip()
         if jd:
-            seg += f"\n\n### ⚖️ 研究主管裁决\n\n{jd}"
-        parts.append(f"## 看多看空辩论\n\n{seg}\n")
+            seg += f"\n\n### ⚖️ Research manager's ruling\n\n{jd}"
+        parts.append(f"## Bull vs bear debate\n\n{seg}\n")
 
     rh = (risk.get("history") or "").strip()
     rjd = (rd.get("risk_judgment") or risk.get("judge_decision") or "").strip()
     if rh or rjd:
         seg = rh
         if rjd:
-            seg += (("\n\n" if seg else "") + f"### 🛡️ 风控裁决\n\n{rjd}")
-        parts.append(f"## 风控辩论\n\n{seg}\n")
+            seg += (("\n\n" if seg else "") + f"### 🛡️ Risk ruling\n\n{rjd}")
+        parts.append(f"## Risk debate\n\n{seg}\n")
 
     return "\n".join(parts).strip()
 
@@ -197,12 +197,12 @@ def _assemble_research_markdown(rd: dict) -> str:
 
 
 def render_analysis_pdf(title: str, markdown_text: str) -> bytes:
-    """分析报告 markdown → PDF 字节(中文矢量、可复制)。WeasyPrint 优先,失败回退 xhtml2pdf。"""
+    """Analysis report markdown -> PDF bytes (vector text, copyable). WeasyPrint first, falling back to xhtml2pdf."""
     title = guard_title(title, surface="pdf_title", fallback="Deep research")
     markdown_text = ensure_guarded(markdown_text, surface="pdf")
     body_html = _md_to_html(markdown_text)
     try:
         return _render_weasyprint(title, body_html)
-    except Exception as e:  # WeasyPrint 缺系统库/渲染异常 → 保底
-        logger.warning("[PDF导出] WeasyPrint 不可用,回退 xhtml2pdf: %s", e)
+    except Exception as e:  # WeasyPrint missing system libraries / render error -> fallback
+        logger.warning("[PDF export] WeasyPrint unavailable; falling back to xhtml2pdf: %s", e)
         return _render_xhtml2pdf(title, body_html)

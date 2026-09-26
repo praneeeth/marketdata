@@ -1,4 +1,4 @@
-"""公告利好利空解读(Phase B)。"""
+"""Announcement positive/negative analysis (Phase B)."""
 
 from __future__ import annotations
 
@@ -17,28 +17,28 @@ class _FakeAIClient:
 
 
 def test_parse_tone():
-    """利好/利空/中性 解析(子串安全)。"""
-    assert insights._parse_tone("利好,业绩超预期") == "利好"
-    assert insights._parse_tone("偏利空") == "利空"
-    assert insights._parse_tone("影响中性") == "中性"
-    assert insights._parse_tone("看不出") == "中性"
+    """Positive/negative/neutral parsing (substring-safe)."""
+    assert insights._parse_tone("positive, results beat estimates") == "Positive"
+    assert insights._parse_tone("Mostly negative") == "Negative"
+    assert insights._parse_tone("neutral impact") == "Neutral"
+    assert insights._parse_tone("unclear") == "Neutral"
 
 
 def test_announcement_eval_maps_tone_per_item(monkeypatch):
-    """逐条公告映射 AI 判定的利好/利空。"""
+    """Each announcement maps to the AI's positive/negative verdict."""
     insights._ANN_CACHE.clear()
 
     async def fake_fetch(symbol, name, limit=5):
         return [
-            {"title": "中标重大项目", "time": "2026-06-18 09:00", "content": ""},
-            {"title": "股东拟减持", "time": "2026-06-17 16:00", "content": ""},
+            {"title": "Wins a major order", "time": "2026-06-18 09:00", "content": ""},
+            {"title": "Promoter plans stake sale", "time": "2026-06-17 16:00", "content": ""},
         ]
 
     monkeypatch.setattr(insights, "_fetch_recent_announcements", fake_fetch)
     monkeypatch.setattr(
         insights,
             "get_configured_failover_client",
-        lambda db, mid=None: _FakeAIClient("1|利好|中标利好业绩\n2|利空|减持承压"),
+        lambda db, mid=None: _FakeAIClient("1|positive|order win supports earnings\n2|negative|stake sale weighs"),
     )
 
     req = insights.AnnouncementEvalRequest(symbol="600519", market="IN")
@@ -49,12 +49,12 @@ def test_announcement_eval_maps_tone_per_item(monkeypatch):
         db.close()
 
     assert len(res["items"]) == 2
-    assert res["items"][0]["tone"] == "利好"
-    assert res["items"][1]["tone"] == "利空"
+    assert res["items"][0]["tone"] == "Positive"
+    assert res["items"][1]["tone"] == "Negative"
 
 
 def test_announcement_eval_empty(monkeypatch):
-    """无公告时返回空列表,不调 AI。"""
+    """No announcements returns an empty list without calling the AI."""
     insights._ANN_CACHE.clear()
 
     async def fake_fetch(symbol, name, limit=5):

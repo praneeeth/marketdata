@@ -1,13 +1,13 @@
-"""A 股交易成本模型 —— 回测(Phase 0)与模拟盘(Phase 1)共用。
+"""Trading cost model, shared by back-tests (Phase 0) and the simulation (Phase 1).
 
-成本口径(2023-08-28 印花税下调后):
-- 印花税:**卖出单边** 0.05%(万 5)
-- 佣金:双边,默认万 2.5,单笔最低 5 元
-- 过户费:双边,成交额 0.001%(沪深统一,2022-04 起)
-- 滑点:可配置基点(默认 5bps),买入价上滑 / 卖出价下滑,模拟冲击成本
+The parameters are inherited from China A-shares (after the 2023-08-28 stamp-duty cut) and are not yet calibrated to Indian STT/brokerage:
+- stamp duty: **sell side only** 0.05%
+- commission: both sides, default 0.025%, minimum 5 per trade
+- transfer fee: both sides, 0.001% of turnover
+- slippage: configurable basis points (default 5bps); buy price up / sell price down, modelling impact cost
 
-滑点体现在实际成交价(fill_price),不重复计入显式规费;显式规费 = 佣金+印花税+过户费。
-现金变动(cash_delta)= 买入为负、卖出为正,已扣全部成本与滑点,PnL 由买卖两腿 cash_delta 相加得出。
+Slippage shows up in the actual fill price (fill_price) and isn't counted again in explicit fees; explicit fees = commission + stamp duty + transfer fee.
+Cash change (cash_delta) is negative for buys and positive for sells, after all costs and slippage; P&L is the sum of both legs' cash_delta.
 """
 
 from __future__ import annotations
@@ -17,35 +17,35 @@ from dataclasses import dataclass
 
 @dataclass(frozen=True)
 class CostConfig:
-    """成本参数(可配置;默认值贴近 A 股散户实际)。"""
+    """Cost parameters (configurable; defaults inherited from A-share retail trading)."""
 
-    commission_rate: float = 0.00025   # 佣金费率(双边)万 2.5
-    min_commission: float = 5.0        # 单笔最低佣金(元)
-    stamp_duty_rate: float = 0.0005    # 印花税(仅卖出)万 5
-    transfer_fee_rate: float = 0.00001  # 过户费(双边)十万分之 1
-    slippage_bps: float = 5.0          # 滑点(基点,双边;5bps = 0.05%)
+    commission_rate: float = 0.00025   # commission rate (both sides) 0.025%
+    min_commission: float = 5.0        # minimum commission per trade
+    stamp_duty_rate: float = 0.0005    # stamp duty (sell only) 0.05%
+    transfer_fee_rate: float = 0.00001  # transfer fee (both sides) 0.001%
+    slippage_bps: float = 5.0          # slippage (basis points, both sides; 5bps = 0.05%)
 
 
 @dataclass(frozen=True)
 class Fill:
-    """一次成交的净结果(含成本拆解,便于展示与审计)。"""
+    """Net result of one fill (with the cost breakdown, for display and audit)."""
 
     side: str            # "buy" | "sell"
-    price: float         # 名义价(信号/行情价,未含滑点)
-    fill_price: float    # 实际成交价(含滑点)
+    price: float         # nominal price (signal/quote price, before slippage)
+    fill_price: float    # actual fill price (with slippage)
     quantity: int
-    gross: float         # 实际成交额 = fill_price * quantity
+    gross: float         # actual turnover = fill_price * quantity
     commission: float
     stamp_duty: float
     transfer_fee: float
-    slippage_cost: float  # 滑点损耗 = |fill_price - price| * quantity(仅展示)
-    explicit_fees: float  # 显式规费 = commission + stamp_duty + transfer_fee
-    friction: float       # 总摩擦 = explicit_fees + slippage_cost(仅展示)
-    cash_delta: float     # 现金变动:buy 为负,sell 为正(已扣显式规费;滑点含在 fill_price)
+    slippage_cost: float  # slippage loss = |fill_price - price| * quantity (display only)
+    explicit_fees: float  # explicit fees = commission + stamp_duty + transfer_fee
+    friction: float       # total friction = explicit_fees + slippage_cost (display only)
+    cash_delta: float     # cash change: negative for buy, positive for sell (after explicit fees; slippage is in fill_price)
 
 
 class CostModel:
-    """A 股交易成本计算器。线程无关,可全局复用。"""
+    """Trading cost calculator. Thread-agnostic; safe to share globally."""
 
     def __init__(self, config: CostConfig | None = None) -> None:
         self.cfg = config or CostConfig()
@@ -55,19 +55,19 @@ class CostModel:
         return price + adj if side == "buy" else max(0.0, price - adj)
 
     def fill(self, side: str, price: float, quantity: int) -> Fill:
-        """计算一笔成交的成本与现金变动。
+        """Cost and cash change of one fill.
 
         Args:
-            side: "buy" 或 "sell"
-            price: 名义价(未含滑点)
-            quantity: 股数(正整数)
+            side: "buy" or "sell"
+            price: nominal price (before slippage)
+            quantity: number of shares (positive integer)
         """
         side = (side or "").strip().lower()
         if side not in ("buy", "sell"):
-            raise ValueError(f"side 必须是 buy/sell,得到 {side!r}")
+            raise ValueError(f"side must be buy/sell, got {side!r}")
         qty = int(quantity)
         if qty <= 0 or price <= 0:
-            raise ValueError(f"price/quantity 必须为正,得到 price={price} qty={quantity}")
+            raise ValueError(f"price/quantity must be positive, got price={price} qty={quantity}")
 
         fill_price = self._apply_slippage(price, side)
         gross = fill_price * qty
@@ -100,10 +100,10 @@ class CostModel:
     def round_trip_pnl(
         self, entry_price: float, exit_price: float, quantity: int
     ) -> dict:
-        """一买一卖的完整盈亏(扣全部成本)。便于单笔回测与对账。"""
+        """P&L of one buy and one sell (after all costs). Handy for single-trade back-tests and reconciliation."""
         buy = self.fill("buy", entry_price, quantity)
         sell = self.fill("sell", exit_price, quantity)
-        # 现金口径:买入流出 -cash_delta(正数),卖出流入 cash_delta
+        # Cash basis: buy outflow is -cash_delta (positive), sell inflow is cash_delta
         invested = -buy.cash_delta
         proceeds = sell.cash_delta
         pnl = proceeds - invested
@@ -123,5 +123,5 @@ class CostModel:
         }
 
 
-# 全局默认实例(可被覆盖配置)
+# Global default instance (config can be overridden)
 DEFAULT_COST_MODEL = CostModel()

@@ -1,4 +1,4 @@
-"""模拟盘 API 端点。"""
+"""Simulation API endpoints."""
 
 import logging
 from datetime import datetime, timezone
@@ -51,9 +51,9 @@ class ToggleBody(BaseModel):
 
 
 class UpdateSettingsBody(BaseModel):
-    excluded_markets: list[str] | None = None  # 兼容旧字段
+    excluded_markets: list[str] | None = None  # old field, kept for compatibility
     market_allocations: dict[str, float] | None = None  # {"IN": 1.0}; total <= 1
-    initial_capital: float | None = None  # 总资金（>0 时按差额增/减资）
+    initial_capital: float | None = None  # total capital (>0: add/withdraw the difference)
 
 
 def _serialize_account_dict(
@@ -99,7 +99,7 @@ def _serialize_account_dict(
 def _build_equity_curve(
     db: Session, acc: PaperTradingAccount, market: str | None
 ) -> tuple[list[dict], float, float]:
-    """构建收益曲线，返回 (curve, peak, max_drawdown_pct)。market=None 为全市场。"""
+    """Build the return curve; returns (curve, peak, max_drawdown_pct). market=None means all markets."""
     ratio = market_allocations_or_default(acc).get(market, 0.0) if market else 1.0
     base = acc.initial_capital * ratio if market else acc.initial_capital
 
@@ -171,7 +171,7 @@ def _build_equity_curve(
 
 
 def _account_summary(db: Session, acc: PaperTradingAccount, market: str | None) -> dict:
-    """账户汇总。market=None 为全账户（沿用引擎维护的回撤）；否则按该市场子池口径。"""
+    """Account summary. market=None is the whole account (using the engine's drawdown); otherwise that market's sub-pool."""
     if not market or market not in ALL_MARKETS:
         open_positions = (
             db.query(PaperTradingPosition)
@@ -236,7 +236,7 @@ def _account_summary(db: Session, acc: PaperTradingAccount, market: str | None) 
 
 
 def _strategy_performance(db: Session, market: str | None) -> list[dict]:
-    """按策略聚合绩效（已平仓 + 持仓中），可按市场过滤。"""
+    """Performance by strategy (closed + open), optionally filtered by market."""
     tq = db.query(PaperTradingTrade)
     if market:
         tq = tq.filter(PaperTradingTrade.stock_market == market)
@@ -420,13 +420,13 @@ def get_metrics(market: str | None = None, db: Session = Depends(get_db)):
 
 @router.get("/diagnostics")
 def get_diagnostics():
-    """组合诊断(只读):集中度/市场与策略分布/风险提示。"""
+    """Portfolio diagnostics (read-only): concentration / market and strategy split / risk notes."""
     return diagnose_paper_portfolio()
 
 
 @router.get("/backends")
 def get_backends():
-    """可用回测后端探测(builtin 永远可用;vectorbt/rqalpha/qlib 视安装情况)。"""
+    """Detect available back-test backends (builtin always; vectorbt/rqalpha/qlib if installed)."""
     return available_backends()
 
 
@@ -437,7 +437,7 @@ def get_backends():
 def toggle_account(body: ToggleBody, db: Session = Depends(get_db)):
     acc = db.query(PaperTradingAccount).first()
     if not acc:
-        raise HTTPException(404, "模拟盘账户不存在")
+        raise HTTPException(404, "Simulation account not found")
     acc.enabled = body.enabled
     db.commit()
     db.refresh(acc)
@@ -448,7 +448,7 @@ def toggle_account(body: ToggleBody, db: Session = Depends(get_db)):
 def reset_account():
     result = ENGINE.reset_account()
     if not result.get("ok"):
-        raise HTTPException(500, "重置失败")
+        raise HTTPException(500, "Reset failed")
     return {"ok": True}
 
 
@@ -456,7 +456,7 @@ def reset_account():
 async def close_position(position_id: int):
     result = await ENGINE.close_position_manual_async(position_id)
     if not result.get("ok"):
-        raise HTTPException(400, result.get("error", "平仓失败"))
+        raise HTTPException(400, result.get("error", "Close failed"))
     return {"ok": True}
 
 
@@ -464,15 +464,15 @@ async def close_position(position_id: int):
 def update_settings(body: UpdateSettingsBody, db: Session = Depends(get_db)):
     acc = db.query(PaperTradingAccount).first()
     if not acc:
-        raise HTTPException(404, "模拟盘账户不存在")
+        raise HTTPException(404, "Simulation account not found")
 
     if body.market_allocations is not None:
         alloc = normalize_allocations(body.market_allocations)
         total = sum(alloc.values())
         if total > 1.0 + 1e-9:
-            raise HTTPException(400, f"投资比例合计不能超过 100%（当前 {round(total * 100)}%）")
+            raise HTTPException(400, f"Investment ratios can't add up to more than 100% (currently {round(total * 100)}%)")
         acc.market_allocations = alloc
-        # 同步派生 excluded_markets（比例 0 即排除），兼容旧读取
+        # Derive excluded_markets too (ratio 0 = excluded), for old readers
         acc.excluded_markets = [m for m in ALL_MARKETS if alloc.get(m, 0.0) <= 0]
     elif body.excluded_markets is not None:
         valid = {"IN"}
@@ -495,13 +495,13 @@ def update_settings(body: UpdateSettingsBody, db: Session = Depends(get_db)):
     dependencies=[Depends(feature_gate(Feature.AI_PAPER_TRADING))],
 )
 async def manual_scan():
-    """手动触发一次模拟盘扫描（建仓 + 平仓检查）。"""
+    """Run one simulation scan manually (entries + exit checks)."""
     result = await ENGINE.scan_once()
     return result
 
 
 # ---------------------------------------------------------------------------
-# 跟单通知设置
+# Simulation notification settings
 # ---------------------------------------------------------------------------
 
 _NOTIFY_KEYS = [
@@ -523,7 +523,7 @@ _NOTIFY_DEFAULTS = {
 
 @router.get("/notify-settings")
 def get_notify_settings(db: Session = Depends(get_db)):
-    """返回当前通知配置 + 可用渠道列表。"""
+    """Current notification config + available channels."""
     rows = db.query(AppSettings).filter(AppSettings.key.in_(_NOTIFY_KEYS)).all()
     settings = dict(_NOTIFY_DEFAULTS)
     for r in rows:
@@ -551,14 +551,14 @@ class NotifySettingsBody(BaseModel):
     dependencies=[Depends(feature_gate(Feature.AI_PAPER_TRADING))],
 )
 def update_notify_settings(body: NotifySettingsBody, db: Session = Depends(get_db)):
-    """更新通知配置。"""
+    """Update the notification config."""
     updates = {k: v for k, v in body.model_dump().items() if v is not None}
     for key, value in updates.items():
         row = db.query(AppSettings).filter(AppSettings.key == key).first()
         if row:
             row.value = value
         else:
-            db.add(AppSettings(key=key, value=value, description=f"模拟盘通知配置: {key}"))
+            db.add(AppSettings(key=key, value=value, description=f"Simulation notification config: {key}"))
     db.commit()
     return get_notify_settings(db)
 
@@ -568,11 +568,11 @@ def update_notify_settings(body: NotifySettingsBody, db: Session = Depends(get_d
     dependencies=[Depends(feature_gate(Feature.AI_PAPER_TRADING))],
 )
 async def test_notify():
-    """发送测试通知。"""
+    """Send a test notification."""
     from src.modules.paper_trading.paper_trading_notifier import send_test_notification
     result = await send_test_notification()
     if not result.get("success"):
-        raise HTTPException(400, result.get("error", "发送失败"))
+        raise HTTPException(400, result.get("error", "Send failed"))
     return {"ok": True}
 
 
@@ -581,7 +581,7 @@ async def test_notify():
     dependencies=[Depends(feature_gate(Feature.AI_PAPER_TRADING))],
 )
 async def trigger_premarket_plan():
-    """手动触发盘前计划通知。"""
+    """Send the pre-market plan notification manually."""
     from src.modules.paper_trading.paper_trading_notifier import send_premarket_plan
     await send_premarket_plan()
     return {"ok": True}
@@ -592,7 +592,7 @@ async def trigger_premarket_plan():
     dependencies=[Depends(feature_gate(Feature.AI_PAPER_TRADING))],
 )
 async def trigger_daily_summary():
-    """手动触发日终摘要通知。"""
+    """Send the end-of-day summary notification manually."""
     from src.modules.paper_trading.paper_trading_notifier import send_daily_summary
     await send_daily_summary()
     return {"ok": True}

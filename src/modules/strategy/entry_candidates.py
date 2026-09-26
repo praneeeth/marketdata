@@ -39,29 +39,29 @@ ACTION_BASE_SCORE: dict[str, float] = {
 }
 
 AGENT_LABELS: dict[str, str] = {
-    "premarket_outlook": "盘前分析",
-    "intraday_monitor": "盘中监测",
-    "daily_report": "收盘复盘",
-    "news_digest": "新闻速递",
-    "market_scan": "市场扫描",
+    "premarket_outlook": "Pre-market outlook",
+    "intraday_monitor": "Intraday monitor",
+    "daily_report": "Daily close report",
+    "news_digest": "News digest",
+    "market_scan": "Market scan",
 }
 
 
 CANDIDATE_SOURCE_LABELS: dict[str, str] = {
-    "watchlist": "关注池",
-    "market_scan": "市场池",
-    "mixed": "市场+关注",
+    "watchlist": "Watchlist",
+    "market_scan": "Market pool",
+    "mixed": "Market + watchlist",
 }
 
 
 STRATEGY_LABELS: dict[str, str] = {
-    "trend_follow": "趋势延续",
-    "macd_golden": "MACD金叉",
-    "volume_breakout": "放量突破",
-    "momentum": "动量强化",
-    "pullback": "回踩确认",
-    "rebound": "超跌反弹",
-    "watchlist_agent": "Agent建议",
+    "trend_follow": "Trend continuation",
+    "macd_golden": "MACD golden cross",
+    "volume_breakout": "Volume breakout",
+    "momentum": "Momentum",
+    "pullback": "Pullback confirmation",
+    "rebound": "Oversold rebound",
+    "watchlist_agent": "Agent item",
 }
 
 MARKET_SCAN_SEED_SYMBOLS: dict[str, list[str]] = {
@@ -343,68 +343,68 @@ def _score_suggestion(
     evidence: list[str] = []
 
     if suggestion.signal:
-        evidence.append(f"建议信号: {suggestion.signal}")
+        evidence.append(f"Signal: {suggestion.signal}")
     if suggestion.reason:
-        evidence.append(f"建议依据: {suggestion.reason}")
+        evidence.append(f"Reason: {suggestion.reason}")
 
     if quote:
         pct = _safe_float(quote.get("change_pct"))
         if pct is not None:
             if 0.5 <= abs(pct) <= 6:
                 score += 2
-                evidence.append(f"当日波动适中({pct:+.2f}%)")
+                evidence.append(f"Moderate move today ({pct:+.2f}%)")
             elif abs(pct) >= 10:
                 score -= 3
-                evidence.append(f"当日波动过大({pct:+.2f}%)")
+                evidence.append(f"Large move today ({pct:+.2f}%)")
 
     if kline:
         trend = (kline.get("trend") or "").strip()
-        if trend == "多头排列":
+        if trend == "bullish alignment":
             score += 8
-            evidence.append("均线多头排列")
-        elif trend == "空头排列":
+            evidence.append("Bullish MA alignment")
+        elif trend == "bearish alignment":
             score -= 8
-            evidence.append("均线空头排列")
+            evidence.append("Bearish MA alignment")
 
         macd = (kline.get("macd_cross") or "").strip()
-        if macd == "金叉":
+        if macd == "golden cross":
             score += 5
-            evidence.append("MACD 金叉")
-        elif macd == "死叉":
+            evidence.append("MACD golden cross")
+        elif macd == "death cross":
             score -= 5
-            evidence.append("MACD 死叉")
+            evidence.append("MACD death cross")
 
         rsi_status = (kline.get("rsi_status") or "").strip()
-        if rsi_status in ("超卖", "偏弱"):
+        if rsi_status in ("oversold", "weak"):
             score += 2
             evidence.append(f"RSI {rsi_status}")
-        elif rsi_status in ("超买",):
+        elif rsi_status in ("overbought",):
             score -= 3
             evidence.append(f"RSI {rsi_status}")
 
         kdj_status = (kline.get("kdj_status") or "").strip()
-        if "金叉" in kdj_status:
+        if "golden cross" in kdj_status:
             score += 3
-            evidence.append("KDJ 金叉")
-        elif "死叉" in kdj_status:
+            evidence.append("KDJ golden cross")
+        elif "death cross" in kdj_status:
             score -= 3
-            evidence.append("KDJ 死叉")
+            evidence.append("KDJ death cross")
 
         vol_ratio = _safe_float(kline.get("volume_ratio"))
         if vol_ratio is not None:
             if vol_ratio >= 2:
                 score += 4
-                evidence.append(f"量比放大({vol_ratio:.1f}x)")
+                evidence.append(f"Volume ratio up ({vol_ratio:.1f}x)")
             elif vol_ratio >= 1.3:
                 score += 2
-                evidence.append(f"量比温和放大({vol_ratio:.1f}x)")
+                evidence.append(f"Volume ratio slightly up ({vol_ratio:.1f}x)")
 
     q = suggestion.meta or {}
     quality = _safe_float((q.get("context_quality_score") if isinstance(q, dict) else None))
     if quality is not None:
         quality_bonus = _clamp((quality - 60.0) / 10.0, -3.0, 5.0)
         score += quality_bonus
-        evidence.append(f"上下文质量分 {quality:.0f}")
+        evidence.append(f"Context quality {quality:.0f}")
 
     created_at = suggestion.created_at
     if created_at:
@@ -414,10 +414,10 @@ def _score_suggestion(
             hours = (utc_now() - created_at).total_seconds() / 3600.0
             if hours <= 6:
                 score += 3
-                evidence.append("建议新鲜度高(6h内)")
+                evidence.append("Fresh item (within 6h)")
             elif hours >= 48:
                 score -= 3
-                evidence.append("建议时效偏旧(48h+)")
+                evidence.append("Stale item (48h+)")
         except Exception:
             pass
 
@@ -473,13 +473,13 @@ def _build_plan(
                 target_price = resistance * 0.99
             else:
                 target_price = price * 1.06
-            invalidation = f"若跌破 {stop_loss:.2f} 则失效"
+            invalidation = f"Invalid below {stop_loss:.2f}"
         elif action in ("hold", "watch"):
             stop_loss = (support * 0.98) if support else (price * 0.94)
             target_price = (resistance * 0.99) if resistance else (price * 1.04)
-            invalidation = f"若跌破 {stop_loss:.2f} 则转防守"
+            invalidation = f"Turns defensive below {stop_loss:.2f}"
         else:
-            invalidation = "当前以风险控制为主，不建议新开仓"
+            invalidation = "Risk control first; no new position suggested"
 
     return {
         "entry_low": entry_low,
@@ -581,19 +581,19 @@ def _derive_market_scan_decision(quote: dict | None, kline: dict | None) -> dict
     reasons: list[str] = []
 
     trend = (k.get("trend") or "").strip()
-    if trend == "多头排列":
+    if trend == "bullish alignment":
         points += 2
         tags.append("trend_follow")
-        reasons.append("均线多头排列")
-    elif trend == "空头排列":
+        reasons.append("Bullish MA alignment")
+    elif trend == "bearish alignment":
         points -= 2
 
     macd = (k.get("macd_cross") or "").strip()
-    if macd == "金叉":
+    if macd == "golden cross":
         points += 2
         tags.append("macd_golden")
-        reasons.append("MACD金叉")
-    elif macd == "死叉":
+        reasons.append("MACD golden cross")
+    elif macd == "death cross":
         points -= 2
 
     vol_ratio = _safe_float(k.get("volume_ratio"))
@@ -601,7 +601,7 @@ def _derive_market_scan_decision(quote: dict | None, kline: dict | None) -> dict
         if vol_ratio >= 1.8:
             points += 1
             tags.append("volume_breakout")
-            reasons.append(f"放量({vol_ratio:.1f}x)")
+            reasons.append(f"Volume up ({vol_ratio:.1f}x)")
         elif vol_ratio <= 0.7:
             points -= 1
 
@@ -610,35 +610,35 @@ def _derive_market_scan_decision(quote: dict | None, kline: dict | None) -> dict
         if 1.5 <= pct <= 8.5:
             points += 1
             tags.append("momentum")
-            reasons.append(f"涨幅{pct:+.2f}%")
+            reasons.append(f"Up {pct:+.2f}%")
         elif pct >= 10.5:
             points -= 2
         elif pct <= -5.5:
             points += 1
             tags.append("rebound")
-            reasons.append("短线超跌")
+            reasons.append("Short-term oversold")
 
     support = _safe_float(k.get("support_m")) or _safe_float(k.get("support"))
     last_close = _safe_float(k.get("last_close")) or _safe_float(q.get("current_price"))
     if support and last_close and 0 < support < last_close <= support * 1.03:
         points += 1
         tags.append("pullback")
-        reasons.append("回踩支撑附近")
+        reasons.append("Pulled back near support")
 
     action = "watch"
-    action_label = "观望"
+    action_label = "Watch"
     if points >= 4:
         action = "buy"
-        action_label = "建仓"
+        action_label = "Open position"
     elif points >= 3:
         action = "add"
-        action_label = "准备加仓"
+        action_label = "Prepare to add"
     elif points <= -3:
         action = "avoid"
-        action_label = "回避"
+        action_label = "Avoid"
 
-    signal = "，".join(_strategy_labels(tags[:3])) if tags else "暂无明确信号"
-    reason = "，".join(reasons[:3]) if reasons else "等待更高确定性信号后介入"
+    signal = ", ".join(_strategy_labels(tags[:3])) if tags else "No clear signal"
+    reason = ", ".join(reasons[:3]) if reasons else "Wait for a higher-confidence signal"
     return {
         "action": action,
         "action_label": action_label,
@@ -661,32 +661,32 @@ def _score_market_scan_candidate(
 
     if tags:
         score += min(8, len(tags) * 2)
-        evidence.append("策略信号: " + " / ".join(_strategy_labels(tags[:3])))
+        evidence.append("Strategy signals: " + " / ".join(_strategy_labels(tags[:3])))
 
     pct = _safe_float(q.get("change_pct"))
     if pct is not None:
         if 1 <= pct <= 7:
             score += 2
-            evidence.append(f"价格动量({pct:+.2f}%)")
+            evidence.append(f"Price momentum ({pct:+.2f}%)")
         elif pct >= 10:
             score -= 3
-            evidence.append(f"涨幅过热({pct:+.2f}%)")
+            evidence.append(f"Overheated move ({pct:+.2f}%)")
 
     turnover = _safe_float(q.get("turnover"))
     if turnover is not None:
         if turnover >= 3e9:
             score += 3
-            evidence.append("成交额高")
+            evidence.append("High turnover")
         elif turnover >= 1e9:
             score += 1
 
     trend = (k.get("trend") or "").strip()
-    if trend == "多头排列":
+    if trend == "bullish alignment":
         score += 5
-        evidence.append("均线多头排列")
-    elif trend == "空头排列":
+        evidence.append("Bullish MA alignment")
+    elif trend == "bearish alignment":
         score -= 6
-        evidence.append("均线空头排列")
+        evidence.append("Bearish MA alignment")
 
     score = _clamp(score, 0.0, 100.0)
     return score, evidence[:8]
@@ -846,7 +846,7 @@ def _load_market_scan_seed_inputs(*, market: str, limit: int) -> dict[str, dict]
     try:
         rows = md_stock_data(symbols, _to_market(mkt).value)
     except Exception as e:
-        logger.warning(f"市场扫描种子池拉取失败({mkt}): {e}")
+        logger.warning(f"Market scan seed pool fetch failed ({mkt}): {e}")
         rows = []
     out: dict[str, dict] = {}
     for row in rows or []:
@@ -967,7 +967,7 @@ def _persist_market_scan_snapshot(snapshot: str, market_scan_map: dict[str, dict
         db.commit()
     except Exception as e:
         db.rollback()
-        logger.warning(f"写入市场池快照失败: {e}")
+        logger.warning(f"Failed to write the market pool snapshot: {e}")
     finally:
         db.close()
 
@@ -1093,7 +1093,7 @@ def refresh_entry_candidates(
             "source_trace_id": str((s.meta or {}).get("trace_id") or ""),
             "quote_seed": seed_quote,
             "action": (s.action or "watch").strip().lower(),
-            "action_label": (s.action_label or "观望").strip(),
+            "action_label": (s.action_label or "Watch").strip(),
             "signal": (s.signal or "").strip(),
             "reason": (s.reason or "").strip(),
             "meta": to_jsonable(s.meta or {}),
@@ -1137,7 +1137,7 @@ def refresh_entry_candidates(
         try:
             rows = md_stock_data(uniq, market.value)
         except Exception as e:
-            logger.warning(f"入场候选行情采集失败({market.value}): {e}")
+            logger.warning(f"Screening candidate quote fetch failed ({market.value}): {e}")
             rows = []
         for q in rows or []:
             quotes[f"{market.value}:{q.symbol}"] = {
@@ -1212,7 +1212,7 @@ def refresh_entry_candidates(
             strategy_tags: list[str] = list(inp.get("strategy_tags_seed") or [])
             if suggestion_obj is not None:
                 action = (inp.get("action") or "watch").strip().lower()
-                action_label = (inp.get("action_label") or "观望").strip()
+                action_label = (inp.get("action_label") or "Watch").strip()
                 signal = (inp.get("signal") or "").strip()
                 reason = (inp.get("reason") or "").strip()
                 score, evidence = _score_suggestion(
@@ -1221,9 +1221,9 @@ def refresh_entry_candidates(
                     quote=quote,
                     kline=kline,
                 )
-                if (kline.get("trend") or "").strip() == "多头排列":
+                if (kline.get("trend") or "").strip() == "bullish alignment":
                     strategy_tags.append("trend_follow")
-                if (kline.get("macd_cross") or "").strip() == "金叉":
+                if (kline.get("macd_cross") or "").strip() == "golden cross":
                     strategy_tags.append("macd_golden")
                 if (_safe_float(kline.get("volume_ratio")) or 0) >= 1.8:
                     strategy_tags.append("volume_breakout")
@@ -1232,7 +1232,7 @@ def refresh_entry_candidates(
                 decision = _derive_market_scan_decision(quote=quote, kline=kline)
                 if seeded_action in ACTION_BASE_SCORE:
                     action = seeded_action
-                    action_label = (inp.get("action_label") or decision.get("action_label") or "观望").strip()
+                    action_label = (inp.get("action_label") or decision.get("action_label") or "Watch").strip()
                     signal = (inp.get("signal") or decision.get("signal") or "").strip()
                     reason = (inp.get("reason") or decision.get("reason") or "").strip()
                     strategy_tags = list(
@@ -1263,10 +1263,10 @@ def refresh_entry_candidates(
 
             if is_holding and action == "buy":
                 action = "add"
-                action_label = "准备加仓"
+                action_label = "Prepare to add"
             if (not is_holding) and action == "add":
                 action = "buy"
-                action_label = "建仓"
+                action_label = "Open position"
 
             strategy_tags = list(dict.fromkeys([x for x in strategy_tags if x]))
             plan = _build_plan(
@@ -1344,7 +1344,7 @@ def refresh_entry_candidates(
         db.commit()
     except Exception as e:
         db.rollback()
-        logger.error(f"刷新入场候选失败: {e}")
+        logger.error(f"Failed to refresh screening candidates: {e}")
         raise
     finally:
         db.close()
@@ -1470,7 +1470,7 @@ def save_entry_candidate_feedback(
         return True
     except Exception as e:
         db.rollback()
-        logger.warning(f"保存候选反馈失败: {e}")
+        logger.warning(f"Failed to save candidate feedback: {e}")
         return False
     finally:
         db.close()
@@ -1520,7 +1520,7 @@ def evaluate_entry_candidate_outcomes(
 
         today = date.today()
         kline_cache: dict[tuple[str, str], list] = {}
-        pending = 0  # 分批提交计数,缩短写事务窗口
+        pending = 0  # batch commit counter, keeps write transactions short
 
         for c in candidates:
             snap_day = _parse_day(c.snapshot_date)
@@ -1618,7 +1618,7 @@ def evaluate_entry_candidate_outcomes(
                 existing.add((c.id, horizon))
                 pending += 1
 
-            # 分批提交:累计到阈值即落盘,缩短写事务,避免与 60s 调度器并发写长时间持锁
+            # Batch commit: flush at the threshold to keep write transactions short and avoid holding the lock against the 60s scheduler
             if pending >= 50:
                 db.commit()
                 pending = 0
@@ -1627,7 +1627,7 @@ def evaluate_entry_candidate_outcomes(
         return stats
     except Exception as e:
         db.rollback()
-        logger.warning(f"候选后验评估失败: {e}")
+        logger.warning(f"Candidate outcome evaluation failed: {e}")
         return stats
     finally:
         db.close()

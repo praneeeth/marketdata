@@ -43,7 +43,7 @@ def _repository():
 
 def _checkpoint() -> AgentCheckpoint:
     return AgentCheckpoint(
-        messages=[ModelMessage(role="user", content="创建提醒")],
+        messages=[ModelMessage(role="user", content="create an alert")],
         step_index=1,
         tool_calls_used=1,
         pending_approvals=[
@@ -110,17 +110,17 @@ def test_checkpoint_is_stored_as_a_versioned_envelope_with_task_metadata():
 def test_permission_resolution_uses_tool_then_risk_defaults_and_safety_floors():
     engine, session, repository, _task = _repository()
     write_tool = ToolSpec(
-        name="create_alert", title="提醒", description="write", risk=ToolRisk.WRITE
+        name="create_alert", title="Alert", description="write", risk=ToolRisk.WRITE
     )
     destructive = ToolSpec(
         name="delete_alert",
-        title="删除",
+        title="Delete",
         description="delete",
         risk=ToolRisk.DESTRUCTIVE,
     )
     confirmed = ToolSpec(
         name="export_report",
-        title="导出",
+        title="Export",
         description="export",
         risk=ToolRisk.READ,
         confirmation_required=True,
@@ -150,7 +150,7 @@ def test_service_builds_a_stable_policy_snapshot_for_one_runtime():
 
     engine, session, repository, _task = _repository()
     write_tool = ToolSpec(
-        name="create_alert", title="提醒", description="write", risk=ToolRisk.WRITE
+        name="create_alert", title="Alert", description="write", risk=ToolRisk.WRITE
     )
     repository.upsert_tool_permission(
         "local", "tool", "create_alert", PermissionMode.DENY
@@ -210,7 +210,7 @@ def test_repausing_a_partial_resume_reuses_existing_pending_approval_rows():
 
     engine, session, repository, task = _repository()
     checkpoint = AgentCheckpoint(
-        messages=[ModelMessage(role="user", content="创建两个提醒")],
+        messages=[ModelMessage(role="user", content="create two alerts")],
         step_index=1,
         tool_calls_used=2,
         pending_approvals=[
@@ -263,7 +263,7 @@ def test_service_returns_one_decision_for_immediate_resume_when_other_approvals_
 
     engine, session, repository, task = _repository()
     checkpoint = AgentCheckpoint(
-        messages=[ModelMessage(role="user", content="创建两个提醒")],
+        messages=[ModelMessage(role="user", content="create two alerts")],
         step_index=1,
         tool_calls_used=2,
         pending_approvals=[
@@ -305,7 +305,7 @@ def test_service_returns_one_decision_for_immediate_resume_when_other_approvals_
 def test_finishing_a_failed_task_cancels_unresolved_approval_cards():
     engine, session, repository, task = _repository()
     checkpoint = AgentCheckpoint(
-        messages=[ModelMessage(role="user", content="创建两个提醒")],
+        messages=[ModelMessage(role="user", content="create two alerts")],
         step_index=1,
         tool_calls_used=2,
         pending_approvals=[
@@ -348,7 +348,7 @@ def test_service_presents_price_alert_approval_in_plain_language():
 
     engine, session, repository, task = _repository()
     checkpoint = AgentCheckpoint(
-        messages=[ModelMessage(role="user", content="茅台涨到 1800 提醒我")],
+        messages=[ModelMessage(role="user", content="alert me when Infosys reaches 1800")],
         step_index=1,
         tool_calls_used=1,
         pending_approvals=[
@@ -357,8 +357,8 @@ def test_service_presents_price_alert_approval_in_plain_language():
                 tool_name="create_price_alert",
                 risk=ToolRisk.WRITE,
                 arguments={
-                    "symbol": "600519",
-                    "market": "CN",
+                    "symbol": "INFY",
+                    "market": "IN",
                     "direction": "above",
                     "target_price": 1800,
                     "cooldown_minutes": 30,
@@ -378,8 +378,8 @@ def test_service_presents_price_alert_approval_in_plain_language():
     )
 
     assert approvals[0].presentation == {
-        "tool_title": "创建价格提醒",
-        "summary": "为 CN:600519 创建价格 ≥ 1800 的盘中提醒，冷却 30 分钟。",
+        "tool_title": "Create price alert",
+        "summary": "Create an intraday alert for IN:INFY when the price goes ≥ 1800, with a 30-minute cooldown.",
     }
     session.close()
     engine.dispose()
@@ -414,12 +414,12 @@ def test_service_presents_update_and_delete_alert_approvals_with_effects():
     )
 
     assert update_presentation == {
-        "tool_title": "修改价格提醒",
-        "summary": "修改价格提醒 #7：目标价 ≤ 1700；停用。",
+        "tool_title": "Update price alert",
+        "summary": "Update price alert #7: target ≤ 1700; disable.",
     }
     assert delete_presentation == {
-        "tool_title": "删除价格提醒",
-        "summary": "删除价格提醒 #7 及其历史命中记录。",
+        "tool_title": "Delete price alert",
+        "summary": "Delete price alert #7 and its trigger history.",
     }
     session.close()
     engine.dispose()
@@ -452,7 +452,7 @@ def test_service_exposes_and_updates_tool_permission_settings_with_safety_floor(
         "mode": "allow",
     } in updated["overrides"]
 
-    with pytest.raises(ValueError, match="只能设为禁止"):
+    with pytest.raises(ValueError, match="can only be set to deny"):
         service.update_tool_permission(
             selector_kind="risk",
             selector_value="destructive",

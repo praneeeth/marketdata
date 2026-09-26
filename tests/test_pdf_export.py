@@ -1,4 +1,4 @@
-"""详情报告导出 PDF(后台直出:xhtml2pdf + reportlab STSong-Light 中文字体)。"""
+"""Export a detailed report to PDF (server-side: WeasyPrint, falling back to xhtml2pdf)."""
 
 from __future__ import annotations
 
@@ -6,11 +6,11 @@ import io
 
 
 def _weasyprint_renders() -> bool:
-    """WeasyPrint 能否真正渲染(需 pango 等系统库)。不可用时回退 xhtml2pdf,中文走 CID 字体不进文本层。"""
+    """Whether WeasyPrint can really render (needs system libraries such as pango). Otherwise xhtml2pdf is the fallback."""
     try:
         from weasyprint import HTML
 
-        HTML(string="<p>测试</p>").write_pdf()
+        HTML(string="<p>test</p>").write_pdf()
         return True
     except Exception:
         return False
@@ -19,58 +19,58 @@ def _weasyprint_renders() -> bool:
 _WEASY = _weasyprint_renders()
 
 
-def test_render_pdf_returns_valid_bytes_with_chinese():
-    """markdown→PDF:返回合法 PDF 字节,且中文进入文本层(非豆腐块、可复制)。"""
+def test_render_pdf_returns_valid_bytes_with_text():
+    """markdown -> PDF: returns valid PDF bytes, with the text in the text layer (copyable)."""
     from src.modules.reporting.pdf_export import render_analysis_pdf
 
-    md = "# 广汽集团(601238)深度分析\n\n**最终决策:持有**\n\n- 多头:业绩拐点确认\n- 空头:估值偏高"
-    data = render_analysis_pdf("【深度】广汽集团(601238):持有", md)
+    md = "# Tata Motors (TATAMOTORS) deep research\n\n**Final decision: Hold**\n\n- Bull: earnings turning point confirmed\n- Bear: valuation rich"
+    data = render_analysis_pdf("[Deep research] Tata Motors (TATAMOTORS): Hold", md)
     assert isinstance(data, (bytes, bytearray))
     assert bytes(data[:4]) == b"%PDF"
     assert len(data) > 1500
 
     if not _WEASY:
-        return  # xhtml2pdf 回退:中文走 STSong-Light CID,不进文本层;仅 WeasyPrint 路径保证可复制中文
+        return  # the xhtml2pdf fallback's text layer isn't checked here; only the WeasyPrint path guarantees copyable text
 
     from pypdf import PdfReader
 
     txt = PdfReader(io.BytesIO(bytes(data))).pages[0].extract_text() or ""
-    assert "广汽集团" in txt
-    assert "持有" in txt
+    assert "Tata Motors" in txt
+    assert "Hold" in txt
 
 
 def test_render_pdf_handles_empty_markdown():
-    """空正文也不崩,仍返回合法 PDF(至少有标题)。"""
+    """An empty body doesn't break; still returns a valid PDF (with at least the title)."""
     from src.modules.reporting.pdf_export import render_analysis_pdf
 
-    data = render_analysis_pdf("标题", "")
+    data = render_analysis_pdf("Title", "")
     assert bytes(data[:4]) == b"%PDF"
 
 
 def test_assemble_report_markdown_mirrors_detail_page_sections():
-    """从 raw_data 拼出的报告含详情页全部分节:PM/交易员/4分析师全文/多空辩论全文/风控辩论全文。"""
+    """The report built from raw_data has every section of the detail page: PM/trader/4 analysts in full/bull-bear debate in full/risk debate in full."""
     from src.modules.reporting.pdf_export import assemble_report_markdown
 
     raw = {
-        "suggestion": {"action_label": "持有", "confidence": 5.0},
-        "final_decision": "PM决策正文XYZ",
-        "trader_plan": "交易员计划正文XYZ",
+        "suggestion": {"action_label": "Hold", "confidence": 5.0},
+        "final_decision": "PM decision body XYZ",
+        "trader_plan": "Trader plan body XYZ",
         "analyst_reports": {
-            "market": "技术面分析正文XYZ", "social": "情绪面分析正文XYZ",
-            "news": "新闻面分析正文XYZ", "fundamentals": "基本面分析正文XYZ",
+            "market": "Technical analysis body XYZ", "social": "Sentiment analysis body XYZ",
+            "news": "News analysis body XYZ", "fundamentals": "Fundamentals analysis body XYZ",
         },
-        "debate_history": {"history": "多头观点AAA 空头观点BBB", "judge_decision": "研究主管裁决XYZ"},
-        "risk_debate": {"history": "激进CCC 保守DDD", "judge_decision": "风控裁决XYZ"},
+        "debate_history": {"history": "Bull view AAA Bear view BBB", "judge_decision": "Research manager ruling XYZ"},
+        "risk_debate": {"history": "Aggressive CCC Conservative DDD", "judge_decision": "Risk ruling XYZ"},
     }
     md = assemble_report_markdown(raw)
     for must in [
-        "PM决策正文XYZ", "交易员计划正文XYZ",
-        "技术面分析正文XYZ", "情绪面分析正文XYZ", "新闻面分析正文XYZ", "基本面分析正文XYZ",
-        "多头观点AAA", "空头观点BBB", "研究主管裁决XYZ",
-        "激进CCC", "风控裁决XYZ",
-        "技术分析师", "看多看空辩论", "风控辩论",
+        "PM decision body XYZ", "Trader plan body XYZ",
+        "Technical analysis body XYZ", "Sentiment analysis body XYZ", "News analysis body XYZ", "Fundamentals analysis body XYZ",
+        "Bull view AAA", "Bear view BBB", "Research manager ruling XYZ",
+        "Aggressive CCC", "Risk ruling XYZ",
+        "Technical analyst", "Bull vs bear debate", "Risk debate",
     ]:
-        assert must in md, f"缺少: {must}"
+        assert must in md, f"missing: {must}"
 
 
 def _mem_db():
@@ -86,47 +86,47 @@ def _mem_db():
 
 
 def test_pdf_endpoint_returns_full_detail_content():
-    """端点:返回 application/pdf 附件,且含详情页完整内容(分析师/辩论全文,来自 raw_data,非仅 content 摘要)。"""
+    """Endpoint: returns an application/pdf attachment with the full detail-page content (analyst/debate text from raw_data, not just the content summary)."""
     from src.modules.automation.api import agents
     from src.platform.persistence.models import AnalysisHistory
 
     db = _mem_db()
     try:
         db.add(AnalysisHistory(
-            agent_name="tradingagents", stock_symbol="601238",
-            analysis_date="2026-06-20", title="【深度】广汽集团(601238):持有",
-            content="# 摘要\n\n**持有**",  # content 是精简版,不含下面这些
+            agent_name="tradingagents", stock_symbol="TATAMOTORS",
+            analysis_date="2026-06-20", title="[Deep research] Tata Motors (TATAMOTORS): Hold",
+            content="# Summary\n\n**Hold**",  # content is the short version, without the text below
             raw_data={
-                "suggestion": {"action_label": "持有", "confidence": 5.0},
-                "final_decision": "PM决策正文",
-                "analyst_reports": {"market": "技术面分析正文UNIQUE", "fundamentals": "基本面正文"},
-                "debate_history": {"history": "多头观点UNIQUE 空头观点", "judge_decision": "研究主管裁决"},
-                "risk_debate": {"history": "激进 保守", "judge_decision": "风控裁决"},
+                "suggestion": {"action_label": "Hold", "confidence": 5.0},
+                "final_decision": "PM decision body",
+                "analyst_reports": {"market": "Technical analysis body UNIQUE", "fundamentals": "Fundamentals body"},
+                "debate_history": {"history": "Bull view UNIQUE Bear view", "judge_decision": "Research manager ruling"},
+                "risk_debate": {"history": "Aggressive Conservative", "judge_decision": "Risk ruling"},
             },
         ))
         db.commit()
         resp = agents.export_tradingagents_analysis_pdf(
-            stock_symbol="601238", analysis_date="2026-06-20", db=db)
+            stock_symbol="TATAMOTORS", analysis_date="2026-06-20", db=db)
         assert resp.media_type == "application/pdf"
         assert bytes(resp.body[:4]) == b"%PDF"
         assert "attachment" in resp.headers["content-disposition"]
 
         if not _WEASY:
-            return  # 中文文本层仅 WeasyPrint 路径可提取;content 组装由 test_assemble_* 覆盖
+            return  # the text layer is only extracted on the WeasyPrint path; test_assemble_* covers content assembly
 
         from pypdf import PdfReader
 
         reader = PdfReader(io.BytesIO(bytes(resp.body)))
         txt = "\n".join((p.extract_text() or "") for p in reader.pages)
-        # content 摘要里没有的「分析师全文 / 辩论全文」确实进了 PDF
-        assert "技术面分析正文UNIQUE" in txt
-        assert "多头观点UNIQUE" in txt
+        # The analyst/debate text that isn't in the content summary really made it into the PDF
+        assert "Technical analysis body UNIQUE" in txt
+        assert "Bull view UNIQUE" in txt
     finally:
         db.close()
 
 
 def test_pdf_endpoint_404_when_missing():
-    """端点:无记录 → HTTP 404。"""
+    """Endpoint: no record -> HTTP 404."""
     import pytest
     from fastapi import HTTPException
 

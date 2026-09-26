@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from sqlalchemy.orm import Session
 
-# 表由共享持久化平台注册；组合 repository 直接使用它们，避免模块内保留
-# 一个不承载任何领域行为的 ``portfolio.models`` re-export 文件。
+# The tables are registered by the shared persistence platform; the portfolio repository uses them directly instead of keeping
+# a ``portfolio.models`` re-export file with no domain behaviour.
 from src.platform.persistence.models import PaperTradingPosition, Position, Stock
 
 

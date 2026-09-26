@@ -1,4 +1,4 @@
-"""Agent 运行记录 - 写入 agent_runs 表（供 UI 查询）"""
+"""Agent run records, written to the agent_runs table (for the UI)."""
 import logging
 from datetime import datetime, timedelta, timezone
 
@@ -9,8 +9,8 @@ from src.platform.persistence.models import AgentRun, LogEntry
 
 logger = logging.getLogger(__name__)
 
-# 采集阶段可能在外部数据源限流/重试时暂时没有进度日志，不能沿用
-# “5 分钟无日志即 stale”的规则；但服务重启后也不能无限恢复旧任务。
+# The collection stage may have no progress logs for a while when external sources rate-limit/retry, so the
+# "stale after 5 minutes without logs" rule can't apply; but after a restart old runs can't be resumed forever either.
 ACTIVE_RUN_TTL_SEC = 45 * 60
 
 
@@ -28,9 +28,9 @@ def start_agent_run(
     trigger_source: str = "",
     model_label: str = "",
 ) -> None:
-    """在任务真正开始前写入 running 生命周期记录。
+    """Write the running lifecycle record before the run really starts.
 
-    同一 trace 可能同时从 API 包装器和执行入口调用，因此写入是幂等的。
+    The same trace may be written from both the API wrapper and the run entry point, so the write is idempotent.
     """
     if not trace_id:
         return
@@ -53,7 +53,7 @@ def start_agent_run(
         ))
         db.commit()
     except Exception as e:
-        logger.warning(f"写入 AgentRun running 状态失败: {e}")
+        logger.warning(f"Failed to write AgentRun running state: {e}")
         db.rollback()
     finally:
         db.close()
@@ -72,20 +72,20 @@ def record_agent_run(
     context_chars: int = 0,
     model_label: str = "",
 ) -> None:
-    """记录一次 Agent 运行结果到数据库。
+    """Record one agent run result in the database.
 
     Args:
-        agent_name: Agent 名称
+        agent_name: agent name
         status: success / failed
-        result: 简要结果（会截断）
-        error: 错误信息（会截断）
-        duration_ms: 执行耗时（毫秒）
-        trace_id: 运行链路追踪 id
+        result: short result (truncated)
+        error: error message (truncated)
+        duration_ms: run time (milliseconds)
+        trace_id: trace id of the run
         trigger_source: schedule / manual / api
-        notify_attempted: 是否尝试发送通知
-        notify_sent: 通知是否发送成功
-        context_chars: prompt/context 字符数
-        model_label: 本次运行使用的模型标识
+        notify_attempted: whether a notification was attempted
+        notify_sent: whether the notification was sent
+        context_chars: prompt/context character count
+        model_label: model used for this run
     """
     db = SessionLocal()
     try:
@@ -117,22 +117,22 @@ def record_agent_run(
             db.add(AgentRun(**values))
         db.commit()
     except Exception as e:
-        logger.warning(f"写入 AgentRun 失败: {e}")
+        logger.warning(f"Failed to write AgentRun: {e}")
         db.rollback()
     finally:
         db.close()
 
 
 def find_active_tradingagents_trace(db: Session, stock_symbol: str) -> str | None:
-    """返回标的仍在执行的 TradingAgents trace，用于跨模块幂等触发。
+    """Return a symbol's TradingAgents trace that is still running, for idempotent triggering across modules.
 
-    运行状态属于自动化模块，市场模块只能通过这个公开查询判断是否需要创建新任务，
-    不应导入自动化 HTTP router 或直接查询其内部实现。
+    Run state belongs to the automation module; the market module may only use this public query to decide whether
+    to start a new run, and must not import the automation HTTP router or query its internals.
     """
     now = datetime.now(timezone.utc)
 
-    # 生命周期记录是首选数据源：采集阶段还没有 ta_progress 时也能恢复，
-    # 且不会因为某个外部源 5 分钟没有日志就重复触发任务。
+    # The lifecycle record is the preferred source: it can recover a run even before any ta_progress in the collection stage,
+    # and won't re-trigger a run just because an external source logged nothing for 5 minutes.
     active_run = (
         db.query(AgentRun)
         .filter(
@@ -147,7 +147,7 @@ def find_active_tradingagents_trace(db: Session, stock_symbol: str) -> str | Non
         created_at = _as_utc(active_run.created_at)
         if created_at is None or (now - created_at).total_seconds() <= ACTIVE_RUN_TTL_SEC:
             return active_run.trace_id
-        # 已超过整个任务安全窗口时，不能再被旧日志重新判成 running。
+        # Past the whole run's safety window, old logs can't mark it running again.
         return None
 
     cutoff = now - timedelta(minutes=30)

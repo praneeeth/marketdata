@@ -1,9 +1,9 @@
-"""系统自检(Doctor):一键体检 数据源 / AI / 通知,带中文修复提示。
+"""System self-check (Doctor): checks data sources / AI / notifications in one go, with fix hints.
 
-复用各自现有的 test 逻辑(数据源 manager.test_source、AI AIClient.chat、通知 NotifierManager),
-不重造探测;补两件事:① 并发聚合成一块看板 ② 常见错误 → 中文 actionable 修复提示。
+Reuses each area's existing test logic (broker status, AI AIClient.chat, notifications NotifierManager)
+instead of new probes, and adds two things: (1) concurrent aggregation into one dashboard (2) common errors -> actionable fix hints.
 
-通知默认**只校验 URI 配置不真发**(防刷屏);notify_send=True 才真实发送。
+Notifications are **only validated (URI config), not sent** by default (no spam); notify_send=True really sends.
 """
 
 from __future__ import annotations
@@ -16,12 +16,12 @@ from src.platform.persistence.database import SessionLocal
 
 logger = logging.getLogger(__name__)
 
-SLOW_MS = 4000          # 超过算「慢」
-PROBE_TIMEOUT_S = 20    # 单项探测超时
+SLOW_MS = 4000          # above this counts as "slow"
+PROBE_TIMEOUT_S = 20    # timeout per probe
 
 
 def classify_hint(category: str, error: str | None) -> str:
-    """错误 → 中文 actionable 修复提示。覆盖自托管最常见的代理/鉴权/配置坑。"""
+    """Error -> actionable fix hint. Covers the most common self-hosting proxy/auth/config problems."""
     e = (error or "").lower()
     if category == "datasource":
         if "expired" in e or "not logged in" in e:
@@ -31,29 +31,29 @@ def classify_hint(category: str, error: str | None) -> str:
         return "Broker not connected: open Data sources, save your API keys and log in."
     if category == "ai":
         if any(k in e for k in ("401", "unauthorized", "invalid_api_key", "api key", "incorrect api key", "authentication")):
-            return "AI 鉴权失败:API Key 不对或失效,检查服务商 api_key。"
+            return "AI authentication failed: the API key is wrong or expired; check the provider's api_key."
         if any(k in e for k in ("model", "not found", "does not exist", "404")):
-            return "模型不存在:检查模型名(model)是否与服务商一致。"
+            return "Model not found: check the model name matches the provider's."
         if any(k in e for k in ("429", "rate limit", "quota", "insufficient", "balance")):
-            return "被限流或额度不足:稍后重试,或检查账户余额/额度。"
+            return "Rate limited or out of quota: try again later, or check the account balance/quota."
         if any(k in e for k in ("connect", "timeout", "timed out", "proxy", "ssl", "getaddrinfo", "name resolution")):
-            return "连不上 AI 服务:检查 base_url 是否正确、是否需要/误用了代理。"
-        return "AI 调用失败:逐项检查 base_url / api_key / model 配置。"
+            return "Can't reach the AI service: check base_url, and whether a proxy is needed or wrongly set."
+            return "AI call failed: check the base_url / api_key / model config one by one."
     if category == "notify":
         if any(k in e for k in ("invalid", "unsupported", "scheme", "malformed", "parse", "config")):
-            return "通知配置无效:检查渠道 URL/参数格式(Apprise URI)。"
+            return "Invalid notification config: check the channel URL/parameter format (Apprise URI)."
         if any(k in e for k in ("forbidden", "unauthorized", "403", "401", "404", "blocked", "connect", "timeout")):
-            return "通知发送失败:检查 webhook 地址/token 是否正确、是否被网络拦截。"
-        return "通知不通:核对渠道配置,或到渠道页点「测试」做真实发送验证。"
+            return "Notification failed: check the webhook address/token, and whether the network blocks it."
+            return "Notifications not getting through: check the channel config, or click Test on the channel page to send for real."
     if category == "system":
         if "lock" in e:
-            return "SQLite 被锁:并发调度叠加慢代理所致,降低并发或加快/关闭代理。"
-        if any(k in e for k in ("disk", "space", "磁盘", "空间")):
-            return "磁盘空间不足:清理 data 目录旧数据/日志,或扩容磁盘。"
-        if any(k in e for k in ("scheduler", "调度", "stopped", "not running")):
-            return "调度器未运行/已停止:重启服务以恢复定时任务。"
-        return error or "系统项异常,查看日志。"
-    return error or "未知错误,查看日志。"
+            return "SQLite is locked: concurrent schedules plus a slow proxy; reduce concurrency or speed up/turn off the proxy."
+        if any(k in e for k in ("disk", "space")):
+            return "Low disk space: clean old data/logs out of the data directory, or add disk space."
+        if any(k in e for k in ("scheduler", "stopped", "not running")):
+            return "Scheduler not running/stopped: restart the service to resume scheduled tasks."
+        return error or "System check failed; see the logs."
+    return error or "Unknown error; see the logs."
 
 
 def _item(category: str, key: str, name: str, status: str,
@@ -91,7 +91,7 @@ async def probe_broker(connection: dict) -> dict:
 
 
 async def probe_ai_model(model, service) -> dict:
-    """复用 AIClient.chat 发一个极短 ping。"""
+    """Send a very short ping through AIClient.chat."""
     from src.platform.ai.ai_client import AIClient
 
     name = model.name or model.model
@@ -108,31 +108,31 @@ async def probe_ai_model(model, service) -> dict:
 
 
 async def probe_notify_channel(channel, *, send: bool = False) -> dict:
-    """默认只校验 URI 配置(add_channel 不通会抛);send=True 才真实发送。"""
+    """By default only validate the URI config (add_channel raises if invalid); send=True really sends."""
     from src.platform.notifications.notifier import NotifierManager
 
     name = channel.name or channel.type
     t0 = time.monotonic()
     try:
         notifier = NotifierManager()
-        notifier.add_channel(channel.type, channel.config or {})  # URI 非法会抛
+        notifier.add_channel(channel.type, channel.config or {})  # raises on an invalid URI
         if not send:
             latency = int((time.monotonic() - t0) * 1000)
             return _item("notify", f"nc:{channel.id}", name, "ok", latency,
-                         note="仅校验配置格式,未真实发送(勾选「含真实发送」可发测试消息)")
+                         note="Config format validated only, nothing sent (tick \"Send for real\" to send a test message)")
         result = await notifier.notify_with_result(
-            title="系统自检", content="盯盘侠系统自检测试消息。", bypass_quiet_hours=True)
+            title="System self-check", content="Self-check test message from the app.", bypass_quiet_hours=True)
         latency = int((time.monotonic() - t0) * 1000)
         ok = bool(result.get("success"))
         return _item("notify", f"nc:{channel.id}", name, _status_for(ok, latency), latency,
-                     None if ok else (result.get("error") or "发送失败"))
+                     None if ok else (result.get("error") or "Send failed"))
     except Exception as e:
         return _item("notify", f"nc:{channel.id}", name, "fail",
                      int((time.monotonic() - t0) * 1000), str(e))
 
 
 async def probe_db() -> dict:
-    """对真实库执行 SELECT 1。"""
+    """Run SELECT 1 against the real database."""
     from sqlalchemy import text
 
     from src.platform.persistence.database import SessionLocal
@@ -145,13 +145,13 @@ async def probe_db() -> dict:
         finally:
             db.close()
         latency = int((time.monotonic() - t0) * 1000)
-        return _item("system", "sys:db", "数据库", _status_for(True, latency), latency)
+        return _item("system", "sys:db", "Database", _status_for(True, latency), latency)
     except Exception as e:
-        return _item("system", "sys:db", "数据库", "fail", int((time.monotonic() - t0) * 1000), str(e))
+        return _item("system", "sys:db", "Database", "fail", int((time.monotonic() - t0) * 1000), str(e))
 
 
 async def probe_disk() -> dict:
-    """检查 data 目录所在盘的可用空间。"""
+    """Check free space on the disk holding the data directory."""
     import os
     import shutil
 
@@ -163,25 +163,25 @@ async def probe_disk() -> dict:
         usage = shutil.disk_usage(data_dir)
         free_gb = usage.free / (1024 ** 3)
         total_gb = usage.total / (1024 ** 3)
-        note = f"可用 {free_gb:.1f}GB / 共 {total_gb:.1f}GB"
+        note = f"{free_gb:.1f}GB free of {total_gb:.1f}GB"
         latency = int((time.monotonic() - t0) * 1000)
         if free_gb < 0.2:
-            return _item("system", "sys:disk", "磁盘空间", "fail", latency,
-                         error=f"磁盘空间严重不足({note})", note=note)
+            return _item("system", "sys:disk", "Disk space", "fail", latency,
+                         error=f"Disk space critically low ({note})", note=note)
         status = "slow" if free_gb < 1.0 else "ok"
-        return _item("system", "sys:disk", "磁盘空间", status, latency, note=note)
+        return _item("system", "sys:disk", "Disk space", status, latency, note=note)
     except Exception as e:
-        return _item("system", "sys:disk", "磁盘空间", "fail", int((time.monotonic() - t0) * 1000), str(e))
+        return _item("system", "sys:disk", "Disk space", "fail", int((time.monotonic() - t0) * 1000), str(e))
 
 
 async def probe_scheduler() -> dict:
-    """经 scheduler_registry 看运行中的调度器;注册表空(CLI/未启动)→ 优雅跳过。"""
+    """Look at running schedulers through scheduler_registry; an empty registry (CLI/not started) is skipped gracefully."""
     from src.platform.scheduling import scheduler_registry
 
     regs = scheduler_registry.get_all()
     if not regs:
-        return _item("system", "sys:scheduler", "调度器", "ok", 0,
-                     note="当前进程无运行中的调度器(CLI 自检会跳过此项)")
+        return _item("system", "sys:scheduler", "Scheduler", "ok", 0,
+                     note="No scheduler running in this process (the CLI self-check skips this item)")
     running: list[str] = []
     stopped: list[str] = []
     jobs = 0
@@ -195,36 +195,36 @@ async def probe_scheduler() -> dict:
         except Exception:
             stopped.append(name)
     if running:
-        note = f"{len(running)} 个调度器运行中,共 {jobs} 个任务"
+        note = f"{len(running)} schedulers running, {jobs} jobs in total"
         if stopped:
-            note += f";已停止: {', '.join(stopped)}"
-        return _item("system", "sys:scheduler", "调度器", "ok", 0, note=note)
-    return _item("system", "sys:scheduler", "调度器", "fail", 0,
-                 error=f"调度器已停止: {', '.join(stopped)}")
+            note += f"; stopped: {', '.join(stopped)}"
+        return _item("system", "sys:scheduler", "Scheduler", "ok", 0, note=note)
+    return _item("system", "sys:scheduler", "Scheduler", "fail", 0,
+                 error=f"Schedulers stopped: {', '.join(stopped)}")
 
 
 async def _guard(coro, fallback: dict) -> dict:
-    """给每个 probe 套超时;探测自身已 try/except,这里只兜超时/异常。"""
+    """Wrap each probe in a timeout; probes already try/except, so this only catches timeouts/unexpected errors."""
     try:
         return await asyncio.wait_for(coro, timeout=PROBE_TIMEOUT_S)
     except asyncio.TimeoutError:
         return _item(fallback["category"], fallback["key"], fallback["name"],
-                     "fail", PROBE_TIMEOUT_S * 1000, f"探测超时(>{PROBE_TIMEOUT_S}s)")
-    except Exception as e:  # pragma: no cover - 防御
+                     "fail", PROBE_TIMEOUT_S * 1000, f"Probe timed out (>{PROBE_TIMEOUT_S}s)")
+    except Exception as e:  # pragma: no cover - defensive
         return _item(fallback["category"], fallback["key"], fallback["name"],
                      "fail", 0, str(e))
 
 
 def _enumerate(db, include_system: bool = True) -> list[dict]:
-    """枚举所有待检项(身份 + ORM 引用),不探测。include_system 加 DB/磁盘/调度 系统基础项。"""
+    """List every item to check (identity + ORM reference) without probing. include_system adds the DB/disk/scheduler items."""
     from src.modules.market.brokers import get_broker_manager
     from src.platform.persistence.models import AIModel, AIService, NotifyChannel
 
     targets: list[dict] = []
     if include_system:
-        targets.append({"category": "system", "key": "sys:db", "name": "数据库", "group": None, "_kind": "db"})
-        targets.append({"category": "system", "key": "sys:disk", "name": "磁盘空间", "group": None, "_kind": "disk"})
-        targets.append({"category": "system", "key": "sys:scheduler", "name": "调度器", "group": None, "_kind": "sched"})
+        targets.append({"category": "system", "key": "sys:db", "name": "Database", "group": None, "_kind": "db"})
+        targets.append({"category": "system", "key": "sys:disk", "name": "Disk space", "group": None, "_kind": "disk"})
+        targets.append({"category": "system", "key": "sys:scheduler", "name": "Scheduler", "group": None, "_kind": "sched"})
     for conn in get_broker_manager().connections(db):
         if conn.get("enabled"):
             targets.append({"category": "datasource", "key": f"broker:{conn['provider']}",
@@ -233,7 +233,7 @@ def _enumerate(db, include_system: bool = True) -> list[dict]:
         service = db.query(AIService).filter(AIService.id == model.service_id).first()
         if not service:
             continue
-        # group = 服务商名,供前端做「服务商 → 模型」两级层级
+        # group = provider name, so the frontend can show a provider -> model hierarchy
         targets.append({"category": "ai", "key": f"ai:{model.id}", "name": model.name or model.model,
                         "group": service.name, "_kind": "ai", "_obj": model, "_service": service})
     for ch in db.query(NotifyChannel).filter(NotifyChannel.enabled.is_(True)).all():
@@ -262,7 +262,7 @@ def _probe_for(t: dict, notify_send: bool):
 
 
 def list_selfcheck_items(*, db=None, include_system: bool = True) -> list[dict]:
-    """只枚举待检项身份(category/key/name/group),不探测;供前端先渲染列表再逐项检查。"""
+    """List only the identities of items to check (category/key/name/group), without probing; the frontend renders the list first, then checks each."""
     own = db is None
     db = db or SessionLocal()
     try:
@@ -273,7 +273,7 @@ def list_selfcheck_items(*, db=None, include_system: bool = True) -> list[dict]:
 
 
 async def run_selfcheck(*, db=None, notify_send: bool = False, keys=None, include_system: bool = True) -> dict:
-    """探测待检项,返回看板。keys 非空时只探测这些 key(供前端逐项更新进度)。"""
+    """Probe the items and return the dashboard. With keys, only those keys are probed (so the frontend can update progress item by item)."""
     own = db is None
     db = db or SessionLocal()
     try:

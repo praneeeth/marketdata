@@ -1,14 +1,14 @@
-"""MCP Server —— 把 chat 的 5 个只读工具暴露为 Model Context Protocol 端点。
+"""MCP server: exposes chat's 5 read-only tools as a Model Context Protocol endpoint.
 
-设计选择(在报告中说明):
-- **手写轻量 JSON-RPC**(Streamable HTTP 的 JSON 响应模式),不引入 mcp SDK ——
-  依赖最小、测试自包含、协议表面小(只读场景仅需 initialize/tools/list/tools/call);
-- 挂在**顶层 `/mcp`**(不在 `/api/` 下),绕开 ResponseWrapperMiddleware 的
-  `{code,data,message}` 包装,保证 JSON-RPC 报文原样返回;
-- 鉴权用**独立 PAT 体系**(pwmcp_ 前缀 + sha256 存库 + 常数时间比较 + mcp:read
-  scope),与登录 JWT 分流;工具全只读,天然安全;每次调用落审计日志。
+Design choices:
+- **Hand-written lightweight JSON-RPC** (the JSON response mode of Streamable HTTP), no mcp SDK:
+  minimal dependencies, self-contained tests, a small protocol surface (read-only needs only initialize/tools/list/tools/call);
+- mounted at **top-level `/mcp`** (not under `/api/`), bypassing ResponseWrapperMiddleware's
+  `{code,data,message}` wrapper so JSON-RPC messages come back unchanged;
+- auth uses a **separate PAT system** (pwmcp_ prefix + sha256 at rest + constant-time compare + mcp:read
+  scope), separate from the login JWT; every tool is read-only; each call is audit-logged.
 
-工具实现复用 assistant 的公开工具 schema 与 dispatcher，不重写业务逻辑。
+Tools reuse the assistant's public tool schemas and dispatcher instead of reimplementing logic.
 """
 
 import json
@@ -25,32 +25,32 @@ from src.modules.administration.pat import (
     looks_like_pat,
     verify_pat_hash,
 )
-from src.modules.assistant.legacy_chat_tools import CHAT_TOOLS, execute_chat_tool
+from src.modules.assistant.legacy_chat_tools import CHAT_TOOLS, TOOL_ERROR_PREFIX, execute_chat_tool
 from src.platform.persistence.database import SessionLocal, get_db
 from src.platform.persistence.models import MCPCallLog, PersonalAccessToken
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
-# 协议版本(客户端未协商时的默认值)
+# Protocol version (default when the client doesn't negotiate)
 DEFAULT_PROTOCOL_VERSION = "2024-11-05"
 SERVER_INFO = {"name": "PanWatch", "version": "0.1.0"}
 
-# 只读工具白名单(复用 chat 的工具定义,新增工具自动纳入)
+# Read-only tool allowlist (reuses chat's tool definitions; new tools are included automatically)
 READ_TOOL_NAMES = {t["function"]["name"] for t in CHAT_TOOLS}
 
-# last_used 写入节流窗口(秒),避免每次 tool call 都写库
+# Throttle window (seconds) for writing last_used, so not every tool call writes to the DB
 _LAST_USED_THROTTLE_S = 60
-# 审计摘要长度上限
+# Maximum audit summary length
 _ARG_SUMMARY_MAX = 200
 _ARG_VALUE_MAX = 40
 
 
-# ──────────────── PAT 鉴权 ────────────────
+# ──────────────── PAT auth ────────────────
 
 
 def _to_utc(dt: datetime | None) -> datetime | None:
-    """SQLite 存的 DateTime 是 naive,统一按 UTC 处理,避免 aware/naive 比较报错。"""
+    """SQLite stores naive DateTimes; treat them all as UTC to avoid aware/naive comparison errors."""
     if dt is None:
         return None
     return dt if dt.tzinfo is not None else dt.replace(tzinfo=timezone.utc)
@@ -66,13 +66,13 @@ def _bump_last_used(db: Session, row: PersonalAccessToken, request: Request) -> 
 
 
 def authenticate_pat(request: Request, db: Session) -> dict:
-    """校验 Authorization: Bearer pwmcp_...，返回 PAT 元数据；失败抛 HTTPException。"""
+    """Validate Authorization: Bearer pwmcp_... and return the PAT metadata; raise HTTPException on failure."""
     header = request.headers.get("authorization") or ""
     if not header.lower().startswith("bearer "):
-        raise HTTPException(401, "缺少 Bearer PAT")
+        raise HTTPException(401, "Missing Bearer PAT")
     token = header[7:].strip()
     if not looks_like_pat(token):
-        raise HTTPException(403, "MCP 端点需要 PAT(pwmcp_ 前缀)")
+        raise HTTPException(403, "The MCP endpoint needs a PAT (pwmcp_ prefix)")
 
     row = (
         db.query(PersonalAccessToken)
@@ -80,19 +80,19 @@ def authenticate_pat(request: Request, db: Session) -> dict:
         .first()
     )
     if row is None or not verify_pat_hash(token, row.token_hash):
-        raise HTTPException(401, "无效的 token")
+        raise HTTPException(401, "Invalid token")
     if row.revoked_at is not None:
-        raise HTTPException(401, "token 已吊销")
+        raise HTTPException(401, "Token revoked")
     exp = _to_utc(row.expires_at)
     if exp is not None and exp < datetime.now(timezone.utc):
-        raise HTTPException(401, "token 已过期")
+        raise HTTPException(401, "Token expired")
 
     try:
         scopes = set(json.loads(row.scopes_json or "[]"))
     except Exception:
         scopes = set()
     if SCOPE_MCP_READ not in scopes:
-        raise HTTPException(403, f"PAT 缺少所需 scope: {SCOPE_MCP_READ}")
+        raise HTTPException(403, f"PAT is missing the required scope: {SCOPE_MCP_READ}")
 
     _bump_last_used(db, row, request)
     return {
@@ -103,11 +103,11 @@ def authenticate_pat(request: Request, db: Session) -> dict:
     }
 
 
-# ──────────────── 审计日志 ────────────────
+# ──────────────── Audit log ────────────────
 
 
 def _summarize_args(args: dict) -> str | None:
-    """脱敏摘要:结构化字段 k=v，截断，供审计调试。"""
+    """Redacted summary: structured k=v fields, truncated, for audit debugging."""
     if not args:
         return None
     parts: list[str] = []
@@ -136,7 +136,7 @@ def _write_call_log(
     duration_ms: int,
     client_ip: str | None,
 ) -> None:
-    """落审计日志(独立 session，失败静默不影响主流程)。"""
+    """Write the audit log (own session; failures are silent and don't affect the main flow)."""
     db = SessionLocal()
     try:
         db.add(
@@ -153,7 +153,7 @@ def _write_call_log(
         )
         db.commit()
     except Exception:
-        logger.warning("写入 MCPCallLog 失败", exc_info=True)
+        logger.warning("Failed to write MCPCallLog", exc_info=True)
         db.rollback()
     finally:
         db.close()
@@ -163,7 +163,7 @@ MCP_LOG_RETENTION_DAYS = 30
 
 
 def prune_mcp_logs(retention_days: int = MCP_LOG_RETENTION_DAYS) -> int:
-    """清理超过保留期的 MCP 调用日志,返回删除条数(供每日调度调用)。"""
+    """Delete MCP call logs past the retention period and return the count (called by the daily schedule)."""
     from datetime import timedelta
 
     cutoff = datetime.now(timezone.utc) - timedelta(days=retention_days)
@@ -174,21 +174,21 @@ def prune_mcp_logs(retention_days: int = MCP_LOG_RETENTION_DAYS) -> int:
         )
         db.commit()
         if deleted:
-            logger.info("MCP 调用日志保留期清理: 删除 %d 条", deleted)
+            logger.info("MCP call log retention cleanup: deleted %d rows", deleted)
         return deleted
     except Exception:
-        logger.warning("MCP 调用日志清理失败", exc_info=True)
+        logger.warning("MCP call log cleanup failed", exc_info=True)
         db.rollback()
         return 0
     finally:
         db.close()
 
 
-# ──────────────── JSON-RPC 处理 ────────────────
+# ──────────────── JSON-RPC handling ────────────────
 
 
 def _mcp_tools() -> list[dict]:
-    """CHAT_TOOLS(OpenAI function schema)→ MCP tool 列表。"""
+    """CHAT_TOOLS (OpenAI function schema) -> MCP tool list."""
     tools = []
     for t in CHAT_TOOLS:
         fn = t["function"]
@@ -218,25 +218,25 @@ async def _handle_tools_call(params: dict, db: Session, pat: dict, req_id) -> JS
     name = params.get("name")
     args = params.get("arguments") or {}
     if not name:
-        return _rpc_error(req_id, -32602, "缺少工具名 name")
+        return _rpc_error(req_id, -32602, "Missing tool name")
     if name not in READ_TOOL_NAMES:
         _write_call_log(pat, str(name), "error", "unknown tool", None, 0, pat.get("client_ip"))
-        return _rpc_error(req_id, -32602, f"未知或不允许的工具: {name}")
+        return _rpc_error(req_id, -32602, f"Unknown or disallowed tool: {name}")
 
     start = time.perf_counter()
     err: str | None = None
     try:
         text = await execute_chat_tool(db, name, args if isinstance(args, dict) else {})
-        is_error = text.startswith("工具执行出错")
+        is_error = text.startswith(TOOL_ERROR_PREFIX)
         if is_error:
             err = text
         return _rpc_result(
             req_id,
             {"content": [{"type": "text", "text": text}], "isError": is_error},
         )
-    except Exception as e:  # noqa: BLE001 — 兜底,不让异常穿透协议层
+    except Exception as e:  # noqa: BLE001 — catch-all so exceptions never cross the protocol layer
         err = str(e)
-        return _rpc_error(req_id, -32603, f"工具执行异常: {e}")
+        return _rpc_error(req_id, -32603, f"Tool execution error: {e}")
     finally:
         duration_ms = int((time.perf_counter() - start) * 1000)
         _write_call_log(
@@ -253,22 +253,22 @@ async def _handle_tools_call(params: dict, db: Session, pat: dict, req_id) -> JS
 @router.post("")
 @router.post("/")
 async def mcp_endpoint(request: Request, db: Session = Depends(get_db)):
-    """MCP Streamable HTTP 单端点:处理 initialize / tools/list / tools/call 等。"""
+    """MCP Streamable HTTP single endpoint: handles initialize / tools/list / tools/call, etc."""
     pat = authenticate_pat(request, db)
 
     try:
         payload = await request.json()
     except Exception:
-        return _rpc_error(None, -32700, "JSON 解析失败")
+        return _rpc_error(None, -32700, "JSON parse error")
 
     if not isinstance(payload, dict):
-        return _rpc_error(None, -32600, "仅支持单条 JSON-RPC 请求")
+        return _rpc_error(None, -32600, "Only single JSON-RPC requests are supported")
 
     method = payload.get("method")
     req_id = payload.get("id")
     params = payload.get("params") or {}
 
-    # 通知类消息(无 id)不需要响应,返回 202
+    # Notifications (no id) need no response; return 202
     if req_id is None and isinstance(method, str) and method.startswith("notifications/"):
         return Response(status_code=202)
 
@@ -289,4 +289,4 @@ async def mcp_endpoint(request: Request, db: Session = Depends(get_db)):
     if method == "tools/call":
         return await _handle_tools_call(params, db, pat, req_id)
 
-    return _rpc_error(req_id, -32601, f"方法不支持: {method}")
+    return _rpc_error(req_id, -32601, f"Method not supported: {method}")

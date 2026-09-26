@@ -119,7 +119,7 @@ def _stock_to_response(stock: Stock, agent_display_names: dict[str, str] | None 
 
 @router.get("/markets/status")
 def get_market_status():
-    """获取各市场的交易状态"""
+    """Trading status of each market."""
     from datetime import datetime
 
     result = []
@@ -128,34 +128,34 @@ def get_market_status():
             now = datetime.now(market_def.get_tz())
             is_trading = market_def.is_trading_time()
 
-            # 获取交易时段描述
+            # Trading session description
             sessions_desc = []
             for session in market_def.sessions:
                 sessions_desc.append(f"{session.start.strftime('%H:%M')}-{session.end.strftime('%H:%M')}")
 
-            # 判断状态
+            # Status
             weekday = now.weekday()
             current_time = now.time()
 
             if weekday >= 5:
                 status = "closed"
-                status_text = "休市（周末）"
+                status_text = "Closed (weekend)"
             elif is_trading:
                 status = "trading"
-                status_text = "交易中"
+                status_text = "Open"
             else:
-                # 判断是盘前还是盘后
+                # Pre-open or after close?
                 first_session = market_def.sessions[0]
                 last_session = market_def.sessions[-1]
                 if current_time < first_session.start:
                     status = "pre_market"
-                    status_text = "盘前"
+                    status_text = "Pre-open"
                 elif current_time > last_session.end:
                     status = "after_hours"
-                    status_text = "已收盘"
+                    status_text = "Closed"
                 else:
                     status = "break"
-                    status_text = "午间休市"
+                    status_text = "Lunch break"
 
             result.append({
                 "code": market_code.value,
@@ -168,13 +168,13 @@ def get_market_status():
                 "timezone": market_def.timezone,
             })
         except Exception as e:
-            # 单个市场获取失败不影响其他市场
-            logger.error(f"获取 {market_code.value} 市场状态失败: {e}")
+            # One market failing doesn't affect the others
+            logger.error(f"Failed to get the {market_code.value} market status: {e}")
             result.append({
                 "code": market_code.value,
                 "name": market_def.name,
                 "status": "unknown",
-                "status_text": "未知",
+                "status_text": "Unknown",
                 "is_trading": False,
                 "sessions": [],
                 "local_time": "--:--",
@@ -224,12 +224,12 @@ def list_stocks(db: Session = Depends(get_db)):
 
 @router.get("/quotes")
 def get_quotes(db: Session = Depends(get_db)):
-    """获取所有自选股的实时行情"""
+    """Live quotes for every watchlist stock."""
     stocks = db.query(Stock).all()
     if not stocks:
         return {}
 
-    # 按市场分组
+    # Group by market
     market_stocks: dict[str, list[Stock]] = {}
     for s in stocks:
         market_stocks.setdefault(s.market, []).append(s)
@@ -237,11 +237,11 @@ def get_quotes(db: Session = Depends(get_db)):
     quotes = {}
     for market, stock_list in market_stocks.items():
         try:
-            MarketCode(market)  # 校验市场合法
+            MarketCode(market)  # validate the market
         except ValueError:
             continue
 
-        symbols = [s.symbol for s in stock_list]   # 原始代码,md 内部按市场格式化
+        symbols = [s.symbol for s in stock_list]   # raw symbols; md formats them per market
         try:
             items = md_quote_rows(symbols, market)
             for item in items:
@@ -255,7 +255,7 @@ def get_quotes(db: Session = Depends(get_db)):
                        if "quality" in item else {}),
                 }
         except Exception as e:
-            logger.error(f"获取 {market} 行情失败: {e}")
+            logger.error(f"Failed to get {market} quotes: {e}")
 
     return quotes
 
@@ -285,7 +285,7 @@ def create_stock(stock: StockCreate, db: Session = Depends(get_db)):
         Stock.symbol == stock.symbol, Stock.market == stock.market
     ).first()
     if existing:
-        raise HTTPException(400, f"股票 {stock.symbol} 已存在")
+        raise HTTPException(400, f"Stock {stock.symbol} already exists")
 
     max_order = db.query(func.max(Stock.sort_order)).scalar() or 0
     db_stock = Stock(**stock.model_dump(), sort_order=int(max_order) + 1)
@@ -317,7 +317,7 @@ def reorder_stocks(body: StockReorderRequest, db: Session = Depends(get_db)):
 def update_stock(stock_id: int, stock: StockUpdate, db: Session = Depends(get_db)):
     db_stock = db.query(Stock).filter(Stock.id == stock_id).first()
     if not db_stock:
-        raise HTTPException(404, "股票不存在")
+        raise HTTPException(404, "Stock not found")
 
     for key, value in stock.model_dump(exclude_unset=True).items():
         setattr(db_stock, key, value)
@@ -331,14 +331,14 @@ def update_stock(stock_id: int, stock: StockUpdate, db: Session = Depends(get_db
 def delete_stock(stock_id: int, db: Session = Depends(get_db)):
     db_stock = db.query(Stock).filter(Stock.id == stock_id).first()
     if not db_stock:
-        raise HTTPException(404, "股票不存在")
+        raise HTTPException(404, "Stock not found")
 
-    # 删除股票前，要求先清理持仓，避免误删资产数据。
+    # Before deleting a stock, its positions must be removed first so asset data isn't deleted by mistake.
     has_position = db.query(Position.id).filter(Position.stock_id == stock_id).first()
     if has_position:
-        raise HTTPException(400, "该股票存在持仓，请先删除持仓后再删除股票")
+        raise HTTPException(400, "This stock has positions; delete them before deleting the stock")
 
-    # SQLite 默认可能不启用 FK 级联，手动清理提醒数据避免孤儿记录。
+    # SQLite may not enable FK cascades by default, so alert data is cleaned up by hand to avoid orphan rows.
     rule_ids = [
         row[0]
         for row in db.query(PriceAlertRule.id).filter(
@@ -366,20 +366,20 @@ def delete_stock(stock_id: int, db: Session = Depends(get_db)):
 
 @router.put("/{stock_id}/agents", response_model=StockResponse)
 def update_stock_agents(stock_id: int, body: StockAgentUpdate, db: Session = Depends(get_db)):
-    """更新股票关联的 Agent 列表（含调度配置和 AI/通知覆盖）"""
+    """Update the agents linked to a stock (with schedule config and AI/notification overrides)."""
     db_stock = db.query(Stock).filter(Stock.id == stock_id).first()
     if not db_stock:
-        raise HTTPException(404, "股票不存在")
+        raise HTTPException(404, "Stock not found")
 
     for item in body.agents:
         agent = db.query(AgentConfig).filter(AgentConfig.name == item.agent_name).first()
         if not agent:
-            raise HTTPException(400, f"Agent {item.agent_name} 不存在")
+            raise HTTPException(400, f"Agent {item.agent_name} not found")
         agent_kind = (agent.kind or "").strip() or infer_agent_kind(agent.name)
         if agent_kind != AGENT_KIND_WORKFLOW:
-            raise HTTPException(400, f"Agent {item.agent_name} 为内部能力，不支持绑定到股票")
+            raise HTTPException(400, f"Agent {item.agent_name} is an internal capability and can't be linked to a stock")
 
-    # 清除旧关联，重建
+    # Clear the old links and rebuild
     db.query(StockAgent).filter(StockAgent.stock_id == stock_id).delete()
     for item in body.agents:
         db.add(StockAgent(
@@ -409,12 +409,12 @@ async def trigger_stock_agent(
     name: str = Query(""),
     db: Session = Depends(get_db),
 ):
-    """手动触发单只股票 Agent。
+    """Run an agent for one stock manually.
 
-    - 正常模式：传有效 stock_id
-    - 无绑定模式：stock_id<=0 且传 symbol/market（需 allow_unbound=true）
-    - 无绑定模式默认禁用通知（仅生成建议）
-    - 默认异步执行（立即返回），传 wait=true 可同步等待结果
+    - Normal mode: pass a valid stock_id
+    - Unbound mode: stock_id<=0 plus symbol/market (needs allow_unbound=true)
+    - Unbound mode turns notifications off by default (analysis only)
+    - Runs asynchronously by default (returns at once); pass wait=true to wait for the result
     """
     sa = None
     trigger_stock = None
@@ -423,25 +423,25 @@ async def trigger_stock_agent(
     if stock_id > 0:
         db_stock = db.query(Stock).filter(Stock.id == stock_id).first()
         if not db_stock:
-            raise HTTPException(404, "股票不存在")
+            raise HTTPException(404, "Stock not found")
 
         sa = db.query(StockAgent).filter(
             StockAgent.stock_id == stock_id, StockAgent.agent_name == agent_name
         ).first()
         if not sa and not allow_unbound:
-            raise HTTPException(400, f"股票未关联 Agent {agent_name}")
+            raise HTTPException(400, f"Stock isn't linked to agent {agent_name}")
         if not sa and allow_unbound:
-            # 允许无绑定触发时，至少确保 Agent 存在。
+            # When unbound runs are allowed, at least make sure the agent exists.
             agent = db.query(AgentConfig).filter(AgentConfig.name == agent_name).first()
             if not agent:
-                raise HTTPException(400, f"Agent {agent_name} 不存在")
+                raise HTTPException(400, f"Agent {agent_name} not found")
         trigger_stock = db_stock
     else:
         symbol = (symbol or "").strip()
         if not symbol:
-            raise HTTPException(400, "当 stock_id<=0 时，symbol 不能为空")
+            raise HTTPException(400, "symbol is required when stock_id<=0")
         if not allow_unbound:
-            raise HTTPException(400, "当 stock_id<=0 时，需设置 allow_unbound=true")
+            raise HTTPException(400, "allow_unbound=true is required when stock_id<=0")
 
         market = (market or "IN").strip().upper() or "IN"
         name = (name or "").strip() or symbol
@@ -454,10 +454,10 @@ async def trigger_stock_agent(
             ).first()
             trigger_stock = db_stock
         else:
-            # 不落库：用于详情弹窗未持仓且未关注股票的一次性分析。
+            # Not saved: a one-off analysis from the details dialog for a stock that isn't held or watched.
             agent = db.query(AgentConfig).filter(AgentConfig.name == agent_name).first()
             if not agent:
-                raise HTTPException(400, f"Agent {agent_name} 不存在")
+                raise HTTPException(400, f"Agent {agent_name} not found")
             trigger_stock = SimpleNamespace(
                 id=0,
                 symbol=symbol,
@@ -466,34 +466,34 @@ async def trigger_stock_agent(
             )
 
     logger.info(
-        f"手动触发 Agent {agent_name} - {trigger_stock.name}({trigger_stock.symbol})"
+        f"Manual agent run {agent_name} - {trigger_stock.name} ({trigger_stock.symbol})"
     )
 
     from server import trigger_agent_for_stock
     import time as _time
 
-    # 幂等性兜底:TradingAgents 单次 3-5 分钟,前端误操作/双击可能并发触发同一标的。
-    # 后端先查"该 symbol 是否有真正在跑的 TA 任务",有则返回现有 trace_id(不启新任务)。
-    # force_refresh=true 时跳过去重,允许用户主动强制重跑(老任务自然终止,新 trace_id)。
+    # Idempotency guard: one TradingAgents run takes 3-5 minutes, and a double click could start the same symbol twice.
+    # The backend first checks for a TA run really in progress for this symbol and returns its trace_id (no new run).
+    # force_refresh=true skips the check so the user can force a re-run (the old run ends naturally; new trace_id).
     if agent_name == "tradingagents" and not force_refresh:
         from src.modules.automation import find_active_tradingagents_trace
         existing_trace = find_active_tradingagents_trace(db, trigger_stock.symbol)
         if existing_trace:
             logger.info(
-                f"[trigger 幂等] {trigger_stock.symbol} 已有在跑任务 trace={existing_trace},"
-                f"复用而非启新任务"
+                f"[trigger idempotency] {trigger_stock.symbol} already has a run in progress trace={existing_trace}; "
+                f"reusing it instead of starting a new one"
             )
             return {
                 "queued": False,
                 "trace_id": existing_trace,
-                "message": "已有正在执行的深度分析,返回现有任务进度",
+                "message": "A deep research run is already in progress; returning its progress",
                 "deduplicated": True,
             }
 
-    # 预生成 trace_id,返回给前端用于轮询进度
+    # Generate the trace_id up front; the frontend polls progress with it
     trace_id = f"man-{agent_name}-{trigger_stock.symbol}-{int(_time.time() * 1000)}"
 
-    # 生命周期先落库，确保后台线程尚未写出第一条进度日志时，刷新页面仍能恢复任务。
+    # Save the lifecycle first so a page refresh can recover the run even before the background thread logs progress.
     if agent_name == "tradingagents":
         try:
             from src.modules.automation.agent_runs import start_agent_run
@@ -503,12 +503,12 @@ async def trigger_stock_agent(
                 trigger_source="manual",
             )
         except Exception as e:
-            logger.warning(f"[TA] 写 running 生命周期失败,不影响主流程: {e}")
+            logger.warning(f"[TA] Failed to write the running lifecycle; continuing: {e}")
 
-    # 立刻写一条"任务已触发"进度日志,保证前端 polling 第一拍就能看到 running。
-    # 否则 trigger_agent_for_stock 内部要先 await agent.collect()(美股拉 yfinance 数据
-    # 可能 30s+),期间没有任何 ta_progress 日志 → 前端 progress 接口返回 not_found
-    # → 60s grace 过后前端 reset 到 idle,看起来像"进度卡死自动退回"。
+    # Write a "run started" progress entry right away so the frontend's first poll sees running.
+    # Otherwise trigger_agent_for_stock first awaits agent.collect() (fetching data can take
+    # 30s+), with no ta_progress entries meanwhile -> the progress endpoint returns not_found
+    # -> after the 60s grace period the frontend resets to idle, looking like "progress stalled and reset".
     if agent_name == "tradingagents":
         try:
             from src.platform.observability.log_context import log_context
@@ -519,13 +519,13 @@ async def trigger_stock_agent(
                 tags={"stage": "task_triggered", "action": "triggered"},
             ):
                 logger.info(
-                    f"[TA] 任务已触发 - {trigger_stock.symbol} (trace={trace_id})"
+                    f"[TA] Run started - {trigger_stock.symbol} (trace={trace_id})"
                 )
         except Exception as e:
-            logger.warning(f"[TA] 写触发日志失败,不影响主流程: {e}")
+            logger.warning(f"[TA] Failed to write the start log; continuing: {e}")
 
     if not wait:
-        # 异步模式：后台执行，立即返回
+        # Async mode: run in the background and return at once
         sa_id = sa.id if sa else None
 
         def _runner():
@@ -540,9 +540,9 @@ async def trigger_stock_agent(
                     trace_id=trace_id,
                     force_refresh=force_refresh,
                 ))
-                logger.info(f"Agent {agent_name} 后台执行完成 - {trigger_stock.symbol}")
+                logger.info(f"Agent {agent_name} finished in the background - {trigger_stock.symbol}")
             except Exception:
-                logger.exception(f"Agent {agent_name} 后台执行失败 - {trigger_stock.symbol}")
+                logger.exception(f"Agent {agent_name} failed in the background - {trigger_stock.symbol}")
 
         t = threading.Thread(
             target=_runner,
@@ -550,9 +550,9 @@ async def trigger_stock_agent(
             daemon=True,
         )
         t.start()
-        return {"queued": True, "trace_id": trace_id, "message": "已提交后台执行"}
+        return {"queued": True, "trace_id": trace_id, "message": "Queued to run in the background"}
 
-    # 同步模式：等待结果返回
+    # Sync mode: wait for the result
     try:
         result = await trigger_agent_for_stock(
             agent_name,
@@ -564,7 +564,7 @@ async def trigger_stock_agent(
             trace_id=trace_id,
             force_refresh=force_refresh,
         )
-        logger.info(f"Agent {agent_name} 执行完成 - {trigger_stock.symbol}")
+        logger.info(f"Agent {agent_name} finished - {trigger_stock.symbol}")
         return {
             "result": result,
             "trace_id": trace_id,
@@ -575,5 +575,5 @@ async def trigger_stock_agent(
     except ValueError as e:
         raise HTTPException(400, str(e))
     except Exception as e:
-        logger.error(f"Agent {agent_name} 执行失败 - {trigger_stock.symbol}: {e}")
-        raise HTTPException(500, f"Agent 执行失败: {e}")
+        logger.error(f"Agent {agent_name} failed - {trigger_stock.symbol}: {e}")
+        raise HTTPException(500, f"Agent run failed: {e}")

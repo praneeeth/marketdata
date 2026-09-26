@@ -15,7 +15,7 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
-# 统一导出“业务数据 → TradingAgents 上下文”的入口，避免调用方关心内部渲染函数。
+# The single entry point for "business data -> TradingAgents context", so callers don't need the internal render functions.
 __all__ = [
     "build_stock_metadata_context",
     "fetch_financial_abstract",
@@ -32,10 +32,10 @@ def _fmt_num(v: float | None) -> str:
     if v is None:
         return "N/A"
     av = abs(v)
-    if av >= 1e8:
-        return f"{v / 1e8:.2f} 亿"
-    if av >= 1e4:
-        return f"{v / 1e4:.2f} 万"
+    if av >= 1e7:
+        return f"{v / 1e7:.2f} Cr"
+    if av >= 1e5:
+        return f"{v / 1e5:.2f} L"
     return f"{v:.2f}"
 
 
@@ -46,7 +46,7 @@ def _fmt_pct(v: float | None) -> str:
 
 
 def _fmt_period(p: str) -> str:
-    """20260331 → 2026Q1, 20251231 → 2025Q4(年报)"""
+    """20260331 -> 2026Q1, 20251231 -> 2025Q4 (annual report)"""
     if len(p) != 8:
         return p
     y, m, d = p[:4], p[4:6], p[6:8]
@@ -55,7 +55,7 @@ def _fmt_period(p: str) -> str:
 
 
 def render_fundamentals_summary(data: dict) -> str:
-    """渲染基本面综合摘要(给 get_fundamentals 用)。"""
+    """Render the fundamentals summary (for get_fundamentals)."""
     periods = data.get("periods", [])[:4]
     ind = data.get("indicators", {})
     if not periods or not ind:
@@ -66,14 +66,14 @@ def render_fundamentals_summary(data: dict) -> str:
     lines.append("")
 
     key_metrics = [
-        ("营业总收入", _fmt_num),
-        ("归母净利润", _fmt_num),
-        ("扣非净利润", _fmt_num),
-        ("基本每股收益", lambda v: f"{v:.2f} 元" if v is not None else "N/A"),
-        ("毛利率", _fmt_pct),
-        ("净资产收益率(ROE)", _fmt_pct),
-        ("资产负债率", _fmt_pct),
-        ("经营现金流量净额", _fmt_num),
+        ("Total revenue", _fmt_num),
+        ("Net profit attributable to shareholders", _fmt_num),
+        ("Net profit excluding exceptional items", _fmt_num),
+        ("Basic EPS", lambda v: f"Rs {v:.2f}" if v is not None else "N/A"),
+        ("Gross margin", _fmt_pct),
+        ("Return on equity (ROE)", _fmt_pct),
+        ("Debt-to-assets ratio", _fmt_pct),
+        ("Net operating cash flow", _fmt_num),
     ]
     for name, fmt in key_metrics:
         vals = ind.get(name)
@@ -92,7 +92,7 @@ def render_fundamentals_summary(data: dict) -> str:
 
 
 def render_income_statement(data: dict) -> str:
-    """渲染利润表(给 get_income_statement 用)。"""
+    """Render the income statement (for get_income_statement)."""
     periods = data.get("periods", [])[:4]
     ind = data.get("indicators", {})
     if not periods or not ind:
@@ -101,14 +101,14 @@ def render_income_statement(data: dict) -> str:
     lines.append(f"Periods: {' | '.join(_fmt_period(p) for p in periods)}")
     lines.append("")
     metrics = [
-        ("营业总收入", _fmt_num),
-        ("营业成本", _fmt_num),
-        ("归母净利润", _fmt_num),
-        ("净利润", _fmt_num),
-        ("扣非净利润", _fmt_num),
-        ("毛利率", _fmt_pct),
-        ("销售净利率", _fmt_pct),
-        ("期间费用率", _fmt_pct),
+        ("Total revenue", _fmt_num),
+        ("Cost of revenue", _fmt_num),
+        ("Net profit attributable to shareholders", _fmt_num),
+        ("Net profit", _fmt_num),
+        ("Net profit excluding exceptional items", _fmt_num),
+        ("Gross margin", _fmt_pct),
+        ("Net profit margin", _fmt_pct),
+        ("Operating expense ratio", _fmt_pct),
     ]
     for name, fmt in metrics:
         vals = ind.get(name)
@@ -120,7 +120,7 @@ def render_income_statement(data: dict) -> str:
 
 
 def render_balance_sheet(data: dict) -> str:
-    """渲染资产负债表(给 get_balance_sheet 用)。"""
+    """Render the balance sheet (for get_balance_sheet)."""
     periods = data.get("periods", [])[:4]
     ind = data.get("indicators", {})
     if not periods or not ind:
@@ -129,12 +129,12 @@ def render_balance_sheet(data: dict) -> str:
     lines.append(f"Periods: {' | '.join(_fmt_period(p) for p in periods)}")
     lines.append("")
     metrics = [
-        ("股东权益合计(净资产)", _fmt_num),
-        ("每股净资产", lambda v: f"{v:.2f} 元" if v is not None else "N/A"),
-        ("商誉", _fmt_num),
-        ("资产负债率", _fmt_pct),
-        ("总资产报酬率(ROA)", _fmt_pct),
-        ("净资产收益率(ROE)", _fmt_pct),
+        ("Total shareholders' equity (net assets)", _fmt_num),
+        ("Book value per share", lambda v: f"Rs {v:.2f}" if v is not None else "N/A"),
+        ("Goodwill", _fmt_num),
+        ("Debt-to-assets ratio", _fmt_pct),
+        ("Return on assets (ROA)", _fmt_pct),
+        ("Return on equity (ROE)", _fmt_pct),
     ]
     for name, fmt in metrics:
         vals = ind.get(name)
@@ -146,7 +146,7 @@ def render_balance_sheet(data: dict) -> str:
 
 
 def render_cashflow(data: dict) -> str:
-    """渲染现金流量表(给 get_cashflow 用)。"""
+    """Render the cash flow statement (for get_cashflow)."""
     periods = data.get("periods", [])[:4]
     ind = data.get("indicators", {})
     if not periods or not ind:
@@ -155,8 +155,8 @@ def render_cashflow(data: dict) -> str:
     lines.append(f"Periods: {' | '.join(_fmt_period(p) for p in periods)}")
     lines.append("")
     metrics = [
-        ("经营现金流量净额", _fmt_num),
-        ("每股现金流", lambda v: f"{v:.2f} 元" if v is not None else "N/A"),
+        ("Net operating cash flow", _fmt_num),
+        ("Cash flow per share", lambda v: f"Rs {v:.2f}" if v is not None else "N/A"),
     ]
     for name, fmt in metrics:
         vals = ind.get(name)
@@ -201,7 +201,7 @@ def build_stock_metadata_context(
 
 
 def _finite_number(value: Any) -> float | None:
-    """把可能来自数据库的数值安全转换为有限 float。"""
+    """Safely convert a value that may come from the database into a finite float."""
     try:
         number = float(value)
     except (TypeError, ValueError):
@@ -210,10 +210,10 @@ def _finite_number(value: Any) -> float | None:
 
 
 def to_tradingagents_portfolio(portfolio: Any):
-    """把 ``PortfolioInfo`` 转为 TradingAgents 0.5.0 的 ``PortfolioContext``。
+    """Convert ``PortfolioInfo`` into TradingAgents 0.5.0's ``PortfolioContext``.
 
-    多账户中同一 ticker 的仓位按数量加权平均成本价聚合。没有账户快照时返回
-    ``None``，让上游明确区分“用户未提供组合”与“组合现金/仓位均为零”。
+    The same ticker across accounts is merged with a quantity-weighted average cost. Returns ``None``
+    without an account snapshot, so upstream can tell "no portfolio given" from "portfolio with zero cash and positions".
     """
     accounts: Iterable[Any] = getattr(portfolio, "accounts", ()) or ()
     accounts = list(accounts)
@@ -232,8 +232,8 @@ def to_tradingagents_portfolio(portfolio: Any):
         for position in getattr(account, "positions", ()) or ():
             ticker = str(getattr(position, "symbol", "") or "").strip().upper()
             quantity = _finite_number(getattr(position, "quantity", None))
-            # TradingAgents 0.5.0 用正数表示多头、负数表示空头；这里只过滤
-            # 零数量和脏数据，不能把空头当成“无持仓”丢掉。
+            # TradingAgents 0.5.0 uses positive numbers for long and negative for short; only zero
+            # quantities and bad data are filtered here; a short must not be dropped as "no position".
             if not ticker or quantity is None or quantity == 0:
                 continue
             average_price = _finite_number(getattr(position, "cost_price", None))
@@ -247,8 +247,8 @@ def to_tradingagents_portfolio(portfolio: Any):
             for lot_quantity, average_price in lots
             if average_price is not None
         ]
-        # 用数量绝对值做成本价权重：同方向仓位与旧逻辑一致，混合多空时
-        # 也不会因净数量接近 0 而产生无意义的极端均价；quantity 仍保留净符号。
+        # Weight the cost by absolute quantity: same-direction positions match the old logic, and mixed long/short
+        # can't produce a meaningless extreme average when the net quantity is near 0; quantity keeps its net sign.
         total_abs_quantity = sum(abs(lot_quantity) for lot_quantity, _ in priced_lots)
         average_price = (
             sum(abs(lot_quantity) * price for lot_quantity, price in priced_lots)
@@ -264,19 +264,19 @@ def to_tradingagents_portfolio(portfolio: Any):
 
 
 def patch_instrument_context(graph: Any, metadata_context: str) -> None:
-    """把 PanWatch 标的元数据注入 TradingAgents 0.5.0 的 ``instrument_context``。
+    """Inject the app's instrument metadata into TradingAgents 0.5.0's ``instrument_context``.
 
-    ``past_context`` 是上游用于历史研究记忆的扩展点，业务标的元数据放进去会
-    混淆提示词语义，也会让后续研究回放把本次股票信息当成历史经验。0.5.0 的
-    ``Propagator.create_initial_state`` 已公开 ``instrument_context``，因此只在
-    这个入口做一次实例级包装，并完整透传 portfolio/future kwargs。
+    ``past_context`` is upstream's extension point for research memory; putting instrument metadata there would
+    muddle the prompt semantics and make later research replays treat this stock's info as past experience. 0.5.0's
+    ``Propagator.create_initial_state`` exposes ``instrument_context``, so this entry point wraps it once per
+    instance and passes portfolio/future kwargs through unchanged.
     """
     if not metadata_context:
         return
 
     propagator = getattr(graph, "propagator", None)
     if propagator is None or not hasattr(propagator, "create_initial_state"):
-        logger.warning("[TA context] propagator.create_initial_state 不存在，跳过元数据注入")
+        logger.warning("[TA context] propagator.create_initial_state not found; skipping metadata injection")
         return
 
     original = propagator.create_initial_state
@@ -304,9 +304,9 @@ def patch_instrument_context(graph: Any, metadata_context: str) -> None:
         )
 
     propagator.create_initial_state = _patched  # type: ignore[method-assign]
-    logger.info("[TA context] 已注入 %s 字符标的元数据到 instrument_context", len(metadata_context))
+    logger.info("[TA context] Injected %s characters of instrument metadata into instrument_context", len(metadata_context))
 
 
 def patch_past_context(graph: Any, metadata_context: str) -> None:
-    """兼容旧调用方的别名；新代码应使用 :func:`patch_instrument_context`。"""
+    """Alias kept for old callers; new code should use :func:`patch_instrument_context`."""
     patch_instrument_context(graph, metadata_context)

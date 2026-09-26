@@ -1,4 +1,4 @@
-"""盘前分析 Agent - 开盘前展望今日走势"""
+"""Pre-market outlook agent: reviews yesterday and overnight moves before the open."""
 
 import asyncio
 import logging
@@ -34,27 +34,27 @@ from src.platform.marketdata.models import MarketCode
 
 logger = logging.getLogger(__name__)
 
-# 盘前建议类型映射
+# Pre-market action labels (recommendation mode only; unreachable in research_only)
 PREMARKET_ACTION_MAP = {
-    "准备建仓": {"action": "buy", "label": "准备建仓"},
-    "准备加仓": {"action": "add", "label": "准备加仓"},
-    "准备减仓": {"action": "reduce", "label": "准备减仓"},
-    "设置预警": {"action": "alert", "label": "设置预警"},
-    "观望": {"action": "watch", "label": "观望"},
+    "Plan to open": {"action": "buy", "label": "Plan to open"},
+    "Plan to add": {"action": "add", "label": "Plan to add"},
+    "Plan to reduce": {"action": "reduce", "label": "Plan to reduce"},
+    "Set alert": {"action": "alert", "label": "Set alert"},
+    "Watch": {"action": "watch", "label": "Watch"},
 }
 
 PROMPT_PATH = Path(__file__).parent.parent.parent.parent / "prompts" / "premarket_outlook.txt"
 
 
 class PremarketOutlookAgent(BaseAgent):
-    """盘前分析 Agent"""
+    """Pre-market outlook agent."""
 
     name = "premarket_outlook"
-    display_name = "盘前分析"
-    description = "开盘前综合昨日分析和隔夜信息，展望今日走势"
+    display_name = "Pre-market outlook"
+    description = "Before the open: combines yesterday's analysis with overnight global moves"
 
     async def collect(self, context: AgentContext) -> dict:
-        """采集盘前数据"""
+        """Collect pre-market data."""
         trace_id = (
             get_log_context().get("trace_id")
             or datetime.now().strftime("%m%d%H%M%S%f")[-10:]
@@ -62,20 +62,20 @@ class PremarketOutlookAgent(BaseAgent):
         start_ts = time.monotonic()
         symbols = [s.symbol for s in context.watchlist]
         logger.info(
-            "[%s] 盘前分析采集开始: watchlist=%s symbols=%s",
+            "[%s] Pre-market collection started: watchlist=%s symbols=%s",
             trace_id,
             len(symbols),
             ",".join(symbols[:12]),
         )
 
-        # 1. 获取昨日盘后分析
+        # 1. Yesterday's post-market analysis
         yesterday_analysis = get_latest_analysis(
             agent_name="daily_report",
             stock_symbol="*",
             before_date=date.today(),
         )
         logger.info(
-            "[%s] 昨日盘后回顾: exists=%s content_chars=%s",
+            "[%s] Yesterday's review: exists=%s content_chars=%s",
             trace_id,
             bool(yesterday_analysis and yesterday_analysis.content),
             len((yesterday_analysis.content if yesterday_analysis else "") or ""),
@@ -101,9 +101,9 @@ class PremarketOutlookAgent(BaseAgent):
                 )
         except Exception as e:
             logger.warning("[%s] global cues unavailable: %s", trace_id, e)
-        logger.info("[%s] 隔夜指数采集完成: count=%s", trace_id, len(us_indices))
+        logger.info("[%s] Overnight cues collected: count=%s", trace_id, len(us_indices))
 
-        # 3/4. SignalPack（技术面+持仓+新闻）
+        # 3/4. SignalPack (technicals, positions, news)
         builder = SignalPackBuilder()
         sym_list = [(s.symbol, s.market, s.name) for s in context.watchlist]
         packs = await builder.build_for_symbols(
@@ -130,7 +130,7 @@ class PremarketOutlookAgent(BaseAgent):
             news_total += len((pack.news.items if (pack and pack.news) else []) or [])
             event_total += len((pack.events.items if (pack and pack.events) else []) or [])
         logger.info(
-            "[%s] SignalPack完成: total=%s quote_ok=%s technical_ok=%s news_items=%s events=%s",
+            "[%s] SignalPack done: total=%s quote_ok=%s technical_ok=%s news_items=%s events=%s",
             trace_id,
             len(symbols),
             quote_ok,
@@ -158,7 +158,7 @@ class PremarketOutlookAgent(BaseAgent):
             if int(score) < 70:
                 low_quality.append(f"{sym}:{score}")
         logger.info(
-            "[%s] 上下文构建完成: symbol_ctx=%s avg=%s min=%s max=%s low_quality=%s",
+            "[%s] Context built: symbol_ctx=%s avg=%s min=%s max=%s low_quality=%s",
             trace_id,
             len(symbol_contexts),
             quality_overview.get("avg_score", 0),
@@ -167,7 +167,7 @@ class PremarketOutlookAgent(BaseAgent):
             ",".join(low_quality[:8]) if low_quality else "-",
         )
 
-        # Flatten news for headline section (优先实时，其次扩展，再次历史记忆)
+        # Flatten news for the headline section (live first, then extended, then remembered)
         news_items = []
         try:
             seen = set()
@@ -201,11 +201,11 @@ class PremarketOutlookAgent(BaseAgent):
                 if len(news_items) >= 10:
                     break
         except Exception as e:
-            logger.warning("[%s] 头条新闻组装失败: %s", trace_id, e)
+            logger.warning("[%s] Building headlines failed: %s", trace_id, e)
             news_items = []
-        logger.info("[%s] 头条新闻组装完成: count=%s", trace_id, len(news_items))
+        logger.info("[%s] Headlines built: count=%s", trace_id, len(news_items))
         logger.info(
-            "[%s] 盘前分析采集完成: elapsed_ms=%s",
+            "[%s] Pre-market collection done: elapsed_ms=%s",
             trace_id,
             int((time.monotonic() - start_ts) * 1000),
         )
@@ -224,10 +224,10 @@ class PremarketOutlookAgent(BaseAgent):
         }
 
     def build_prompt(self, data: dict, context: AgentContext) -> tuple[str, str]:
-        """构建盘前分析 Prompt"""
+        """Build the pre-market prompt."""
         system_prompt = load_research_prompt("premarket_outlook.txt")
 
-        # 辅助函数：安全获取数值，None 转为默认值
+        # Helper: safe numeric access; None becomes the default
         def safe_num(value, default=0):
             return value if value is not None else default
 
@@ -240,31 +240,31 @@ class PremarketOutlookAgent(BaseAgent):
                 return "N/A"
 
         lines = []
-        lines.append(f"## 日期：{datetime.now().strftime('%Y-%m-%d')} 盘前\n")
+        lines.append(f"## Date: {datetime.now().strftime('%Y-%m-%d')} (pre-market)\n")
         symbol_contexts = data.get("symbol_contexts", {}) or {}
         quality_overview = data.get("quality_overview", {}) or {}
 
         if quality_overview:
-            lines.append("## 上下文质量概览")
+            lines.append("## Context quality")
             lines.append(
-                f"- 平均质量分：{quality_overview.get('avg_score', 0)}（最低 {quality_overview.get('min_score', 0)} / 最高 {quality_overview.get('max_score', 0)}）"
+                f"- Average quality: {quality_overview.get('avg_score', 0)} (min {quality_overview.get('min_score', 0)} / max {quality_overview.get('max_score', 0)})"
             )
             global_topic = (quality_overview.get("global_news_topic") or {})
             if global_topic.get("summary"):
-                lines.append(f"- 历史新闻主题：{global_topic.get('summary')}")
+                lines.append(f"- Recurring news themes: {global_topic.get('summary')}")
             lines.append("")
 
-        # 昨日分析回顾
+        # Yesterday's analysis
         if data.get("yesterday_analysis"):
-            lines.append("## 昨日盘后分析回顾")
-            # 截取前 500 字，避免过长
+            lines.append("## Yesterday's post-market review")
+            # First 500 characters only
             content = data["yesterday_analysis"]
             if len(content) > 500:
                 content = content[:500] + "..."
             lines.append(content)
             lines.append("")
 
-        # 隔夜美股表现
+        # Overnight global markets
         if data.get("us_indices"):
             lines.append("## Overnight global markets (delayed, unofficial; context only)")
             for idx in data["us_indices"]:
@@ -282,20 +282,18 @@ class PremarketOutlookAgent(BaseAgent):
                 )
             lines.append("")
 
-        # 相关新闻
+        # Related news
         if data.get("news"):
-            lines.append("## 相关新闻资讯")
+            lines.append("## Related news")
             for news in data["news"]:
-                source_label = {"sina": "新浪", "eastmoney": "东财"}.get(
-                    news["source"], news["source"]
-                )
+                source_label = news["source"]
                 importance_star = (
                     "⭐" * news.get("importance", 0) if news.get("importance") else ""
                 )
                 symbols_tag = (
                     f"[{','.join(news['symbols'])}]" if news["symbols"] else ""
                 )
-                link = f"([原文]({news['url']}))" if news.get("url") else ""
+                link = f"([source]({news['url']}))" if news.get("url") else ""
                 lines.append(
                     f"- [{news['time']}] {importance_star}{news['title']} {symbols_tag} {link}".strip()
                 )
@@ -303,8 +301,8 @@ class PremarketOutlookAgent(BaseAgent):
                     lines.append(f"  > {news['content'][:100]}...")
             lines.append("")
 
-        # 自选股技术状态（来自 SignalPack）
-        lines.append("## 自选股技术状态")
+        # Watchlist technicals (from SignalPack)
+        lines.append("## Watchlist technicals")
         packs = data.get("signal_packs", {}) or {}
         news_items = data.get("news", []) or []
 
@@ -315,28 +313,28 @@ class PremarketOutlookAgent(BaseAgent):
             stock_coverage = stock_quality.get("coverage") or {}
             tech = (pack.technical if pack else None) or {}
             if tech.get("error"):
-                lines.append(f"\n### {stock.name}（{stock.symbol}）")
-                lines.append(f"- 数据获取失败：{tech.get('error')}")
+                lines.append(f"\n### {stock.name} ({stock.symbol})")
+                lines.append(f"- Data unavailable: {tech.get('error')}")
                 continue
 
-            lines.append(f"\n### {stock.name}（{stock.symbol}）")
+            lines.append(f"\n### {stock.name} ({stock.symbol})")
             if stock_quality:
                 lines.append(
-                    f"- 数据质量：{stock_quality.get('score', 0)}（实时新闻 {stock_quality.get('realtime_news_count', 0)} 条，扩展新闻 {stock_quality.get('extended_news_count', 0)} 条，历史新闻 {stock_quality.get('history_news_count', 0)} 条）"
+                    f"- Data quality: {stock_quality.get('score', 0)} (live news {stock_quality.get('realtime_news_count', 0)}, extended news {stock_quality.get('extended_news_count', 0)}, historical news {stock_quality.get('history_news_count', 0)})"
                 )
                 if not stock_coverage.get("news_realtime"):
-                    lines.append("- 备注：实时新闻缺失，已回退扩展/历史上下文")
+                    lines.append("- Note: no live news; fell back to extended/historical context")
             last_close = tech.get("last_close")
             if last_close is not None:
-                lines.append(f"- 昨收价：{last_close:.2f}")
+                lines.append(f"- Previous close: {last_close:.2f}")
             if tech.get("trend"):
-                lines.append(f"- 均线趋势：{tech['trend']}")
+                lines.append(f"- MA trend: {tech['trend']}")
             if tech.get("macd_status"):
-                lines.append(f"- MACD 状态：{tech['macd_status']}")
-            # RSI / KDJ / 布林 / 量能 / 形态
+                lines.append(f"- MACD: {tech['macd_status']}")
+            # RSI / KDJ / Bollinger / volume / pattern
             if tech.get("rsi6") is not None and tech.get("rsi_status"):
                 lines.append(
-                    f"- RSI：{tech.get('rsi6'):.1f}（{tech.get('rsi_status')}）"
+                    f"- RSI: {tech.get('rsi6'):.1f} ({tech.get('rsi_status')})"
                 )
             if tech.get("kdj_status"):
                 kdj_k = tech.get("kdj_k")
@@ -344,28 +342,28 @@ class PremarketOutlookAgent(BaseAgent):
                 kdj_j = tech.get("kdj_j")
                 if kdj_k is not None and kdj_d is not None and kdj_j is not None:
                     lines.append(
-                        f"- KDJ：{tech.get('kdj_status')}（K={kdj_k:.1f} D={kdj_d:.1f} J={kdj_j:.1f}）"
+                        f"- KDJ: {tech.get('kdj_status')} (K={kdj_k:.1f} D={kdj_d:.1f} J={kdj_j:.1f})"
                     )
                 else:
-                    lines.append(f"- KDJ：{tech.get('kdj_status')}")
+                    lines.append(f"- KDJ: {tech.get('kdj_status')}")
             if tech.get("boll_status"):
                 boll_upper = tech.get("boll_upper")
                 boll_lower = tech.get("boll_lower")
                 if boll_upper is not None and boll_lower is not None:
                     lines.append(
-                        f"- 布林：{tech.get('boll_status')}（上轨{boll_upper:.2f} 下轨{boll_lower:.2f}）"
+                        f"- Bollinger: {tech.get('boll_status')} (upper {boll_upper:.2f} lower {boll_lower:.2f})"
                     )
                 else:
-                    lines.append(f"- 布林：{tech.get('boll_status')}")
+                    lines.append(f"- Bollinger: {tech.get('boll_status')}")
             if tech.get("volume_trend"):
                 vol_ratio = tech.get("volume_ratio")
-                ratio_str = f"（量比{vol_ratio:.2f}）" if vol_ratio is not None else ""
-                lines.append(f"- 量能：{tech.get('volume_trend')}{ratio_str}")
+                ratio_str = f" (volume ratio {vol_ratio:.2f})" if vol_ratio is not None else ""
+                lines.append(f"- Volume: {tech.get('volume_trend')}{ratio_str}")
             if tech.get("kline_pattern"):
-                lines.append(f"- 形态：{tech.get('kline_pattern')}")
+                lines.append(f"- Pattern: {tech.get('kline_pattern')}")
 
 
-            # 个股相关新闻（分层：实时 > 扩展 > 历史）
+            # Stock news (live > extended > remembered)
             stock_news = (
                 (stock_ctx.get("news") or {}).get("realtime")
                 or (stock_ctx.get("news") or {}).get("extended")
@@ -376,108 +374,106 @@ class PremarketOutlookAgent(BaseAgent):
                     n for n in news_items if stock.symbol in (n.get("symbols") or [])
                 ]
             if stock_news:
-                lines.append("- 相关新闻：")
+                lines.append("- Related news:")
                 for n in stock_news[:3]:
-                    source_label = {"sina": "新浪", "eastmoney": "东财"}.get(
-                        n.get("source"), n.get("source")
-                    )
+                    source_label = n.get("source")
                     importance_star = (
                         "⭐" * n.get("importance", 0) if n.get("importance") else ""
                     )
                     time_str = n.get("time") or ""
                     title = n.get("title") or ""
-                    link = f"[原文]({n.get('url')})" if n.get("url") else ""
+                    link = f"[source]({n.get('url')})" if n.get("url") else ""
                     lines.append(
-                        f"  - [{time_str}] {importance_star}{title}（{source_label}）{(' ' + link) if link else ''}"
+                        f"  - [{time_str}] {importance_star}{title} ({source_label}){(' ' + link) if link else ''}"
                     )
             else:
-                lines.append("- 相关新闻：暂无（已检查扩展窗口）")
+                lines.append("- Related news: none (extended window checked)")
 
             history_topic = ((stock_ctx.get("news") or {}).get("history_topic") or {})
             if history_topic.get("summary"):
-                lines.append(f"- 历史新闻记忆(近30天)：{history_topic.get('summary')}")
+                lines.append(f"- Remembered news (30 days): {history_topic.get('summary')}")
 
-            # 事件快照（近 N 天，来自公告结构化）
+            # Events (last N days, from structured announcements)
             events = pack.events.items if (pack and pack.events) else []
             important_events = [e for e in events if (e.get("importance") or 0) >= 2]
             if important_events:
-                lines.append("- 事件：")
+                lines.append("- Events:")
                 for e in important_events[:2]:
                     time_str = e.get("time") or ""
                     et = e.get("event_type") or "notice"
                     title = e.get("title") or ""
-                    link = f"[原文]({e.get('url')})" if e.get("url") else ""
+                    link = f"[source]({e.get('url')})" if e.get("url") else ""
                     lines.append(
                         f"  - [{time_str}] ({et}) {title}{(' ' + link) if link else ''}"
                     )
 
-            # 多级支撑压力（优先中期）
+            # Support and resistance (medium term first)
             support_m = tech.get("support_m")
             resistance_m = tech.get("resistance_m")
             if support_m is not None and resistance_m is not None:
                 lines.append(
-                    f"- 支撑压力：中期支撑{support_m:.2f} / 中期压力{resistance_m:.2f}"
+                    f"- Support/resistance: medium-term support {support_m:.2f} / resistance {resistance_m:.2f}"
                 )
             else:
                 support = tech.get("support")
                 resistance = tech.get("resistance")
                 if support is not None and resistance is not None:
-                    lines.append(f"- 支撑压力：{support:.2f} / {resistance:.2f}")
+                    lines.append(f"- Support/resistance: {support:.2f} / {resistance:.2f}")
             change_5d = tech.get("change_5d")
             if change_5d is not None:
-                lines.append(f"- 近期表现：5日{change_5d:+.1f}%")
+                lines.append(f"- Recent: 5d {change_5d:+.1f}%")
             if tech.get("amplitude") is not None:
                 amp = tech.get("amplitude")
                 amp5 = tech.get("amplitude_avg5")
                 if amp5 is not None:
-                    lines.append(f"- 振幅：{amp:.1f}%（5日均{amp5:.1f}%）")
+                    lines.append(f"- Range: {amp:.1f}% (5-day average {amp5:.1f}%)")
                 else:
-                    lines.append(f"- 振幅：{amp:.1f}%")
+                    lines.append(f"- Range: {amp:.1f}%")
 
             kline_history = stock_ctx.get("kline_history") or {}
             if kline_history.get("available"):
                 lines.append(
-                    f"- 历史走势：5日{fmt_pct(kline_history.get('ret_5d'))} / 20日{fmt_pct(kline_history.get('ret_20d'))} / 60日{fmt_pct(kline_history.get('ret_60d'))}"
+                    f"- Returns: 5d {fmt_pct(kline_history.get('ret_5d'))} / 20d {fmt_pct(kline_history.get('ret_20d'))} / 60d {fmt_pct(kline_history.get('ret_60d'))}"
                 )
                 if kline_history.get("volatility_20d") is not None:
                     lines.append(
-                        f"- 波动(20日标准差)：{float(kline_history.get('volatility_20d')):.2f}%"
+                        f"- Volatility (20d std dev): {float(kline_history.get('volatility_20d')):.2f}%"
                     )
                 if kline_history.get("breakout_state") and kline_history.get("breakout_state") != "none":
-                    lines.append(f"- 突破状态：{kline_history.get('breakout_state')}")
+                    lines.append(f"- Breakout state: {kline_history.get('breakout_state')}")
 
-            # 持仓信息
+            # Position
             position = context.portfolio.get_aggregated_position(stock.symbol)
             if position:
-                style_labels = {"short": "短线", "swing": "波段", "long": "长线"}
-                style = style_labels.get(position.get("trading_style", "swing"), "波段")
+                style_labels = {"short": "Short term", "swing": "Swing", "long": "Long term"}
+                style = style_labels.get(position.get("trading_style", "swing"), "Swing")
                 avg_cost = safe_num(position.get("avg_cost"), 1)
                 lines.append(
-                    f"- 持仓：{position['total_quantity']}股 成本{avg_cost:.2f}（{style}）"
+                    f"- Position: {position['total_quantity']} shares at cost {avg_cost:.2f} ({style})"
                 )
 
             constraints = stock_ctx.get("constraints") or {}
             if constraints:
                 lines.append(
-                    f"- 资金约束：总可用 {safe_num(constraints.get('total_available_funds'), 0):.0f}，单票仓位占比 {safe_num(constraints.get('single_position_ratio'), 0) * 100:.1f}%（{constraints.get('risk_budget_hint', 'normal')}）"
+                    f"- Cash: Rs {safe_num(constraints.get('total_available_funds'), 0):.0f} available; single-stock share {safe_num(constraints.get('single_position_ratio'), 0) * 100:.1f}% ({constraints.get('risk_budget_hint', 'normal')})"
                 )
             memory = stock_ctx.get("memory") or {}
             if memory:
                 lines.append(
-                    f"- 历史上下文记忆：近{memory.get('window_days', 30)}天质量均值{safe_num(memory.get('avg_quality_score'), 0):.1f}，趋势{memory.get('quality_trend', 'flat')}"
+                    f"- Context memory: average quality {safe_num(memory.get('avg_quality_score'), 0):.1f} over {memory.get('window_days', 30)} days, trend {memory.get('quality_trend', 'flat')}"
                 )
                 if memory.get("latest_history_topic"):
-                    lines.append(f"- 历史记忆主题：{memory.get('latest_history_topic')}")
+                    lines.append(f"- Remembered themes: {memory.get('latest_history_topic')}")
 
-        lines.append("\n请根据以上信息，给出今日交易展望。")
+        lines.append("\nSummarise today's outlook from the information above.")
 
         user_content = "\n".join(lines)
         return system_prompt, user_content
 
     def _parse_suggestions(self, content: str, watchlist: list) -> dict[str, dict]:
         """
-        从 AI 响应中解析个股建议
-        返回: {symbol: {action, action_label, reason, should_alert}}
+        Parse per-stock actions from the AI response (recommendation mode only)
+        Returns: {symbol: {action, action_label, reason, should_alert}}
         """
         suggestions: dict[str, dict] = {}
         if not content or not watchlist:
@@ -504,15 +500,15 @@ class PremarketOutlookAgent(BaseAgent):
             if not action_text:
                 continue
 
-            m = re.search(r"[「【\[]\s*(?P<sym>[A-Za-z]{1,5}|\d{3,6})\s*[」】\]]", line)
+            m = re.search(r"\[\s*(?P<sym>[A-Za-z0-9&\-]{1,20})\s*\]", line)
             sym_raw = m.group("sym") if m else ""
 
             if not sym_raw:
-                m = re.search(r"\(\s*(?P<sym>[A-Za-z]{1,5}|\d{3,6})\s*\)", line)
+                m = re.search(r"\(\s*(?P<sym>[A-Za-z0-9&\-]{1,20})\s*\)", line)
                 sym_raw = m.group("sym") if m else ""
 
             if not sym_raw:
-                m = re.match(r"^(?P<sym>[A-Za-z]{1,5}|\d{3,6})\b", line)
+                m = re.match(r"^(?P<sym>[A-Za-z0-9&\-]{1,20})\b", line)
                 sym_raw = m.group("sym") if m else ""
 
             if not sym_raw:
@@ -540,13 +536,13 @@ class PremarketOutlookAgent(BaseAgent):
 
             reason = ""
             m_reason = re.search(
-                rf"{re.escape(action_text)}\s*[：:：\-—]?\s*(?P<r>.+)$", line
+                rf"{re.escape(action_text)}\s*[:\-—]?\s*(?P<r>.+)$", line
             )
             if m_reason:
                 reason = m_reason.group("r").strip()
 
             action_info = PREMARKET_ACTION_MAP.get(
-                action_text, {"action": "watch", "label": "观望"}
+                action_text, {"action": "watch", "label": "Watch"}
             )
             suggestions[canonical] = {
                 "action": action_info["action"],
@@ -579,7 +575,7 @@ class PremarketOutlookAgent(BaseAgent):
             if not canonical or canonical not in symbol_set:
                 continue
             action = (it.get("action") or "watch").strip()
-            action_label = (it.get("action_label") or "观望").strip()
+            action_label = (it.get("action_label") or "Watch").strip()
             reason = (it.get("reason") or "").strip()
             signal = (it.get("signal") or "").strip()
             suggestions[canonical] = {
@@ -599,26 +595,26 @@ class PremarketOutlookAgent(BaseAgent):
         return suggestions
 
     async def analyze(self, context: AgentContext, data: dict) -> AnalysisResult:
-        """调用 AI 分析并保存到历史/建议池"""
+        """Run the AI analysis and save it to history and the suggestion pool."""
         trace_id = str(data.get("run_trace_id") or datetime.now().strftime("%m%d%H%M%S%f")[-10:])
         start_ts = time.monotonic()
         logger.info(
-            "[%s] 盘前分析开始: watchlist=%s model=%s",
+            "[%s] Pre-market analysis started: watchlist=%s model=%s",
             trace_id,
             len(context.watchlist),
             context.model_label or "default",
         )
         system_prompt, user_content = self.build_prompt(data, context)
         logger.info(
-            "[%s] Prompt构建完成: system_chars=%s user_chars=%s lines=%s",
+            "[%s] Prompt built: system_chars=%s user_chars=%s lines=%s",
             trace_id,
             len(system_prompt or ""),
             len(user_content or ""),
             (user_content.count("\n") + 1) if user_content else 0,
         )
-        logger.info("[%s] AI请求开始", trace_id)
+        logger.info("[%s] AI request started", trace_id)
         content = await context.ai_client.chat(system_prompt, user_content)
-        logger.info("[%s] AI请求完成: response_chars=%s", trace_id, len(content or ""))
+        logger.info("[%s] AI request done: response_chars=%s", trace_id, len(content or ""))
 
         if context.model_label:
             idx = content.rfind(TAG_START)
@@ -638,10 +634,10 @@ class PremarketOutlookAgent(BaseAgent):
             f"{(s.name or s.symbol).strip()}({s.symbol})"
             for s in context.watchlist[:5]
         ]
-        stock_names = "、".join(stock_items) if stock_items else "无股票"
+        stock_names = ", ".join(stock_items) if stock_items else "no stocks"
         if len(context.watchlist) > 5:
-            stock_names += f" 等{len(context.watchlist)}只"
-        title = f"【{self.display_name}】{stock_names}"
+            stock_names += f" and {len(context.watchlist) - 5} more"
+        title = f"[{self.display_name}] {stock_names}"
 
         result = AnalysisResult(
             agent_name=self.name,
@@ -650,7 +646,7 @@ class PremarketOutlookAgent(BaseAgent):
             raw_data={**data, "structured": structured} if structured else data,
         )
 
-        # 解析个股建议
+        # Per-stock actions
         suggestions = self._parse_suggestions_json(structured, context.watchlist)
         suggestion_source = "json"
         if not suggestions:
@@ -666,14 +662,14 @@ class PremarketOutlookAgent(BaseAgent):
         result.raw_data["research"] = research_payload(research_items)
         action_dist = Counter((s.get("action") or "unknown") for s in suggestions.values())
         logger.info(
-            "[%s] 建议解析完成: source=%s count=%s action_dist=%s",
+            "[%s] Actions parsed: source=%s count=%s action_dist=%s",
             trace_id,
             suggestion_source,
             len(suggestions),
             dict(action_dist),
         )
 
-        # 保存各股票建议到建议池
+        # Save each stock's item to the suggestion pool
         stock_map = {s.symbol: s for s in context.watchlist}
         packs = data.get("signal_packs", {}) or {}
         symbol_contexts = data.get("symbol_contexts", {}) or {}
@@ -707,7 +703,7 @@ class PremarketOutlookAgent(BaseAgent):
                     reason=sug.get("reason", ""),
                     agent_name=self.name,
                     agent_label=self.display_name,
-                    expires_hours=12,  # 盘前建议当日有效
+                    expires_hours=12,  # pre-market items last for the day
                     prompt_context=user_content,
                     ai_response=result.content,
                     stock_market=stock.market.value,
@@ -744,7 +740,7 @@ class PremarketOutlookAgent(BaseAgent):
                         horizon_days=horizon,
                         prediction_group_id=prediction_group_id,
                         action=sug.get("action") or "watch",
-                        action_label=sug.get("action_label") or "观望",
+                        action_label=sug.get("action_label") or "Watch",
                         confidence=(float(quality_score) / 100.0)
                         if quality_score is not None
                         else None,
@@ -760,7 +756,7 @@ class PremarketOutlookAgent(BaseAgent):
                     else:
                         outcome_failed += 1
         logger.info(
-            "[%s] 建议落库完成: suggestion_saved=%s failed=%s outcome_saved=%s failed=%s",
+            "[%s] Items saved: suggestion_saved=%s failed=%s outcome_saved=%s failed=%s",
             trace_id,
             suggestion_saved,
             suggestion_failed,
@@ -847,13 +843,13 @@ class PremarketOutlookAgent(BaseAgent):
             quality={"score": quality_overview.get("avg_score", 0)},
         )
         logger.info(
-            "[%s] context_run落库: saved=%s symbols=%s",
+            "[%s] context_run saved: saved=%s symbols=%s",
             trace_id,
             context_run_saved,
             len(compact_context),
         )
 
-        # 保存到历史记录
+        # Save to history
         history_saved = save_analysis(
             agent_name=self.name,
             stock_symbol="*",
@@ -878,15 +874,15 @@ class PremarketOutlookAgent(BaseAgent):
         )
         if history_saved:
             logger.info(
-                "[%s] 盘前分析已保存到历史记录: suggestions=%s prompt_chars=%s",
+                "[%s] Pre-market analysis saved to history: suggestions=%s prompt_chars=%s",
                 trace_id,
                 len(suggestions),
                 len(user_content or ""),
             )
         else:
-            logger.error("[%s] 盘前分析保存历史记录失败", trace_id)
+            logger.error("[%s] Saving the pre-market analysis to history failed", trace_id)
         logger.info(
-            "[%s] 盘前分析完成: elapsed_ms=%s",
+            "[%s] Pre-market analysis done: elapsed_ms=%s",
             trace_id,
             int((time.monotonic() - start_ts) * 1000),
         )

@@ -1,10 +1,10 @@
-"""本地评测环境文件的加载行为。"""
+"""Loading behaviour of the local eval environment file."""
 
 from tests.eval import run_eval
 
 
 def test_load_local_eval_env_reads_unset_eval_variables(tmp_path, monkeypatch):
-    """`.env.eval` 中未显式设置的 EVAL 变量会供 make eval 使用。"""
+    """EVAL variables in `.env.eval` that aren't set explicitly are used by make eval."""
     (tmp_path / ".env.eval").write_text(
         "EVAL_AI_BASE_URL=https://eval.example/v1\n"
         "EVAL_AI_API_KEY=eval-secret\n"
@@ -25,7 +25,7 @@ def test_load_local_eval_env_reads_unset_eval_variables(tmp_path, monkeypatch):
 
 
 def test_load_local_eval_env_keeps_explicit_environment_value(tmp_path, monkeypatch):
-    """终端或 CI 显式提供的评测变量优先于本地文件。"""
+    """Eval variables provided explicitly by the terminal or CI win over the local file."""
     (tmp_path / ".env.eval").write_text("EVAL_AI_MODEL=file-model\n", encoding="utf-8")
     monkeypatch.setattr(run_eval, "REPO_ROOT", tmp_path)
     monkeypatch.setenv("EVAL_AI_MODEL", "ci-model")
@@ -36,7 +36,7 @@ def test_load_local_eval_env_keeps_explicit_environment_value(tmp_path, monkeypa
 
 
 def test_main_loads_local_eval_env_before_running_chat_cases(tmp_path, monkeypatch):
-    """直接执行入口时，本地评测配置会在 Chat 用例开始前生效。"""
+    """When run directly, the local eval config takes effect before the chat cases start."""
     (tmp_path / ".env.eval").write_text(
         "EVAL_AI_BASE_URL=https://eval.example/v1\n"
         "EVAL_AI_API_KEY=eval-secret\n"

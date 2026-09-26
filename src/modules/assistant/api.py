@@ -62,20 +62,20 @@ logger = logging.getLogger(__name__)
 # cut off while the browser is still receiving events.
 ASSISTANT_RUN_TIMEOUT_SECONDS = 180
 ASSISTANT_TOOL_TIMEOUT_SECONDS = 15
-# 研究型请求可能需要行情、K 线、新闻和持仓多轮组合调用；同时由
-# PanAgent runtime 的重复调用保护避免小模型陷入同一工具循环。
+# Research requests may need several rounds of quotes, K-lines, news and holdings; the PanAgent
+# runtime's repeated-call guard stops small models getting stuck in a loop on one tool.
 ASSISTANT_MAX_STEPS = 12
 ASSISTANT_MAX_TOOL_CALLS = 24
 
 _ERROR_MESSAGES = {
-    "run_timeout": "助手响应超时，请稍后重试。",
-    "tool_call_limit": "助手调用步骤过多，请缩小问题范围后重试。",
-    "repeated_tool_call": "助手检测到重复工具调用，请重试或换一种问法。",
-    "runtime_failed": "助手暂时不可用，请稍后重试。",
-    "required_tool_call_missing": "我还没有执行这次修改，请确认目标后重试。",
-    "transport_timeout": "助手响应超时，请稍后重试。",
-    "transport_failed": "助手任务执行失败，请稍后重试。",
-    "transport_setup_failed": "助手任务执行失败，请稍后重试。",
+    "run_timeout": "The assistant timed out. Please try again shortly.",
+    "tool_call_limit": "The assistant took too many steps. Please narrow the question and try again.",
+    "repeated_tool_call": "The assistant repeated the same tool call. Please try again or rephrase.",
+    "runtime_failed": "The assistant is unavailable right now. Please try again shortly.",
+    "required_tool_call_missing": "I haven't made this change yet. Please confirm the target and try again.",
+    "transport_timeout": "The assistant timed out. Please try again shortly.",
+    "transport_failed": "The assistant task failed. Please try again shortly.",
+    "transport_setup_failed": "The assistant task failed. Please try again shortly.",
 }
 _SSE_HEADERS = {
     "Cache-Control": "no-cache",
@@ -84,7 +84,7 @@ _SSE_HEADERS = {
 }
 
 def _error_message(error_code: str) -> str:
-    return _ERROR_MESSAGES.get(error_code, "助手暂时不可用，请稍后重试。")
+    return _ERROR_MESSAGES.get(error_code, "The assistant is unavailable right now. Please try again shortly.")
 
 
 def _encode_sse(event: str, data: dict) -> str:

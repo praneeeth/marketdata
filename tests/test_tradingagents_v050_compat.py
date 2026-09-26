@@ -1,4 +1,4 @@
-"""TradingAgents v0.5.0 集成扩展点的兼容契约。"""
+"""Compatibility contract for TradingAgents v0.5.0 integration extension points."""
 
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ from tradingagents.graph.trading_graph import TradingAgentsGraph
 
 
 def test_v050_exposes_the_panwatch_extension_contract():
-    """升级或上游重构时，公开持仓入口和既有补丁签名必须仍然可用。"""
+    """On an upgrade or upstream refactor, the public portfolio entry point and existing patch signatures must still work."""
     assert version("tradingagents") == "0.5.0"
     assert "portfolio" in inspect.signature(TradingAgentsGraph.propagate).parameters
     assert "portfolio_context" in inspect.signature(Propagator.create_initial_state).parameters

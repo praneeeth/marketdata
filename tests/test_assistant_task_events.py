@@ -55,7 +55,7 @@ def test_append_task_event_can_be_replayed_after_a_cursor():
         TaskEventType.STEP_PROGRESS,
         status=TaskStatus.RUNNING,
         step_index=1,
-        data={"summary": "正在查询"},
+        data={"summary": "Looking up"},
     )
     repository.append_task_event(
         task.id,
@@ -68,7 +68,7 @@ def test_append_task_event_can_be_replayed_after_a_cursor():
     events = repository.list_task_events(task.id, after_sequence=2)
 
     assert [event.sequence for event in events] == [3, 4]
-    assert events[0].data == {"summary": "正在查询"}
+    assert events[0].data == {"summary": "Looking up"}
     assert events[1].event_id
 
     session.close()
@@ -131,7 +131,7 @@ def test_task_event_stream_replays_and_stops_at_terminal_state():
         task.id,
         status="completed",
         final_message_id=42,
-        event_data={"message_id": 42, "content": "完成"},
+        event_data={"message_id": 42, "content": "Done"},
     )
 
     async def collect():
@@ -142,7 +142,7 @@ def test_task_event_stream_replays_and_stops_at_terminal_state():
 
     assert len(parsed) == 3
     assert parsed[-1].startswith("id: 3\nevent: done\n")
-    assert json.loads(parsed[-1].split("data: ", 1)[1].splitlines()[0])["content"] == "完成"
+    assert json.loads(parsed[-1].split("data: ", 1)[1].splitlines()[0])["content"] == "Done"
 
     session.close()
     engine.dispose()
@@ -197,7 +197,7 @@ def test_completion_does_not_leave_message_after_cancellation():
         task.id, status=TaskStatus.FAILED.value, final_message_id=None, error_code="late"
     )
 
-    assert repository.complete_task_with_message(task.id, task.conversation_id, "完成") is None
+    assert repository.complete_task_with_message(task.id, task.conversation_id, "Done") is None
     assert repository.list_messages(task.conversation_id) == []
     assert repository.get_task_snapshot(task.id)["status"] == TaskStatus.CANCELLED.value
 
@@ -217,7 +217,7 @@ def test_retry_does_not_replay_completed_or_tool_side_effect_tasks():
         failed.id, status=TaskStatus.FAILED.value, final_message_id=None, error_code="x"
     )
     repository.record_tool_completed(
-        failed.id, call_id="call-1", tool_name="write_tool", summary="已执行"
+        failed.id, call_id="call-1", tool_name="write_tool", summary="Executed"
     )
     assert repository.retry_task(failed.id).status == TaskStatus.FAILED.value
 

@@ -33,6 +33,7 @@ from src.platform.compliance import (
     sanitize_payload,
     with_short_disclaimer,
 )
+from src.platform.compliance.detector import detect
 from src.platform.compliance.features import (
     Feature,
     FeatureRestrictedError,
@@ -392,3 +393,34 @@ def test_abbreviations_do_not_split_sentences_or_leak_vetoes() -> None:
     result = guard_text(text, surface="t")
     assert result.status in {"redacted", "blocked"}
     assert "rally to" not in result.text
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Final trade decision: Buy",
+        "FINAL TRANSACTION PROPOSAL: **BUY**",
+        "Action: Sell",
+        "Cut the position by 70%",
+        "Build in three tranches, first tranche 30%",
+        "Infosys (INFY): Buy",
+    ],
+)
+def test_english_decision_labels_and_sizing_are_blocked(text: str) -> None:
+    """TradingAgents-style decision labels and sizing must not pass in English."""
+    assert detect(text)
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Price action: consolidation near the 200-day average.",
+        "The promoter cut its stake by 2% last quarter.",
+        "Q2 results: sell-off deepens",
+        "Analysts debate: buy or sell",
+        "Price action is neutral near the 50-day average.",
+        "Price action: hold above the 200-day average so far.",
+    ],
+)
+def test_descriptive_action_and_corporate_stake_changes_pass(text: str) -> None:
+    assert not detect(text)

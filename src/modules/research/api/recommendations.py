@@ -1,4 +1,4 @@
-"""推荐相关 API（入场候选榜）。"""
+"""Recommendation-related API (screening candidates)."""
 
 from datetime import datetime, timezone
 import logging
@@ -102,7 +102,7 @@ def _refresh_worker(
             last_snapshot_date=(result.get("snapshot_date") or ""),
         )
     except Exception as e:
-        logger.exception("后台刷新策略信号失败: %s", e)
+        logger.exception("Background strategy signal refresh failed: %s", e)
         _set_refresh_state(
             running=False,
             finished_at=_now_iso(),
@@ -143,14 +143,14 @@ class CandidateFeedbackIn(BaseModel):
 @router.get("/entry-candidates")
 def get_entry_candidates(
     market: str = Query("", description="Market: IN (NSE/BSE)"),
-    status: str = Query("active", description="状态: active/inactive/all"),
+    status: str = Query("active", description="Status: active/inactive/all"),
     min_score: float = Query(0, ge=0, le=100),
     limit: int = Query(20, ge=1, le=500),
-    refresh: bool = Query(False, description="是否先刷新候选再返回"),
-    snapshot_date: str = Query("", description="快照日期 YYYY-MM-DD，默认最新"),
-    source: str = Query("", description="来源: market_scan/watchlist/mixed/all"),
-    holding: str = Query("", description="持仓过滤: held/unheld/all"),
-    strategy: str = Query("", description="策略标签过滤"),
+    refresh: bool = Query(False, description="Refresh candidates before returning"),
+    snapshot_date: str = Query("", description="Snapshot date YYYY-MM-DD, latest by default"),
+    source: str = Query("", description="Source: market_scan/watchlist/mixed/all"),
+    holding: str = Query("", description="Holding filter: held/unheld/all"),
+    strategy: str = Query("", description="Strategy tag filter"),
 ):
     if refresh:
         refresh_entry_candidates()
@@ -175,7 +175,7 @@ def refresh_candidates(
         max_inputs=max_inputs,
         market_scan_limit=market_scan_limit,
     )
-    # 同步刷新策略信号层，保持前端机会页一致。
+    # Refresh the strategy signal layer synchronously so the frontend opportunities page stays consistent.
     refresh_strategy_signals(
         snapshot_date=cand.get("snapshot_date", ""),
         rebuild_candidates=False,
@@ -215,22 +215,22 @@ def evaluate_candidate_outcomes(
 
 
 @router.get("/strategy-catalog")
-def get_strategy_catalog(enabled_only: bool = Query(True, description="仅返回启用策略")):
+def get_strategy_catalog(enabled_only: bool = Query(True, description="Only enabled strategies")):
     return {"items": list_strategy_catalog(enabled_only=enabled_only)}
 
 
 @router.get("/strategy-signals")
 def get_strategy_signal_list(
     market: str = Query("", description="Market: IN (NSE/BSE)"),
-    status: str = Query("all", description="状态: active/inactive/all"),
+    status: str = Query("all", description="Status: active/inactive/all"),
     min_score: float = Query(0, ge=0, le=100),
     limit: int = Query(50, ge=1, le=500),
-    snapshot_date: str = Query("", description="快照日期 YYYY-MM-DD，默认最新"),
-    source_pool: str = Query("", description="来源池: market_scan/watchlist/mixed/all"),
-    holding: str = Query("", description="持仓过滤: held/unheld/all"),
-    strategy_code: str = Query("", description="策略代码"),
-    risk_level: str = Query("", description="风险等级: low/medium/high/all"),
-    include_payload: bool = Query(False, description="是否返回完整 payload（默认否，提升性能）"),
+    snapshot_date: str = Query("", description="Snapshot date YYYY-MM-DD, latest by default"),
+    source_pool: str = Query("", description="Source pool: market_scan/watchlist/mixed/all"),
+    holding: str = Query("", description="Holding filter: held/unheld/all"),
+    strategy_code: str = Query("", description="Strategy code"),
+    risk_level: str = Query("", description="Risk level: low/medium/high/all"),
+    include_payload: bool = Query(False, description="Return the full payload (off by default, for speed)"),
 ):
     result = list_strategy_signals(
         market=market,
@@ -244,7 +244,7 @@ def get_strategy_signal_list(
         risk_level=risk_level,
         include_payload=include_payload,
     )
-    # Phase 3: 注入 1-10 可解释评分 + 正负因子拆解
+    # Phase 3: add the 1-10 explainable score + positive/negative factor breakdown
     for _it in result.get("items", []):
         enrich_signal(_it)
     return result
@@ -252,7 +252,7 @@ def get_strategy_signal_list(
 
 @router.get("/strategy-regimes")
 def get_strategy_regimes(
-    snapshot_date: str = Query("", description="快照日期 YYYY-MM-DD"),
+    snapshot_date: str = Query("", description="Snapshot date YYYY-MM-DD"),
     market: str = Query("", description="Market filter: IN (NSE/BSE)"),
     limit: int = Query(100, ge=1, le=1000),
 ):
@@ -265,7 +265,7 @@ def get_strategy_regimes(
 
 @router.get("/strategy-risk-snapshots")
 def get_strategy_risk_snapshots(
-    snapshot_date: str = Query("", description="快照日期 YYYY-MM-DD"),
+    snapshot_date: str = Query("", description="Snapshot date YYYY-MM-DD"),
     market: str = Query("", description="Market filter: IN (NSE/BSE)"),
     limit: int = Query(100, ge=1, le=1000),
 ):
@@ -283,13 +283,13 @@ def get_strategy_factor(signal_run_id: int):
 
 @router.post("/strategy-signals/refresh")
 def refresh_strategy_signal_list(
-    rebuild_candidates: bool = Query(True, description="是否先重算候选池"),
-    snapshot_date: str = Query("", description="指定快照日期，不传则用最新"),
+    rebuild_candidates: bool = Query(True, description="Recompute the candidate pool first"),
+    snapshot_date: str = Query("", description="Snapshot date; latest when omitted"),
     max_inputs: int = Query(500, ge=20, le=2000),
     market_scan_limit: int = Query(80, ge=20, le=500),
     max_kline_symbols: int = Query(72, ge=0, le=300),
     limit_candidates: int = Query(2000, ge=50, le=10000),
-    wait: bool = Query(False, description="是否同步等待刷新完成（默认后台执行）"),
+    wait: bool = Query(False, description="Wait for the refresh to finish (runs in the background by default)"),
 ):
     if wait:
         return refresh_strategy_signals(
@@ -314,7 +314,7 @@ def refresh_strategy_signal_list(
         "queued": True,
         "running": True,
         "accepted": bool(started),
-        "message": "已提交后台执行" if started else "刷新任务已在执行中",
+        "message": "Queued to run in the background" if started else "A refresh is already running",
         "snapshot_date": latest_snapshot or state.get("last_snapshot_date") or "",
         "count": 0,
         "items": [],
@@ -367,17 +367,17 @@ def strategy_stats(days: int = Query(45, ge=1, le=365)):
 
 @router.get("/strategy-factor-ic")
 def strategy_factor_ic(
-    days: int = Query(90, ge=7, le=365, description="回看快照天数"),
-    horizon: int = Query(5, ge=1, le=60, description="持有期(交易日)"),
+    days: int = Query(90, ge=7, le=365, description="Days of snapshots to look back"),
+    horizon: int = Query(5, ge=1, le=60, description="Holding period (trading days)"),
 ):
-    """各因子的 IC/IR 有效性评估(StrategyFactorSnapshot × StrategyOutcome)。"""
+    """IC/IR effectiveness of each factor (StrategyFactorSnapshot x StrategyOutcome)."""
     return evaluate_factor_ic(days=days, horizon=horizon)
 
 
 @router.get("/strategy-weight-history")
 def strategy_weight_history(
-    strategy_code: str = Query("", description="策略代码过滤"),
-    market: str = Query("", description="市场过滤"),
+    strategy_code: str = Query("", description="Strategy code filter"),
+    market: str = Query("", description="Market filter"),
     limit: int = Query(200, ge=1, le=2000),
 ):
     return list_strategy_weight_history(

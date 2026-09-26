@@ -12,19 +12,19 @@ from src.modules.administration.update_checker import check_update
 
 router = APIRouter()
 
-# 模块 router 已不在仓库根的浅层目录；版本文件必须从本文件的绝对位置推导，
-# 不能依赖服务进程的当前工作目录。
+# Module routers no longer live in a shallow directory at the repo root; the version file must be found from this
+# file's absolute location, not the server process's working directory.
 VERSION_FILE = Path(__file__).resolve().parents[4] / "VERSION"
 
 
 def get_app_version() -> str:
-    """获取应用版本号"""
-    # 优先从环境变量读取
+    """Get the app version."""
+    # Environment variable first
     version = os.getenv("APP_VERSION")
     if version:
         return version
 
-    # 从 VERSION 文件读取（支持多个位置）
+    # Read the VERSION file (several locations supported)
     possible_paths = [Path("VERSION"), VERSION_FILE]
     for path in possible_paths:
         try:
@@ -47,22 +47,22 @@ class SettingResponse(BaseModel):
         from_attributes = True
 
 
-# 配置项描述
+# Setting descriptions
 SETTING_DESCRIPTIONS = {
-    "http_proxy": "HTTP 代理地址(配置后所有对外请求含行情/新闻/AI/通知统一走此代理)",
-    "notify_quiet_hours": "通知静默时间段（HH:MM-HH:MM，空为关闭）",
-    "notify_retry_attempts": "通知失败重试次数（不含首次）",
-    "notify_retry_backoff_seconds": "通知重试退避秒数（基数）",
-    "notify_dedupe_ttl_overrides": "通知幂等窗口覆盖（JSON，空为默认）",
+    "http_proxy": "HTTP proxy address (once set, all outbound requests including quotes/news/AI/notifications use it)",
+    "notify_quiet_hours": "Notification quiet hours (HH:MM-HH:MM; empty = off)",
+    "notify_retry_attempts": "Notification retry attempts (not counting the first)",
+    "notify_retry_backoff_seconds": "Notification retry backoff in seconds (base)",
+    "notify_dedupe_ttl_overrides": "Notification dedupe window overrides (JSON; empty = defaults)",
     "stock_link_platform": "Stock link platform (quote site opened from a stock symbol): nse, tradingview or google",
-    "panwatch_base_url": "PanWatch 公开访问地址（用于通知里的分析详情页链接，如 https://panwatch.example.com）",
+    "panwatch_base_url": "Public URL of the app (for analysis detail links in notifications, e.g. https://marketdata.example.com)",
 }
 
 SETTING_KEYS = list(SETTING_DESCRIPTIONS.keys())
 
 
 def _get_env_defaults() -> dict[str, str]:
-    """从 .env / 环境变量读取当前值作为默认"""
+    """Read the current values from .env / environment variables as defaults."""
     s = Settings()
     return {
         "http_proxy": s.http_proxy,
@@ -101,7 +101,7 @@ def list_settings(db: Session = Depends(get_db)):
     return result
 
 
-AVATAR_KEY = "ui_avatar"  # DB 仅存文件名;图片本体落在 data/avatars/
+AVATAR_KEY = "ui_avatar"  # the DB stores only the file name; the image lives in data/avatars/
 
 
 def _avatar_dir() -> str:
@@ -112,9 +112,9 @@ def _avatar_dir() -> str:
 
 @router.get("/avatar")
 def get_avatar(db: Session = Depends(get_db)):
-    """读取用户头像:DB 存文件名,图片本体在 data/avatars/,读取后以 data URL 返回。
+    """Read the user avatar: the DB stores the file name, the image is in data/avatars/, returned as a data URL.
 
-    GET /avatar 无同名 GET /{key},不存在路由抢匹配问题。
+    GET /avatar has no GET /{key} of the same name, so no route conflict.
     """
     row = db.query(AppSettings).filter(AppSettings.key == AVATAR_KEY).first()
     fname = (row.value if row and row.value else "").strip()
@@ -134,9 +134,9 @@ def get_avatar(db: Session = Depends(get_db)):
 
 @router.put("/avatar")
 def set_avatar(update: SettingUpdate, db: Session = Depends(get_db)):
-    """保存/清空用户头像:把 data URL 落成 data/avatars/avatar.* 文件,DB 仅记文件名。
+    """Save/clear the user avatar: writes the data URL to data/avatars/avatar.*; the DB stores only the file name.
 
-    需在 /{key} 之前注册以优先匹配。传空字符串即清空(删文件 + 清记录)。
+    Must be registered before /{key} to match first. An empty string clears it (deletes the file and the record).
     """
     row = db.query(AppSettings).filter(AppSettings.key == AVATAR_KEY).first()
     old = (row.value if row else "") or ""
@@ -154,24 +154,24 @@ def set_avatar(update: SettingUpdate, db: Session = Depends(get_db)):
         return {"value": ""}
 
     if not (value.startswith("data:") and "," in value):
-        raise HTTPException(400, "头像需为 data URL")
+        raise HTTPException(400, "The avatar must be a data URL")
     header, b64 = value.split(",", 1)
     ext = "png" if "image/png" in header else "jpg"
     try:
         raw = base64.b64decode(b64)
     except Exception:
-        raise HTTPException(400, "头像数据无效")
+        raise HTTPException(400, "Invalid avatar data")
 
     fname = f"avatar.{ext}"
     with open(os.path.join(_avatar_dir(), fname), "wb") as f:
         f.write(raw)
-    if old and old != fname:  # 扩展名变化时清掉旧文件
+    if old and old != fname:  # remove the old file when the extension changes
         try:
             os.remove(os.path.join(_avatar_dir(), old))
         except OSError:
             pass
     if not row:
-        row = AppSettings(key=AVATAR_KEY, value=fname, description="用户头像文件名")
+        row = AppSettings(key=AVATAR_KEY, value=fname, description="User avatar file name")
         db.add(row)
     else:
         row.value = fname
@@ -192,7 +192,7 @@ def update_setting(key: str, update: SettingUpdate, db: Session = Depends(get_db
     db.commit()
     db.refresh(setting)
 
-    # http_proxy 改动立刻反映到进程 env,所有 httpx(trust_env=True)免重启即走新代理
+    # An http_proxy change is applied to the process env at once, so every httpx client (trust_env=True) uses the new proxy without a restart
     if key == "http_proxy":
         try:
             from server import apply_proxy_env
@@ -205,13 +205,13 @@ def update_setting(key: str, update: SettingUpdate, db: Session = Depends(get_db
 
 @router.get("/version")
 def get_version():
-    """获取应用版本号"""
+    """Get the app version."""
     return {"version": get_app_version()}
 
 
 @router.get("/update-check")
 def get_update_check(db: Session = Depends(get_db)):
-    """检查是否有可用新版本（带服务端缓存）。"""
+    """Check whether a new version is available (cached on the server)."""
     current = get_app_version()
     app_proxy = (
         db.query(AppSettings)

@@ -42,11 +42,11 @@ def test_tiktoken_meter_can_be_injected_without_making_tiktoken_a_runtime_depend
             return list(text)
 
     result = TiktokenTokenMeter(encoding_name="fake", encoding=FakeEncoding()).measure_text(
-        "你好",
+        "hello",
         model="test-model",
     )
 
-    assert result.tokens == 2
+    assert result.tokens == 5  # the fake encoding yields one token per character
     assert result.source == "tokenizer"
     assert result.estimated is False
     assert result.tokenizer == "tiktoken:fake"

@@ -1,6 +1,6 @@
-"""因子权重 API(M5):只读列表 + 手动覆盖(pin / 设权重 / 开关自动标定)。
+"""Factor weight API (M5): read-only list + manual overrides (pin / set weight / toggle auto-calibration).
 
-响应由 ResponseWrapperMiddleware 统一包成 {code,data,message},路由直接返回原始数据。
+ResponseWrapperMiddleware wraps responses as {code,data,message}; routes return the raw data.
 """
 
 from __future__ import annotations
@@ -16,7 +16,7 @@ router = APIRouter()
 
 
 class FactorWeightUpdate(BaseModel):
-    """手动覆盖入参,均可选(只传要改的字段)。"""
+    """Manual override input; every field is optional (send only what changes)."""
 
     weight: float | None = None
     is_pinned: bool | None = None
@@ -25,7 +25,7 @@ class FactorWeightUpdate(BaseModel):
 
 @router.get("/weights")
 def list_weights(db: Session = Depends(get_db)):
-    """列出所有市场 × 因子的权重 + 最近 IC/IR 观测。"""
+    """Weights for every market x factor + the latest IC/IR observation."""
     return {"items": get_all_factor_weights(db=db)}
 
 
@@ -34,7 +34,7 @@ def update_weight(
     factor_code: str, market: str, payload: FactorWeightUpdate,
     db: Session = Depends(get_db),
 ):
-    """手动覆盖某因子权重 / pin / 开关自动标定(权重变化写 manual 审计)。"""
+    """Manually override a factor weight / pin it / toggle auto-calibration (weight changes are audited as manual)."""
     try:
         return set_factor_weight(
             factor_code, market,

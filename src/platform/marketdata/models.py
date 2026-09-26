@@ -67,15 +67,15 @@ MARKETS: dict[MarketCode, MarketDef] = {
 
 @dataclass
 class StockData:
-    """标准化行情数据"""
+    """Normalised quote data."""
     symbol: str
     name: str
     market: MarketCode
     current_price: float
-    change_pct: float       # 涨跌幅 %
-    change_amount: float    # 涨跌额
-    volume: float           # 成交量（手）
-    turnover: float         # 成交额（元）
+    change_pct: float       # change %
+    change_amount: float    # change amount
+    volume: float           # volume (shares)
+    turnover: float         # turnover (INR)
     open_price: float
     high_price: float
     low_price: float
@@ -85,7 +85,7 @@ class StockData:
 
 @dataclass
 class IndexData:
-    """大盘指数数据"""
+    """Index data."""
     symbol: str
     name: str
     market: MarketCode

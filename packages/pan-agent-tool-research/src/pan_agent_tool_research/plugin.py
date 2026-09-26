@@ -130,7 +130,7 @@ class ToolResearchPlugin:
         query = str(context.call.arguments.get("query") or "").strip()
         if not query:
             return ToolResult.failure(
-                summary="工具搜索需要提供 query。", error_code="invalid_tool_search_query"
+                summary="Tool search needs a query.", error_code="invalid_tool_search_query"
             )
         try:
             result = await self._service.research(
@@ -148,7 +148,7 @@ class ToolResearchPlugin:
                 {"reason": "search_failed", "error_type": type(exc).__name__},
             )
             return ToolResult.success(
-                summary="工具搜索暂时不可用，继续使用当前已提供的工具。",
+                summary="Tool search is unavailable for now; continuing with the tools already provided.",
                 data={"loaded_tools": [], "candidates": [], "fallback": True},
                 sources=[],
                 observed_at=datetime.now(UTC),
@@ -165,9 +165,9 @@ class ToolResearchPlugin:
         )
         return ToolResult.success(
             summary=(
-                f"已找到并加载 {len(result.selected_tools)} 个工具。"
+                f"Found and loaded {len(result.selected_tools)} tools."
                 if result.selected_tools
-                else "没有找到匹配的可用工具。"
+                else "No matching tools available."
             ),
             data={
                 "loaded_tools": result.selected_tools,
@@ -189,10 +189,10 @@ class ToolResearchPlugin:
     def _search_tool_spec(cls) -> ToolSpec:
         return ToolSpec(
             name=cls.search_tool_name,
-            title="搜索可用工具",
+            title="Search available tools",
             description=(
-                "当当前工具列表中没有直接匹配的能力时，搜索并加载可用工具。"
-                "返回的工具会在下一轮模型调用中提供完整参数定义。"
+                "When nothing in the current tool list matches directly, search for and load available tools. "
+                "The returned tools come with full parameter definitions in the next model call."
             ),
             input_schema={
                 "type": "object",
@@ -200,7 +200,7 @@ class ToolResearchPlugin:
                 "properties": {
                     "query": {
                         "type": "string",
-                        "description": "要完成的能力或任务，例如查询龙虎榜、分析基本面",
+                        "description": "The capability or task needed, e.g. check block deals or analyse fundamentals",
                     },
                     "limit": {
                         "type": "integer",

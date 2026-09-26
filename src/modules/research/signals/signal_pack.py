@@ -135,7 +135,7 @@ class SignalPackBuilder:
                         try:
                             if provider != "broker":
                                 logger.info(
-                                    f"SignalPack quote 未支持 provider={provider}，跳过"
+                                    f"SignalPack quote: provider={provider} not supported; skipping"
                                 )
                                 continue
 
@@ -152,7 +152,7 @@ class SignalPackBuilder:
                                 remaining.discard(sym)
                         except Exception as e:
                             logger.warning(
-                                f"SignalPack quotes 采集失败({market.value},{provider}): {e}"
+                                f"SignalPack quotes fetch failed ({market.value},{provider}): {e}"
                             )
                             continue
 
@@ -177,7 +177,7 @@ class SignalPackBuilder:
                 key = (market, sym)
                 if key not in self._tech_cache:
                     if kline_disabled:
-                        self._tech_cache[key] = {"error": "K线数据源已禁用"}
+                        self._tech_cache[key] = {"error": "K-line data source disabled"}
                         self._tech_source_cache[key] = "disabled"
                     else:
                         last_err = None
@@ -187,7 +187,7 @@ class SignalPackBuilder:
                                     collector = KlineCollector(market)
                                 else:
                                     logger.info(
-                                        f"SignalPack kline 未支持 provider={provider}，跳过"
+                                        f"SignalPack kline: provider={provider} not supported; skipping"
                                     )
                                     continue
                                 self._tech_cache[key] = collector.get_kline_summary(sym)
@@ -199,7 +199,7 @@ class SignalPackBuilder:
                                 continue
                         if key not in self._tech_cache:
                             self._tech_cache[key] = {
-                                "error": str(last_err) if last_err else "获取K线失败"
+                                "error": str(last_err) if last_err else "K-line fetch failed"
                             }
                             self._tech_source_cache.setdefault(key, "unavailable")
                 tech_map[sym] = self._tech_cache[key]
@@ -222,7 +222,7 @@ class SignalPackBuilder:
                     )
                     self._news_cache[key] = all_news
                 except Exception as e:
-                    logger.warning(f"SignalPack news 采集失败: {e}")
+                    logger.warning(f"SignalPack news fetch failed: {e}")
                     self._news_cache[key] = []
 
             for it in self._news_cache[key]:

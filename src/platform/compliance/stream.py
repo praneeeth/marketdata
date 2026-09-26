@@ -16,7 +16,7 @@ from src.platform.compliance.detector import detect
 from src.platform.compliance.guard import REDACTION_MARKER, guard_text
 
 # A sentence ends at CJK punctuation, a newline, or ASCII punctuation followed by space.
-_BOUNDARY = re.compile(r"[.!?;](?=\s)|[。！？；\n]")
+_BOUNDARY = re.compile(r"[.!?;](?=\s)|[\u3002\uff01\uff1f\uff1b\n]")
 
 
 class GuardedTokenStream:

@@ -49,6 +49,7 @@ _ADVICE_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = tuple(
             "hinglish",
             r"\b(?:kya|kaunsa|konsa)\b.{0,40}\b(?:khareed|kharid|bech|lena|lu|lun|becho|kharido)\w*",
         ),
+        # Chinese phrasing is detection data, kept so a Chinese prompt can't bypass the screen.
         (
             "chinese",
             r"(?:买不买|能买吗|能不能买|要不要买|该不该(?:买|卖)|可以买|可以卖|目标价|止损|加仓|减仓|仓位)",

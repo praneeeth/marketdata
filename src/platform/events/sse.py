@@ -1,11 +1,11 @@
-"""SSE（Server-Sent Events）基础设施。
+"""SSE (Server-Sent Events) infrastructure.
 
-提供两块能力：
-1. `format_sse_event`：把事件编码为 SSE wire 格式（带自增序号 id，供 Last-Event-ID 续推）。
-2. `SSEStream` / `SSEHub`：生成过程与连接解耦的事件缓冲。
-   - 生产者（后台任务）往 `SSEStream` publish 事件，与 HTTP 连接无关，断线不中断生成；
-   - 消费者（SSE 端点）从任意序号开始 subscribe，断线重连带 Last-Event-ID 即可续推；
-   - 流结束（finish）后仍保留一段时间（TTL），供迟到的重连读取完整事件。
+Two pieces:
+1. `format_sse_event`: encodes an event in the SSE wire format (with an increasing id for Last-Event-ID resume).
+2. `SSEStream` / `SSEHub`: an event buffer that decouples generation from the connection.
+   - Producers (background tasks) publish events to an `SSEStream` independently of the HTTP connection, so a disconnect doesn't stop generation;
+   - consumers (SSE endpoints) subscribe from any sequence number, so a reconnect with Last-Event-ID resumes;
+   - after the stream finishes it is kept for a while (TTL) so a late reconnect can read every event.
 """
 
 from __future__ import annotations
@@ -16,23 +16,23 @@ import time
 import uuid
 from dataclasses import dataclass, field
 
-# 流结束后保留时长（秒）：足够前端断线重连拿到完整结果
+# How long a finished stream is kept (seconds): long enough for the frontend to reconnect and get the full result
 STREAM_TTL_SEC = 600
-# 单条流的事件数量上限（防御性兜底，防止异常任务撑爆内存）
+# Maximum events per stream (a defensive cap so a runaway task can't exhaust memory)
 MAX_EVENTS_PER_STREAM = 10000
 
 
 def format_sse_event(seq: int, event: str, data: dict | str) -> str:
-    """编码单条 SSE 事件（id + event + data，data 统一 JSON）。"""
+    """Encode one SSE event (id + event + data; data is always JSON)."""
     if not isinstance(data, str):
         data = json.dumps(data, ensure_ascii=False)
-    # data 含换行时按 SSE 协议拆成多个 data: 行
+    # data with newlines is split into several data: lines, per the SSE protocol
     data_lines = "".join(f"data: {line}\n" for line in data.split("\n"))
     return f"id: {seq}\nevent: {event}\n{data_lines}\n"
 
 
 def format_sse_comment(text: str = "keepalive") -> str:
-    """编码 SSE 注释行（心跳，防止代理断开空闲连接）。"""
+    """Encode an SSE comment line (heartbeat, so proxies don't drop idle connections)."""
     return f": {text}\n\n"
 
 
@@ -45,7 +45,7 @@ class _Event:
 
 @dataclass
 class SSEStream:
-    """一条可重放的事件流（生产端与消费端解耦）。"""
+    """A replayable event stream (producer and consumer decoupled)."""
 
     stream_id: str = field(default_factory=lambda: uuid.uuid4().hex)
     created_at: float = field(default_factory=time.monotonic)
@@ -56,10 +56,10 @@ class SSEStream:
         self._cond = asyncio.Condition()
 
     async def publish(self, event: str, data: dict | str) -> int:
-        """追加一条事件，返回其序号（从 1 开始）。"""
+        """Append an event and return its sequence number (starting at 1)."""
         async with self._cond:
             if len(self._events) >= MAX_EVENTS_PER_STREAM:
-                # 超限直接置为结束，避免无界增长
+                # Over the cap: mark it finished at once to avoid unbounded growth
                 self.done = True
                 self._cond.notify_all()
                 return len(self._events)
@@ -69,17 +69,17 @@ class SSEStream:
             return seq
 
     async def finish(self) -> None:
-        """标记流结束（订阅者读完缓冲后自然退出）。"""
+        """Mark the stream finished (subscribers exit once they have read the buffer)."""
         async with self._cond:
             self.done = True
             self._cond.notify_all()
 
     async def subscribe(self, after_seq: int = 0, heartbeat_sec: float = 15.0):
-        """从 after_seq 之后开始消费事件（异步生成器，产出 SSE wire 格式字符串）。
+        """Consume events after after_seq (an async generator yielding SSE wire-format strings).
 
-        - 先重放缓冲中已存在的事件（断线重连 Last-Event-ID 续推的关键）；
-        - 追平后阻塞等待新事件；等待超过 heartbeat_sec 则产出心跳注释；
-        - 流 done 且缓冲读完后结束。
+        - First replays events already in the buffer (the key to Last-Event-ID resume);
+        - once caught up, waits for new events, yielding a heartbeat comment after heartbeat_sec;
+        - ends when the stream is done and the buffer is read.
         """
         cursor = max(0, int(after_seq))
         while True:
@@ -106,7 +106,7 @@ class SSEStream:
 
 
 class SSEHub:
-    """按 stream_id 管理多条 SSEStream，带 TTL 清理。"""
+    """Manages several SSEStreams by stream_id, with TTL cleanup."""
 
     def __init__(self, ttl_sec: float = STREAM_TTL_SEC):
         self._streams: dict[str, SSEStream] = {}
@@ -123,7 +123,7 @@ class SSEHub:
         return self._streams.get(stream_id)
 
     def _prune(self) -> None:
-        """清掉超过 TTL 的旧流。"""
+        """Remove old streams past the TTL."""
         now = time.monotonic()
         expired = [
             sid for sid, s in self._streams.items()
@@ -133,5 +133,5 @@ class SSEHub:
             self._streams.pop(sid, None)
 
 
-# chat 对话流的全局 hub（进程内单例；生成任务与 SSE 连接通过它解耦）
+# Global hub for chat streams (per-process singleton; decouples generation tasks from SSE connections)
 chat_stream_hub = SSEHub()

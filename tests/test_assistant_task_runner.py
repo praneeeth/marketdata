@@ -41,7 +41,7 @@ def test_durable_runtime_sink_batches_answer_and_preserves_event_order():
             RuntimeEvent(
                 type=EventType.ANSWER_TOKEN,
                 run_id=str(task.id),
-                data={"token": "完成"},
+                data={"token": "Done"},
             )
         )
         await sink.publish(
@@ -67,7 +67,7 @@ def test_durable_runtime_sink_batches_answer_and_preserves_event_order():
         TaskEventType.TOOL_STARTED.value,
         TaskEventType.MODEL_USAGE.value,
     ]
-    assert events[0].data == {"text": "完成"}
+    assert events[0].data == {"text": "Done"}
     assert events[1].data["name"] == "get_quote"
     assert events[2].data["input_tokens"] == 120
 
@@ -87,7 +87,7 @@ def test_durable_runtime_sink_does_not_write_each_answer_token():
     sink = DurableRuntimeEventSink(Service(), task.id)
 
     async def publish_tokens():
-        for token in ("你", "好"):
+        for token in ("Hel", "lo"):
             await sink.publish(
                 RuntimeEvent(
                     type=EventType.ANSWER_TOKEN,
@@ -103,7 +103,7 @@ def test_durable_runtime_sink_does_not_write_each_answer_token():
     events = repository.list_task_events(task.id, after_sequence=2)
     assert len(events) == 1
     assert events[0].event_type == TaskEventType.ANSWER_TOKEN.value
-    assert events[0].data == {"text": "你好"}
+    assert events[0].data == {"text": "Hello"}
 
     session.close()
     engine.dispose()
@@ -176,11 +176,11 @@ def test_runner_executes_from_queued_snapshot_and_persists_terminal_event(monkey
                 RuntimeEvent(
                     type=EventType.ANSWER_TOKEN,
                     run_id=str(task_id),
-                    data={"token": "完成"},
+                    data={"token": "Done"},
                 )
             )
             return RunResult(
-                run_id=str(task_id), status=RunStatus.COMPLETED, answer="完成"
+                run_id=str(task_id), status=RunStatus.COMPLETED, answer="Done"
             )
 
     class Service:

@@ -9,11 +9,11 @@ from typing import Any
 
 from pan_agent import ContextCompressionMode, ContextSummary, ModelMessage
 
-_SUMMARY_SYSTEM_PROMPT = """你是对话上下文压缩器。
-只输出一个合法 JSON 对象，不要输出 Markdown、解释或额外文本。
-JSON 必须包含字段：goal、constraints、decisions、facts、current_state、open_items、tool_findings。
-其中前六个列表字段使用字符串数组，current_state 使用字符串；只保留对后续回答有帮助的事实。
-不要补造没有出现在对话中的价格、日期、人物或决定。
+_SUMMARY_SYSTEM_PROMPT = """You compress conversation context.
+Output exactly one valid JSON object: no Markdown, explanation or extra text.
+The JSON must have the fields goal, constraints, decisions, facts, current_state, open_items, tool_findings.
+The first six list fields are string arrays and current_state is a string; keep only facts that help later answers.
+Don't invent prices, dates, people or decisions that didn't appear in the conversation.
 """
 
 
@@ -53,9 +53,9 @@ class FailoverContextSummarizer:
             {
                 "role": "user",
                 "content": (
-                    f"压缩模式：{mode.value}\n"
-                    f"摘要最多使用约 {self._max_summary_tokens} 个 token。\n"
-                    "请把下面的较早对话整理成可继续使用的结构化摘要。\n\n"
+                    f"Compression mode: {mode.value}\n"
+                    f"Use at most about {self._max_summary_tokens} tokens for the summary.\n"
+                    "Turn the earlier conversation below into a structured summary that can be carried forward.\n\n"
                     + transcript
                 ),
             },

@@ -1,7 +1,7 @@
-"""组合基准/归因结果缓存:按持仓指纹缓存,持仓变动即失效,空结果不缓存。
+"""Portfolio benchmark/attribution cache: cached by holdings fingerprint, invalidated when holdings change; empty results aren't cached.
 
-重建全持仓 NAV(逐只拉 K 线)很贵,首页又频繁请求基准/归因。这里按持仓指纹缓存结果,
-命中时跳过行情/K 线;持仓变化指纹即变 → 重算;失败/空结果不缓存,避免冻住瞬时故障。
+Rebuilding the full NAV (K-lines per stock) is expensive and the home page asks for benchmark/attribution often. Results are cached by a
+holdings fingerprint and a hit skips quotes/K-lines; a holdings change alters the fingerprint -> recompute; failures/empty results aren't cached, so transient faults aren't frozen.
 """
 
 from __future__ import annotations
@@ -16,7 +16,7 @@ import src.platform.persistence.models as M
 from src.modules.portfolio.api import accounts as accounts_api
 from src.platform.persistence.database import Base
 
-_HOLDINGS = [{"symbol": "600519", "market": "CN", "quantity": 100, "market_value": 100.0, "fx": 1.0}]
+_HOLDINGS = [{"symbol": "INFY", "market": "IN", "quantity": 100, "market_value": 100.0, "fx": 1.0}]
 
 
 @pytest.fixture
@@ -42,7 +42,7 @@ def _add_position(db, symbol: str, qty: float):
         acc = M.Account(name="t", available_funds=0, enabled=True)
         db.add(acc)
         db.flush()
-    st = M.Stock(symbol=symbol, name=symbol, market="CN")
+    st = M.Stock(symbol=symbol, name=symbol, market="IN")
     db.add(st)
     db.flush()
     db.add(M.Position(account_id=acc.id, stock_id=st.id, cost_price=1.0, quantity=qty))
@@ -50,8 +50,8 @@ def _add_position(db, symbol: str, qty: float):
 
 
 def test_benchmark_result_cached(db, monkeypatch):
-    """同一持仓的基准请求只计算一次,第二次命中缓存。"""
-    _add_position(db, "600519", 100)
+    """A benchmark request for the same holdings is computed once; the second hits the cache."""
+    _add_position(db, "INFY", 100)
     calls = {"n": 0}
 
     def fake_build(holdings, days=60, benchmark_code="000300"):
@@ -63,13 +63,13 @@ def test_benchmark_result_cached(db, monkeypatch):
 
     r1 = accounts_api.portfolio_benchmark(days=60, benchmark="000300", db=db)
     r2 = accounts_api.portfolio_benchmark(days=60, benchmark="000300", db=db)
-    assert calls["n"] == 1, f"第二次应命中缓存,实际计算 {calls['n']} 次"
+    assert calls["n"] == 1, f"the second call should hit the cache; computed {calls['n']} times"
     assert r1 == r2 == {"excess_return": 1.23}
 
 
 def test_benchmark_empty_not_cached(db, monkeypatch):
-    """数据不足(build 返回空)不缓存,下次仍会重算。"""
-    _add_position(db, "600519", 100)
+    """Insufficient data (build returns empty) isn't cached; the next call recomputes."""
+    _add_position(db, "INFY", 100)
     calls = {"n": 0}
 
     def fake_build(*a, **k):
@@ -81,13 +81,13 @@ def test_benchmark_empty_not_cached(db, monkeypatch):
 
     r1 = accounts_api.portfolio_benchmark(db=db)
     accounts_api.portfolio_benchmark(db=db)
-    assert calls["n"] == 2, "空结果不应缓存,应重算"
+    assert calls["n"] == 2, "an empty result mustn't be cached; it should recompute"
     assert r1.get("empty") is True
 
 
 def test_benchmark_cache_invalidates_on_holdings_change(db, monkeypatch):
-    """持仓变化(指纹变)后应重新计算,不返回旧缓存。"""
-    _add_position(db, "600519", 100)
+    """After holdings change (the fingerprint changes), it recomputes instead of returning the old cache."""
+    _add_position(db, "INFY", 100)
     calls = {"n": 0}
 
     def fake_build(*a, **k):
@@ -97,25 +97,25 @@ def test_benchmark_cache_invalidates_on_holdings_change(db, monkeypatch):
     monkeypatch.setattr(accounts_api, "_gather_holdings", lambda d: list(_HOLDINGS))
     monkeypatch.setattr(pb, "build_portfolio_benchmark", fake_build)
 
-    accounts_api.portfolio_benchmark(db=db)  # 计算 1,写缓存
-    _add_position(db, "000001", 50)  # 持仓变化 → 指纹变
-    accounts_api.portfolio_benchmark(db=db)  # 应重算
-    assert calls["n"] == 2, "持仓变化后缓存应失效"
+    accounts_api.portfolio_benchmark(db=db)  # computed once, cached
+    _add_position(db, "HDFCBANK", 50)  # holdings change -> fingerprint changes
+    accounts_api.portfolio_benchmark(db=db)  # should recompute
+    assert calls["n"] == 2, "the cache should be invalidated after holdings change"
 
 
 def test_attribution_result_cached(db, monkeypatch):
-    """归因结果同样按持仓指纹缓存。"""
-    _add_position(db, "600519", 100)
+    """Attribution results are cached by holdings fingerprint too."""
+    _add_position(db, "INFY", 100)
     calls = {"n": 0}
 
     def fake_attr(holdings, days=60, benchmark_code="000300"):
         calls["n"] += 1
-        return [{"symbol": "600519", "contribution_pct": 1.0}]
+        return [{"symbol": "INFY", "contribution_pct": 1.0}]
 
     monkeypatch.setattr(accounts_api, "_gather_holdings", lambda d: list(_HOLDINGS))
     monkeypatch.setattr(pb, "build_attribution", fake_attr)
 
     r1 = accounts_api.portfolio_attribution(db=db)
     r2 = accounts_api.portfolio_attribution(db=db)
-    assert calls["n"] == 1, f"第二次应命中缓存,实际 {calls['n']} 次"
+    assert calls["n"] == 1, f"the second call should hit the cache; got {calls['n']} times"
     assert r1 == r2

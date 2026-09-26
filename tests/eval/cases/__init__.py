@@ -1,5 +1,5 @@
-"""评测用例集（golden set）。
+"""Evaluation cases (golden set).
 
-- chat_cases: chat 工具循环用例（需模型，make eval 跑）
-- structured_cases: 结构化输出解析用例（纯规则，随 make test 常跑）
+- chat_cases: chat tool-loop cases (need a model; run by make eval)
+- structured_cases: structured output parsing cases (pure rules; run with make test)
 """

@@ -1,7 +1,7 @@
-"""PanWatch 内部页面链接生成：深度分析详情页等。
+"""Links to PanWatch's own pages, such as the deep research detail page.
 
-全局设置 key: panwatch_base_url(公开访问地址,用于通知里的详情页绝对链接)。
-读取模式与 stock_link.py 一致(AppSettings,miss 回退默认)。
+Global setting key: panwatch_base_url (the public URL, for absolute detail-page links in notifications).
+Read the same way as stock_link.py (AppSettings, falling back to the default on a miss).
 """
 
 from __future__ import annotations
@@ -17,10 +17,10 @@ SETTING_KEY = "panwatch_base_url"
 
 
 def get_base_url() -> str:
-    """从 AppSettings 读取公开访问地址(去尾部斜杠);未配置 / DB 不可用返回空串。
+    """Read the public URL from AppSettings (without a trailing slash); empty when unset or the DB is unavailable.
 
-    包一层兜底:单测或 DB 未初始化(app_settings 表不存在)时,读取设置不应让整个
-    分析结果映射崩掉 —— 读不到就降级为空串(不拼详情链接)。
+    Guarded: in unit tests or before the DB is initialised (no app_settings table), reading the setting mustn't break the
+    whole analysis result mapping; if it can't be read it falls back to an empty string (no detail link).
     """
     try:
         db = SessionLocal()
@@ -30,15 +30,15 @@ def get_base_url() -> str:
             return val.rstrip("/")
         finally:
             db.close()
-    except Exception as e:  # noqa: BLE001 — DB 未初始化/表缺失等均降级为空
-        logger.debug(f"get_base_url 读取失败,降级为空: {e}")
+    except Exception as e:  # noqa: BLE001 — an uninitialised DB / missing table falls back to empty
+        logger.debug(f"get_base_url failed; falling back to empty: {e}")
         return ""
 
 
 def analysis_detail_url(symbol: str, date: str, base_url: str = "") -> str:
-    """深度分析详情页 URL: {base}/analysis/{symbol}/{date}。
+    """Deep research detail page URL: {base}/analysis/{symbol}/{date}.
 
-    base_url 未配置(空)时返回空串 —— 调用方据此决定是否拼接链接。
+    Returns an empty string when base_url isn't set; callers use that to decide whether to add a link.
     """
     if not base_url:
         base_url = get_base_url()
@@ -48,9 +48,9 @@ def analysis_detail_url(symbol: str, date: str, base_url: str = "") -> str:
 
 
 def analysis_detail_markdown(
-    symbol: str, date: str, label: str = "📊 查看完整分析详情", base_url: str = ""
+    symbol: str, date: str, label: str = "📊 View the full analysis", base_url: str = ""
 ) -> str:
-    """Markdown 链接 [label](url);无 base_url 时返回空串。"""
+    """Markdown link [label](url); empty string without a base_url."""
     url = analysis_detail_url(symbol, date, base_url)
     if not url:
         return ""

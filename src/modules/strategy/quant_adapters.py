@@ -1,14 +1,14 @@
-"""量化框架适配器接口(Phase 4 预留,轻量)。
+"""Quant framework adapter interface (reserved for Phase 4; lightweight).
 
-定义统一的回测后端协议,让未来可插入不同实现而不改上层:
-- 内置(默认,永远可用):src/core/backtest(纯 Python 轻量内核,Phase 0)
-- 可选升级(按路线图,默认不安装,保持自托管轻量):
-    · vectorbt —— 向量化批量回测 / 因子网格寻参
-    · rqalpha  —— A 股高保真成本撮合(印花税/涨跌停/交易日历)
-    · qlib     —— ML 因子研究(Alpha158/360 + LightGBM 等)
+Defines one back-test backend protocol so different implementations can plug in later without changing the layers above:
+- built-in (default, always available): src/core/backtest (pure Python lightweight core, Phase 0)
+- optional upgrades (per the roadmap; not installed by default, keeping self-hosting light):
+    · vectorbt: vectorised batch back-tests / factor grid search
+    · rqalpha: high-fidelity A-share cost matching (stamp duty / price limits / trading calendar); not India-specific
+    · qlib: ML factor research (Alpha158/360 + LightGBM, etc.)
 
-此处仅声明接口 + 探测「装了哪些后端」,真正接入时各写一个实现本协议的 adapter。
-选型依据见 .docs/quant-framework-comparison.md。
+Only the interface and "which backends are installed" detection live here; real integrations each write an adapter implementing this protocol.
+See .docs/quant-framework-comparison.md for the selection rationale.
 """
 
 from __future__ import annotations
@@ -18,12 +18,12 @@ from typing import Protocol, runtime_checkable
 
 @runtime_checkable
 class BacktestAdapter(Protocol):
-    """回测后端统一接口。内置 backtest.engine.Backtester 已满足 run()。"""
+    """Unified back-test backend interface. The built-in backtest.engine.Backtester already satisfies run()."""
 
     name: str
 
     def run(self, signals: list, bars_by_symbol: dict):  # noqa: D401
-        """对一批信号回测,返回带 metrics 的结果对象。"""
+        """Back-test a batch of signals and return a result object with metrics."""
         ...
 
 
@@ -35,9 +35,9 @@ _OPTIONAL_BACKENDS = (
 
 
 def available_backends() -> dict[str, bool]:
-    """探测可用回测后端。内置永远可用;可选重依赖按是否已安装返回。
+    """Detect available back-test backends. The built-in one is always available; optional heavy dependencies are reported if installed.
 
-    供 UI / 文档展示当前环境装了哪些后端,不触发任何安装。
+    For the UI / docs to show which backends this environment has; never installs anything.
     """
     backends: dict[str, bool] = {"builtin": True}
     for module_name, key in _OPTIONAL_BACKENDS:

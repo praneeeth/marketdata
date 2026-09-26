@@ -17,7 +17,7 @@ def _mem_db():
     return sessionmaker(bind=engine)()
 
 
-# --------------------------- classify_hint(纯函数)---------------------------
+# --------------------------- classify_hint (pure function) ---------------------------
 
 def test_hint_broker_session_expired():
     """Expired broker session -> tell the user to log in again."""
@@ -68,49 +68,49 @@ DISABLED = {"provider": "angel", "label": "Angel One", "enabled": False, "status
 
 
 def test_hint_ai_auth():
-    """AI 401 → 提示 API Key / 鉴权。"""
+    """AI 401 -> hint about the API key / auth."""
     from src.modules.administration.selfcheck import classify_hint
 
     h = classify_hint("ai", "Error code: 401 - invalid_api_key")
-    assert "Key" in h or "key" in h or "鉴权" in h
+    assert "key" in h.lower() or "auth" in h.lower()
 
 
 def test_hint_ai_model_not_found():
-    """AI model 不存在 → 提示模型名。"""
+    """AI model not found -> hint about the model name."""
     from src.modules.administration.selfcheck import classify_hint
 
     h = classify_hint("ai", "The model `gpt-x` does not exist (404)")
-    assert "模型" in h
+    assert "model" in h.lower()
 
 
 def test_hint_notify_invalid():
-    """通知 URI 无效 → 提示配置 / 格式。"""
+    """Invalid notification URI -> hint about config / format."""
     from src.modules.administration.selfcheck import classify_hint
 
     h = classify_hint("notify", "Unsupported URL or invalid scheme")
-    assert "配置" in h or "URI" in h or "格式" in h
+    assert "config" in h or "URI" in h or "format" in h
 
 
 def test_hint_system_disk():
-    """磁盘类错误 → 提示空间/清理。"""
+    """Disk errors -> hint about space / cleanup."""
     from src.modules.administration.selfcheck import classify_hint
 
     h = classify_hint("system", "disk space low: only 50MB free")
-    assert "磁盘" in h or "空间" in h
+    assert "disk" in h.lower() or "space" in h.lower()
 
 
 def test_hint_system_scheduler():
-    """调度器停止 → 提示重启。"""
+    """Scheduler stopped -> hint to restart."""
     from src.modules.administration.selfcheck import classify_hint
 
     h = classify_hint("system", "scheduler stopped")
-    assert "调度" in h
+    assert "scheduler" in h.lower()
 
 
-# --------------------------- 基础项探测(DB/磁盘/调度)---------------------------
+# --------------------------- System items (DB/disk/scheduler) ---------------------------
 
 def test_probe_db_ok():
-    """DB 探测对真实库执行 SELECT 1,应通。"""
+    """The DB probe runs SELECT 1 against the real database and should pass."""
     from src.modules.administration.selfcheck import probe_db
 
     r = asyncio.run(probe_db())
@@ -119,17 +119,17 @@ def test_probe_db_ok():
 
 
 def test_probe_disk_ok():
-    """磁盘探测返回用量,正常机器应通且带 note。"""
+    """The disk probe returns usage; a normal machine should pass with a note."""
     from src.modules.administration.selfcheck import probe_disk
 
     r = asyncio.run(probe_disk())
     assert r["key"] == "sys:disk"
     assert r["status"] in ("ok", "slow", "fail")
-    assert r["note"]  # 显示可用/总量
+    assert r["note"]  # shows free/total
 
 
 def test_probe_scheduler_empty_registry_ok():
-    """无注册调度器(如 CLI/未启动)→ ok 但带说明,不误报断。"""
+    """No registered scheduler (e.g. CLI/not started) -> ok with a note, not a false failure."""
     from src.platform.scheduling import scheduler_registry
     from src.modules.administration.selfcheck import probe_scheduler
 
@@ -140,7 +140,7 @@ def test_probe_scheduler_empty_registry_ok():
 
 
 def test_probe_scheduler_running():
-    """注册了运行中的调度器 → ok,note 含任务数。"""
+    """A running scheduler is registered -> ok, with the job count in the note."""
     from src.platform.scheduling import scheduler_registry
     from src.modules.administration.selfcheck import probe_scheduler
 
@@ -161,7 +161,7 @@ def test_probe_scheduler_running():
 
 
 def test_run_selfcheck_always_includes_system_items():
-    """空库也含 3 个系统基础项(数据库/磁盘/调度)。"""
+    """An empty database still has the 3 system items (database/disk/scheduler)."""
     from src.modules.administration.selfcheck import run_selfcheck
 
     db = _mem_db()
@@ -175,10 +175,10 @@ def test_run_selfcheck_always_includes_system_items():
         db.close()
 
 
-# --------------------------- run_selfcheck(聚合)---------------------------
+# --------------------------- run_selfcheck (aggregation) ---------------------------
 
 def test_run_selfcheck_aggregates(monkeypatch):
-    """枚举启用项 → 并发 probe → 聚合 summary(total/ok/slow/fail)。"""
+    """List enabled items -> probe concurrently -> aggregate the summary (total/ok/slow/fail)."""
     from src.modules.administration import selfcheck
     from src.platform.persistence.models import AIModel, AIService, NotifyChannel
 
@@ -198,7 +198,7 @@ def test_run_selfcheck_aggregates(monkeypatch):
 
         async def fake_ai(model, service):
             return {"category": "ai", "key": f"ai:{model.id}", "name": model.name,
-                    "status": "fail", "latency_ms": 20, "error": "401", "hint": "key 错"}
+                    "status": "fail", "latency_ms": 20, "error": "401", "hint": "wrong key"}
 
         async def fake_nc(channel, send=False):
             return {"category": "notify", "key": f"nc:{channel.id}", "name": channel.name,
@@ -216,7 +216,7 @@ def test_run_selfcheck_aggregates(monkeypatch):
 
 
 def test_run_selfcheck_empty_db():
-    """无启用项 → 空看板,不报错。"""
+    """No enabled items -> an empty dashboard without errors."""
     from src.modules.administration.selfcheck import run_selfcheck
 
     db = _mem_db()
@@ -229,7 +229,7 @@ def test_run_selfcheck_empty_db():
 
 
 def test_list_selfcheck_items_no_probe(monkeypatch):
-    """list 模式只枚举待检身份(category/key/name),不跑探测。"""
+    """List mode only enumerates the identities to check (category/key/name), without probing."""
     from src.modules.administration import selfcheck
     from src.platform.persistence.models import NotifyChannel
 
@@ -251,13 +251,13 @@ def test_list_selfcheck_items_no_probe(monkeypatch):
         items = selfcheck.list_selfcheck_items(db=db, include_system=False)
         assert {i["key"] for i in items} == {"broker:kite", "nc:1"}  # disabled Angel is skipped
         assert all({"category", "key", "name", "group"} <= set(i) for i in items)
-        assert called["n"] == 0  # 没触发任何探测
+        assert called["n"] == 0  # no probe was triggered
     finally:
         db.close()
 
 
 def test_list_items_ai_has_service_group():
-    """AI 项带 group=服务商名(供前端「服务商 → 模型」层级)。"""
+    """AI items carry group = provider name (for the frontend's provider -> model hierarchy)."""
     from src.modules.administration.selfcheck import list_selfcheck_items
     from src.platform.persistence.models import AIModel, AIService
 
@@ -278,7 +278,7 @@ def test_list_items_ai_has_service_group():
 
 
 def test_run_selfcheck_keys_filter(monkeypatch):
-    """keys 过滤:只探测指定 key 的项(供前端逐项更新进度)。"""
+    """keys filter: only probe the given keys (so the frontend can update progress item by item)."""
     from src.modules.administration import selfcheck
     from src.platform.persistence.models import NotifyChannel
 
@@ -306,10 +306,10 @@ def test_run_selfcheck_keys_filter(monkeypatch):
         db.close()
 
 
-# --------------------------- 端点 ---------------------------
+# --------------------------- Endpoints ---------------------------
 
 def test_selfcheck_endpoint(monkeypatch):
-    """端点调用 run_selfcheck 并原样返回看板。"""
+    """The endpoint calls run_selfcheck and returns the dashboard unchanged."""
     from src.modules.administration.api import health
 
     async def fake_run(*, notify_send=False, keys=None):
@@ -317,14 +317,14 @@ def test_selfcheck_endpoint(monkeypatch):
                 "notify_send": notify_send}
 
     monkeypatch.setattr(health, "run_selfcheck", fake_run)
-    # 直接调用路由函数需显式传参(Query 默认值仅在 HTTP 请求时解析)
+    # Calling the route function directly needs explicit arguments (Query defaults only resolve in HTTP requests)
     res = asyncio.run(health.selfcheck(notify_send=True, list_only=False, keys=None))
     assert res["summary"]["total"] == 0
     assert res["notify_send"] is True
 
 
 def test_selfcheck_route_mounted():
-    """/api/health/selfcheck 已挂载到 app。"""
+    """/api/health/selfcheck is mounted on the app."""
     from src.bootstrap.application import app
 
     assert "/api/health/selfcheck" in set(app.openapi().get("paths", {}).keys())
@@ -333,24 +333,24 @@ def test_selfcheck_route_mounted():
 # --------------------------- CLI doctor ---------------------------
 
 def test_doctor_print_report(capsys):
-    """make doctor 的报告:分组打印 + 失败项带错误与中文建议。"""
+    """The make doctor report: grouped output, with the error and fix hint for failed items."""
     from src.modules.administration.doctor import _print_report
 
     res = {
         "summary": {"total": 2, "ok": 1, "slow": 0, "fail": 1},
         "items": [
-            {"category": "system", "key": "sys:db", "name": "数据库", "group": None,
+            {"category": "system", "key": "sys:db", "name": "Database", "group": None,
              "status": "ok", "latency_ms": 5, "error": None, "hint": "", "note": None},
             {"category": "datasource", "key": "broker:kite", "name": "Zerodha Kite Connect", "group": None,
-             "status": "fail", "latency_ms": 0, "error": "timeout", "hint": "检查代理设置", "note": None},
+             "status": "fail", "latency_ms": 0, "error": "timeout", "hint": "check the proxy settings", "note": None},
         ],
     }
     _print_report(res)
     out = capsys.readouterr().out
-    assert "系统自检" in out
-    assert "【系统】" in out and "【数据源】" in out
-    assert "数据库" in out and "Zerodha Kite Connect" in out
-    assert "检查代理设置" in out and "❌" in out
+    assert "system self-check" in out
+    assert "[System]" in out and "[Data sources]" in out
+    assert "Database" in out and "Zerodha Kite Connect" in out
+    assert "check the proxy settings" in out and "❌" in out
 
 
-# 已移除:自检结果的定时告警 selfcheck_and_notify(用户要求自检不发结果通知);弹窗里「含真实发送通知」开关保留。
+# Removed: scheduled alerts for self-check results (selfcheck_and_notify); the user asked for no result notifications. The dialog's "send for real" switch stays.

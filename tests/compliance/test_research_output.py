@@ -19,7 +19,6 @@ AGENT_PROMPTS = [
     "premarket_outlook.txt",
     "intraday_monitor.txt",
     "news_digest.txt",
-    "chart_analyst.txt",
 ]
 
 

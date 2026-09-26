@@ -32,7 +32,7 @@ def _hits(rule: Rule, normalized: str) -> list[str]:
         if rule.veto_before is not None:
             window = normalized[max(0, match.start() - _VETO_WINDOW) : match.start()]
             # A veto only applies within the same sentence as the hit.
-            boundary = max(window.rfind(ch) for ch in ".!?;。！？；")
+            boundary = max(window.rfind(ch) for ch in ".!?;\u3002\uff01\uff1f\uff1b")
             if boundary >= 0 and not _ABBREVIATION_END.search(window[: boundary + 1]):
                 window = window[boundary + 1 :]
             if rule.veto_before.search(window):
@@ -55,7 +55,7 @@ def detect(text: str) -> list[Finding]:
     return detect_normalized(normalize_for_detection(text))
 
 
-_SENTENCE_SPLIT = re.compile(r"(?<=[.!?。！？；;])\s+")
+_SENTENCE_SPLIT = re.compile(r"(?<=[.!?\u3002\uff01\uff1f\uff1b;])\s+")
 
 
 def split_segments(text: str) -> list[str]:

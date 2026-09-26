@@ -1,4 +1,4 @@
-"""建议池 API"""
+"""Suggestion pool API."""
 import logging
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
@@ -18,14 +18,14 @@ router = APIRouter()
 def get_stock_suggestions(
     symbol: str,
     market: str = Query("", description="Market: IN (NSE/BSE)"),
-    include_expired: bool = Query(False, description="是否包含已过期建议"),
-    limit: int = Query(10, description="返回数量限制"),
+    include_expired: bool = Query(False, description="Include expired items"),
+    limit: int = Query(10, description="Maximum number of items"),
     db: Session = Depends(get_db),
 ):
     """
-    获取某只股票的所有建议
+    All items for one stock.
 
-    返回该股票的建议列表，按时间倒序排列
+    Returns the stock's items, newest first.
     """
     suggestions = get_suggestions_for_stock(
         stock_symbol=symbol,
@@ -37,20 +37,20 @@ def get_stock_suggestions(
 
 
 @router.get("/", name="get_suggestions")
-@router.get("", include_in_schema=False)  # 同时处理无斜杠的情况
+@router.get("", include_in_schema=False)  # also handle the path without a trailing slash
 def get_all_latest_suggestions(
-    symbols: str = Query(None, description="股票代码列表，逗号分隔"),
+    symbols: str = Query(None, description="Stock symbols, comma-separated"),
     stock_keys: str = Query(
-        None, description="市场+代码列表，格式 CN:600519,HK:00700,US:AAPL"
+        None, description="Market:symbol list, e.g. IN:INFY,IN:TCS"
     ),
-    include_expired: bool = Query(False, description="是否包含已过期建议"),
+    include_expired: bool = Query(False, description="Include expired items"),
     db: Session = Depends(get_db),
 ):
     """
-    获取所有股票的最新建议
+    Latest item for every stock.
 
-    每只股票只返回最新的一条有效建议
-    用于持仓页面快速展示各股票的最新建议
+    Only the newest valid item per stock,
+    for showing each stock's latest item quickly on the holdings page.
     """
     symbol_list = None
     if symbols:
@@ -83,13 +83,13 @@ def get_all_latest_suggestions(
 
 @router.delete("/cleanup")
 def cleanup_suggestions(
-    days: int = Query(7, description="清理多少天前的记录"),
+    days: int = Query(7, description="Delete rows older than this many days"),
     db: Session = Depends(get_db),
 ):
     """
-    清理过期的建议记录
+    Delete expired items.
 
-    默认清理 7 天前的记录
+    Deletes rows older than 7 days by default.
     """
     count = cleanup_expired_suggestions(days=days)
     return {"deleted": count}

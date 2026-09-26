@@ -1,4 +1,4 @@
-"""建议池管理 - 汇总各 Agent 建议"""
+"""Suggestion pool: collects items from every agent (recommendation mode only)."""
 
 import logging
 from datetime import datetime, timedelta
@@ -29,20 +29,20 @@ def _dedupe_window_minutes(agent_name: str) -> int:
     return 180
 
 
-# Agent 有效期配置（小时）
+# Validity per agent (hours)
 AGENT_EXPIRY_HOURS = {
-    "premarket_outlook": 12,  # 盘前建议当日有效（约12小时）
-    "intraday_monitor": 6,  # 盘中建议6小时有效
-    "daily_report": 16,  # 盘后建议隔夜有效（到次日开盘，约16小时）
-    "news_digest": 12,  # 新闻速递建议半天有效
+    "premarket_outlook": 12,  # pre-market items last the day (about 12 hours)
+    "intraday_monitor": 6,  # intraday items last 6 hours
+    "daily_report": 16,  # close-report items last overnight (to the next open, about 16 hours)
+    "news_digest": 12,  # news digest items last half a day
 }
 
-# Agent 中文名称映射
+# Agent display names
 AGENT_LABELS = {
-    "premarket_outlook": "盘前分析",
-    "intraday_monitor": "盘中监测",
-    "daily_report": "收盘复盘",
-    "news_digest": "新闻速递",
+    "premarket_outlook": "Pre-market outlook",
+    "intraday_monitor": "Intraday monitor",
+    "daily_report": "Daily close report",
+    "news_digest": "News digest",
 }
 
 def save_suggestion(
@@ -61,23 +61,23 @@ def save_suggestion(
     meta: dict | None = None,
 ) -> bool:
     """
-    保存 Agent 建议到建议池
+    Save an agent item to the pool.
 
     Args:
-        stock_symbol: 股票代码
-        stock_name: 股票名称
-        action: 操作类型 (buy/add/reduce/sell/hold/watch/alert/avoid)
-        action_label: 操作中文标签
-        agent_name: Agent 名称
-        signal: 信号描述
-        reason: 建议理由
-        agent_label: Agent 中文名称（可选，自动推断）
-        expires_hours: 过期时间（小时），不指定则使用默认配置
-        prompt_context: Prompt 上下文摘要
-        ai_response: AI 原始响应
+        stock_symbol: stock symbol
+        stock_name: stock name
+        action: action type (buy/add/reduce/sell/hold/watch/alert/avoid)
+        action_label: action display label
+        agent_name: agent name
+        signal: signal
+        reason: reason
+        agent_label: agent display name (optional; inferred automatically)
+        expires_hours: expiry in hours; the default config when omitted
+        prompt_context: prompt context summary
+        ai_response: raw AI response
 
     Returns:
-        是否保存成功
+        Whether it was saved
     """
     # Research-only: AI buy/sell/hold suggestions are never stored or shown (ADR-004).
     if not is_feature_enabled(Feature.SUGGESTION_POOL):
@@ -86,19 +86,19 @@ def save_suggestion(
     try:
         market = (stock_market or "IN").strip().upper() or "IN"
 
-        # 计算过期时间（使用 UTC）
+        # Expiry time (UTC)
         if expires_hours is None:
             expires_hours = AGENT_EXPIRY_HOURS.get(agent_name, 8)
 
         now = utc_now()
         expires_at = now + timedelta(hours=expires_hours)
 
-        # Agent 标签
+        # Agent label
         if not agent_label:
             agent_label = AGENT_LABELS.get(agent_name, agent_name)
 
         # Dedupe: if the latest suggestion from the same agent is essentially the same,
-        # do not create a new row. This prevents "AI 建议反复" in the UI.
+        # do not create a new row. This prevents flip-flopping AI items in the UI.
         try:
             latest = (
                 db.query(StockSuggestion)
@@ -131,7 +131,7 @@ def save_suggestion(
                         latest.stock_name = stock_name
                     db.commit()
                     logger.info(
-                        f"建议去重: {stock_symbol} {action_label} (来源: {agent_label})"
+                        f"Item deduplicated: {stock_symbol} {action_label} (source: {agent_label})"
                     )
                     return True
 
@@ -160,7 +160,7 @@ def save_suggestion(
                             latest.stock_name = stock_name
                         db.commit()
                         logger.info(
-                            f"建议稳定: {stock_symbol} 新建议降级({action_label})，保持上一条({latest.action_label})"
+                            f"Item kept stable: {stock_symbol} new item is weaker ({action_label}); keeping the previous one ({latest.action_label})"
                         )
                         return True
                 except Exception:
@@ -169,7 +169,7 @@ def save_suggestion(
             # Best-effort only; never block saving.
             db.rollback()
 
-        # 创建新建议
+        # Create the new item
         suggestion = StockSuggestion(
             stock_symbol=stock_symbol,
             stock_market=market,
@@ -181,18 +181,18 @@ def save_suggestion(
             agent_name=agent_name,
             agent_label=agent_label,
             expires_at=expires_at,
-            prompt_context=prompt_context[:2000] if prompt_context else "",  # 限制长度
-            ai_response=ai_response[:2000] if ai_response else "",  # 限制长度
+            prompt_context=prompt_context[:2000] if prompt_context else "",  # cap the length
+            ai_response=ai_response[:2000] if ai_response else "",  # cap the length
             meta=to_jsonable(meta or {}),
         )
         db.add(suggestion)
         db.commit()
 
-        logger.info(f"保存建议: {stock_symbol} {action_label} (来源: {agent_label})")
+        logger.info(f"Saved item: {stock_symbol} {action_label} (source: {agent_label})")
         return True
 
     except Exception as e:
-        logger.error(f"保存建议失败: {e}")
+        logger.error(f"Failed to save item: {e}")
         db.rollback()
         return False
     finally:
@@ -206,15 +206,15 @@ def get_suggestions_for_stock(
     limit: int = 10,
 ) -> list[dict]:
     """
-    获取某只股票的建议列表
+    Items for one stock.
 
     Args:
-        stock_symbol: 股票代码
-        include_expired: 是否包含已过期建议
-        limit: 返回数量限制
+        stock_symbol: stock symbol
+        include_expired: include expired items
+        limit: maximum number of rows
 
     Returns:
-        建议列表，按时间倒序
+        Items, newest first
     """
     db = SessionLocal()
     try:
@@ -247,11 +247,11 @@ def get_latest_suggestions(
     include_expired: bool = False,
 ) -> dict[str, dict]:
     """
-    获取所有股票的最新建议（每只股票只返回最新的一条）
+    Latest item for every stock (only the newest one per stock).
 
     Args:
-        stock_symbols: 股票代码列表，None 表示所有
-        include_expired: 是否包含已过期建议
+        stock_symbols: stock symbols; None means all
+        include_expired: include expired items
 
     Returns:
         {symbol: suggestion_dict}
@@ -321,13 +321,13 @@ def get_latest_suggestions(
 
 
 def _to_dict(suggestion: StockSuggestion, now: Optional[datetime] = None) -> dict:
-    """将 StockSuggestion 转换为字典（时间使用 ISO 格式带时区）"""
+    """Convert a StockSuggestion to a dict (times as ISO strings with a time zone)."""
     if now is None:
         now = utc_now()
 
     is_expired = False
     if suggestion.expires_at:
-        # 确保比较时都使用 UTC
+        # Compare in UTC on both sides
         expires_utc = suggestion.expires_at
         if expires_utc.tzinfo is None:
             from src.platform.scheduling.timezone import timezone
@@ -335,7 +335,7 @@ def _to_dict(suggestion: StockSuggestion, now: Optional[datetime] = None) -> dic
             expires_utc = expires_utc.replace(tzinfo=timezone.utc)
         is_expired = expires_utc < now
 
-    # 转换时间为带时区的 ISO 格式
+    # Times as ISO strings with a time zone
     created_at_str = None
     if suggestion.created_at:
         created_at = suggestion.created_at
@@ -378,13 +378,13 @@ def _to_dict(suggestion: StockSuggestion, now: Optional[datetime] = None) -> dic
 
 def cleanup_expired_suggestions(days: int = 7) -> int:
     """
-    清理过期的建议记录
+    Delete expired items.
 
     Args:
-        days: 清理多少天前的记录
+        days: delete rows older than this many days
 
     Returns:
-        删除的记录数
+        Number of rows deleted
     """
     db = SessionLocal()
     try:
@@ -395,10 +395,10 @@ def cleanup_expired_suggestions(days: int = 7) -> int:
             .delete()
         )
         db.commit()
-        logger.info(f"清理了 {result} 条过期建议")
+        logger.info(f"Deleted {result} expired items")
         return result
     except Exception as e:
-        logger.error(f"清理过期建议失败: {e}")
+        logger.error(f"Failed to delete expired items: {e}")
         db.rollback()
         return 0
     finally:

@@ -1,4 +1,4 @@
-"""PanWatch 统一服务入口 - Web 后台 + Agent 调度"""
+"""PanWatch service entry point: web backend + agent scheduling."""
 
 import asyncio
 import logging
@@ -44,7 +44,7 @@ from src.modules.automation.tradingagents import TradingAgentsAgent
 
 logger = logging.getLogger(__name__)
 
-# 全局 scheduler 实例，供 agents API 调用
+# Global scheduler instance, used by the agents API
 scheduler: AgentScheduler | None = None
 price_alert_scheduler: PriceAlertScheduler | None = None
 paper_trading_scheduler: PaperTradingScheduler | None = None
@@ -52,34 +52,34 @@ context_maintenance_scheduler: ContextMaintenanceScheduler | None = None
 
 
 def apply_proxy_env(proxy: str | None) -> None:
-    """统一更新进程环境变量代理,让所有 httpx 默认 Client (trust_env=True) 走该代理。
+    """Set the proxy in the process environment so every default httpx Client (trust_env=True) uses it.
 
-    传空字符串 / None 时清除环境变量(取消代理)。
-    NO_PROXY 默认含 localhost / 回环地址,避免本地访问绕一圈。
+    An empty string / None clears the variables (no proxy).
+    NO_PROXY includes localhost / loopback by default, so local calls don't take a detour.
     """
     p = (proxy or "").strip()
     if p:
         os.environ["HTTP_PROXY"] = p
         os.environ["HTTPS_PROXY"] = p
         os.environ.setdefault("NO_PROXY", "localhost,127.0.0.1,::1,0.0.0.0")
-        logger.info(f"HTTP/HTTPS 代理已应用: {p}")
+        logger.info(f"HTTP/HTTPS proxy applied: {p}")
     else:
         for key in ("HTTP_PROXY", "HTTPS_PROXY"):
             os.environ.pop(key, None)
-        logger.info("HTTP/HTTPS 代理已清除")
+        logger.info("HTTP/HTTPS proxy cleared")
 
 
 def setup_proxy():
-    """启动时把已配置的 HTTP 代理桥接到环境变量。
+    """At startup, bridge the configured HTTP proxy into environment variables.
 
-    优先级:
-    1. 已存在的 HTTP_PROXY / HTTPS_PROXY 环境变量(用户显式覆盖,不动)
-    2. app_settings.http_proxy(UI 配置)
-    3. .env 中的 http_proxy(Settings.http_proxy)
+    Priority:
+    1. existing HTTP_PROXY / HTTPS_PROXY environment variables (an explicit user override; left alone)
+    2. app_settings.http_proxy (UI setting)
+    3. http_proxy in .env (Settings.http_proxy)
     """
     if os.environ.get("HTTP_PROXY") or os.environ.get("HTTPS_PROXY"):
         logger.info(
-            f"沿用现有环境变量代理: HTTP_PROXY={os.environ.get('HTTP_PROXY', '')} "
+            f"Keeping the existing environment proxy: HTTP_PROXY={os.environ.get('HTTP_PROXY', '')} "
             f"HTTPS_PROXY={os.environ.get('HTTPS_PROXY', '')}"
         )
         os.environ.setdefault("NO_PROXY", "localhost,127.0.0.1,::1,0.0.0.0")
@@ -107,7 +107,7 @@ def setup_proxy():
 
 
 def setup_ssl():
-    """设置 SSL 证书环境（企业代理环境）"""
+    """Set up the SSL certificate environment (corporate proxy environments)."""
     settings = Settings()
     ca_cert = settings.ca_cert_file
     if not ca_cert or not os.path.exists(ca_cert):
@@ -132,16 +132,16 @@ def setup_ssl():
 
     os.environ["SSL_CERT_FILE"] = bundle_path
     os.environ["REQUESTS_CA_BUNDLE"] = bundle_path
-    logger.info(f"SSL 证书已加载: {bundle_path}")
+    logger.info(f"SSL certificates loaded: {bundle_path}")
 
 
 def setup_logging():
-    """配置日志: 控制台 + 数据库
+    """Configure logging: console + database.
 
-    分级策略:
-    - root logger 始终 DEBUG,所有日志都会传播到 handler
-    - 控制台 handler 按 LOG_LEVEL 过滤(默认 INFO),并丢弃 httpx 等三方库的 < WARNING 噪音
-    - DB handler 始终 DEBUG 全量收录,UI 日志板永远可以看到包括心跳/httpx 请求在内的完整记录
+    Levels:
+    - the root logger is always DEBUG, so every log reaches the handlers
+    - the console handler filters by LOG_LEVEL (INFO by default) and drops < WARNING noise from third-party libraries such as httpx
+    - the DB handler always records everything at DEBUG, so the UI log board shows the full record including heartbeats/httpx requests
     """
     console_level_name = os.environ.get("LOG_LEVEL", "INFO").upper()
     console_level = getattr(logging, console_level_name, logging.INFO)
@@ -150,7 +150,7 @@ def setup_logging():
     root.setLevel(logging.DEBUG)
     install_log_record_factory()
 
-    # reload/server restart 时避免重复 handler 导致日志放大。
+    # Avoid duplicate handlers (and multiplied logs) on reload/server restart.
     for h in list(root.handlers):
         if isinstance(h, DBLogHandler) or getattr(h, "_panwatch_console", False):
             root.removeHandler(h)
@@ -159,7 +159,7 @@ def setup_logging():
             except Exception:
                 pass
 
-    # 控制台输出: 按 LOG_LEVEL 过滤,且丢弃三方库的低级别噪音
+    # Console output: filtered by LOG_LEVEL, dropping low-level third-party noise
     console = logging.StreamHandler()
     console._panwatch_console = True  # type: ignore[attr-defined]
     console.setLevel(console_level)
@@ -171,14 +171,14 @@ def setup_logging():
     )
     root.addHandler(console)
 
-    # 数据库持久化: 始终全量收录,UI 日志板可查 DEBUG
+    # Database persistence: records everything, so the UI log board can show DEBUG
     db_handler = DBLogHandler(level=logging.DEBUG)
     db_handler.setFormatter(logging.Formatter("%(message)s"))
     root.addHandler(db_handler)
 
-    # uvicorn 默认给自己挂了 stderr handler 并且 propagate=False,导致 access log
-    # 走自己的链路(`INFO: 127.0.0.1 - "GET /api/..."`)不被我们的 filter 拦截。
-    # 改成清空自己的 handler + propagate 到 root,让 _ConsoleNoiseFilter 生效。
+    # uvicorn attaches its own stderr handler with propagate=False, so its access log
+    # (`INFO: 127.0.0.1 - "GET /api/..."`) takes its own path and bypasses our filter.
+    # Clear its handlers and propagate to root so _ConsoleNoiseFilter applies.
     for name in ("uvicorn", "uvicorn.error", "uvicorn.access"):
         lg = logging.getLogger(name)
         lg.handlers = []
@@ -187,11 +187,11 @@ def setup_logging():
 
 
 class _ConsoleNoiseFilter(logging.Filter):
-    """控制台 handler 过滤器: 三方库的 INFO/DEBUG 不进 stdout,WARNING+ 仍然显示。
-    DB handler 不挂这个过滤器,UI 日志板能看到完整请求记录。
+    """Console handler filter: third-party INFO/DEBUG stays out of stdout; WARNING+ still shows.
+    The DB handler doesn't use this filter, so the UI log board sees the full request record.
 
-    uvicorn.access 是每条请求的 access log(`INFO: 127.0.0.1 - "GET /api/..." 200 OK`),
-    属于底层心跳;uvicorn / uvicorn.error 是应用级日志(启动、报错),保留。"""
+    uvicorn.access is the per-request access log (`INFO: 127.0.0.1 - "GET /api/..." 200 OK`),
+    low-level heartbeat noise; uvicorn / uvicorn.error are app-level logs (startup, errors) and are kept."""
 
     _NOISY_PREFIXES = ("httpx", "httpcore", "urllib3", "apscheduler", "uvicorn.access")
 
@@ -209,7 +209,7 @@ def seed_sample_stocks():
     """Add a few NSE large caps on first start so the watchlist isn't empty."""
     db = SessionLocal()
     try:
-        # 只在没有任何股票时才添加示例
+        # Only add samples when there are no stocks at all
         if db.query(Stock).count() > 0:
             return
 
@@ -229,7 +229,7 @@ def seed_sample_stocks():
 
 
 def seed_agents():
-    """初始化内置 Agent 配置"""
+    """Initialise the built-in agent configs."""
     db = SessionLocal()
     for spec in AGENT_SEED_SPECS:
         existing = db.query(AgentConfig).filter(AgentConfig.name == spec.name).first()
@@ -251,9 +251,9 @@ def seed_agents():
                 )
             )
         else:
-            # 始终同步 execution_mode（确保代码中的定义生效）
+            # Always sync execution_mode (so the definition in code wins)
             existing.execution_mode = spec.execution_mode or "batch"
-            # 同步 display_name 和 description
+            # Sync display_name and description
             existing.display_name = spec.display_name or existing.display_name
             existing.description = spec.description or existing.description
             existing.kind = spec.kind
@@ -262,15 +262,15 @@ def seed_agents():
             existing.replaced_by = spec.replaced_by or ""
             existing.display_order = int(spec.display_order or 0)
 
-            # capability 强制不参与调度，避免旧配置继续触发。
+            # Capabilities are never scheduled, so old configs can't trigger them.
             if spec.kind != AGENT_KIND_WORKFLOW:
                 existing.enabled = False
                 existing.schedule = ""
 
-            # 仅在用户未配置时补齐默认 config
+            # Fill in the default config only when the user hasn't set one
             if spec.config and (not existing.config):
                 existing.config = spec.config
-            # 对已存在配置做“向前兼容”的字段补齐（不覆盖用户已有值）
+            # Forward-compatible: fill in missing fields of an existing config (without overwriting the user's values)
             if existing.name == "intraday_monitor":
                 cfg = existing.config or {}
                 if isinstance(cfg, dict) and "event_only" not in cfg:
@@ -282,13 +282,13 @@ def seed_agents():
 
 
 def seed_strategies():
-    """初始化策略目录。"""
+    """Initialise the strategy catalogue."""
     ensure_strategy_catalog()
-    logger.info("策略目录初始化完成")
+    logger.info("Strategy catalogue initialised")
 
 
 def load_watchlist_for_agent(agent_name: str) -> list[StockConfig]:
-    """从数据库加载某个 Agent 关联的自选股"""
+    """Load the watchlist stocks linked to an agent from the database."""
     db = SessionLocal()
     try:
         stock_agents = (
@@ -298,7 +298,7 @@ def load_watchlist_for_agent(agent_name: str) -> list[StockConfig]:
         if not stock_ids:
             return []
 
-        # 绑定优先：只要绑定了 Agent，就纳入执行范围
+        # Binding wins: any stock bound to the agent is included
         stocks = db.query(Stock).filter(Stock.id.in_(stock_ids)).all()
         result = []
         for s in stocks:
@@ -319,12 +319,12 @@ def load_watchlist_for_agent(agent_name: str) -> list[StockConfig]:
 
 
 def load_portfolio_for_agent(agent_name: str) -> PortfolioInfo:
-    """从数据库加载某个 Agent 关联股票的持仓信息（包括多账户）"""
+    """Load the positions of an agent's linked stocks from the database (across accounts)."""
     from src.platform.persistence.models import Account, Position
 
     db = SessionLocal()
     try:
-        # 获取 Agent 关联的股票 ID
+        # IDs of the stocks linked to the agent
         stock_agents = (
             db.query(StockAgent).filter(StockAgent.agent_name == agent_name).all()
         )
@@ -332,12 +332,12 @@ def load_portfolio_for_agent(agent_name: str) -> PortfolioInfo:
         if not stock_ids:
             return PortfolioInfo()
 
-        # 获取所有启用的账户
+        # All enabled accounts
         accounts = db.query(Account).filter(Account.enabled == True).all()
 
         account_infos = []
         for acc in accounts:
-            # 获取该账户中属于关联股票的持仓
+            # The account's positions in the linked stocks
             positions = (
                 db.query(Position)
                 .filter(
@@ -387,7 +387,7 @@ def load_portfolio_for_agent(agent_name: str) -> PortfolioInfo:
 
 
 def load_portfolio_for_stock(stock_id: int) -> PortfolioInfo:
-    """从数据库加载单只股票的持仓信息"""
+    """Load one stock's positions from the database."""
     from src.platform.persistence.models import Account, Position
 
     db = SessionLocal()
@@ -446,7 +446,7 @@ def load_portfolio_for_stock(stock_id: int) -> PortfolioInfo:
 
 
 def _get_proxy() -> str:
-    """从 app_settings 获取 http_proxy"""
+    """Get http_proxy from app_settings."""
     db = SessionLocal()
     try:
         setting = db.query(AppSettings).filter(AppSettings.key == "http_proxy").first()
@@ -456,7 +456,7 @@ def _get_proxy() -> str:
 
 
 def _get_app_setting(key: str) -> str:
-    """从 app_settings 获取配置（不存在返回空字符串）"""
+    """Get a setting from app_settings (empty string when missing)."""
     db = SessionLocal()
     try:
         setting = db.query(AppSettings).filter(AppSettings.key == key).first()
@@ -468,31 +468,31 @@ def _get_app_setting(key: str) -> str:
 def resolve_ai_model(
     agent_name: str, stock_agent_id: int | None = None
 ) -> tuple[AIModel | None, AIService | None]:
-    """解析 AI 模型: stock_agent 覆盖 → agent 默认 → 系统默认(is_default=True)
-    返回 (model, service) 元组"""
+    """Resolve the AI model: stock_agent override -> agent default -> system default (is_default=True).
+    Returns a (model, service) tuple."""
     db = SessionLocal()
     try:
         model_id = None
 
-        # 1. stock_agent 级别覆盖
+        # 1. stock_agent-level override
         if stock_agent_id:
             sa = db.query(StockAgent).filter(StockAgent.id == stock_agent_id).first()
             if sa and sa.ai_model_id:
                 model_id = sa.ai_model_id
 
-        # 2. agent 级别默认
+        # 2. agent-level default
         if not model_id:
             agent = db.query(AgentConfig).filter(AgentConfig.name == agent_name).first()
             if agent and agent.ai_model_id:
                 model_id = agent.ai_model_id
 
-        # 3. 系统默认
+        # 3. system default
         if not model_id:
             default_model = db.query(AIModel).filter(AIModel.is_default == True).first()
             if default_model:
                 model_id = default_model.id
 
-        # 4. 回退：取第一个
+        # 4. fallback: the first one
         if not model_id:
             first_model = db.query(AIModel).first()
             if first_model:
@@ -518,24 +518,24 @@ def resolve_ai_model(
 def resolve_notify_channels(
     agent_name: str, stock_agent_id: int | None = None
 ) -> list[NotifyChannel]:
-    """解析通知渠道: stock_agent 覆盖 → agent 默认 → 系统默认(is_default=True)"""
+    """Resolve notification channels: stock_agent override -> agent default -> system default (is_default=True)."""
     db = SessionLocal()
     try:
         channel_ids = None
 
-        # 1. stock_agent 级别覆盖
+        # 1. stock_agent-level override
         if stock_agent_id:
             sa = db.query(StockAgent).filter(StockAgent.id == stock_agent_id).first()
             if sa and sa.notify_channel_ids:
                 channel_ids = sa.notify_channel_ids
 
-        # 2. agent 级别默认
+        # 2. agent-level default
         if channel_ids is None:
             agent = db.query(AgentConfig).filter(AgentConfig.name == agent_name).first()
             if agent and agent.notify_channel_ids:
                 channel_ids = agent.notify_channel_ids
 
-        # 3. 按 id 列表查询或取系统默认
+        # 3. by id list, or the system default
         if channel_ids:
             channels = (
                 db.query(NotifyChannel)
@@ -563,7 +563,7 @@ def resolve_notify_channels(
 
 
 def _build_notifier(channels: list[NotifyChannel]) -> NotifierManager:
-    """根据解析后的渠道列表构建 NotifierManager"""
+    """Build a NotifierManager from the resolved channels."""
     settings = Settings()
     # allow UI override via app_settings
     quiet_hours = _get_app_setting("notify_quiet_hours") or settings.notify_quiet_hours
@@ -606,16 +606,16 @@ def _build_notifier(channels: list[NotifyChannel]) -> NotifierManager:
 
 
 def _build_ai_client(model: AIModel | None, service: AIService | None, proxy: str):
-    """根据解析后的 model+service 构建带 failover 的 AI 客户端。
+    """Build an AI client with failover from the resolved model+service.
 
-    主候选沿用四级路由选定的 model+service;备选由 build_failover_client 从库里
-    其余模型按优先级补齐。返回的 FailoverAIClient 与 AIClient 接口兼容,可原地替换。
+    The main candidate is the model+service chosen by four-level routing; build_failover_client adds backups from
+    the other models in the DB by priority. The returned FailoverAIClient is interface-compatible with AIClient and replaces it in place.
     """
     return build_failover_client(model, service, proxy)
 
 
 def build_context(agent_name: str, stock_agent_id: int | None = None) -> AgentContext:
-    """为指定 Agent 构建运行上下文"""
+    """Build the run context for an agent."""
     settings = Settings()
     watchlist = load_watchlist_for_agent(agent_name)
     portfolio = load_portfolio_for_agent(agent_name)
@@ -638,7 +638,7 @@ def build_context(agent_name: str, stock_agent_id: int | None = None) -> AgentCo
     )
 
 
-# Agent 注册表
+# Agent registry
 AGENT_REGISTRY: dict[str, type] = {
     "daily_report": DailyReportAgent,
     "premarket_outlook": PremarketOutlookAgent,
@@ -649,11 +649,11 @@ AGENT_REGISTRY: dict[str, type] = {
 
 
 def build_scheduler() -> AgentScheduler:
-    """构建调度器并注册已启用的 Agent"""
+    """Build the scheduler and register the enabled agents."""
     settings = Settings()
     sched = AgentScheduler(timezone=settings.app_timezone)
 
-    # 设置 context 构建函数（每次执行时动态获取最新配置）
+    # Set the context builder (fetches the latest config on every run)
     sched.set_context_builder(build_context)
 
     db = SessionLocal()
@@ -669,10 +669,10 @@ def build_scheduler() -> AgentScheduler:
         for cfg in agent_configs:
             agent_cls = AGENT_REGISTRY.get(cfg.name)
             if not agent_cls:
-                logger.warning(f"Agent {cfg.name} 未在 AGENT_REGISTRY 中注册")
+                logger.warning(f"Agent {cfg.name} isn't registered in AGENT_REGISTRY")
                 continue
             if not cfg.schedule:
-                logger.info(f"Agent {cfg.name} 未设置调度计划，跳过")
+                logger.info(f"Agent {cfg.name} has no schedule; skipping")
                 continue
 
             agent_kwargs = cfg.config or {}
@@ -710,11 +710,11 @@ def register_mcp_log_cleanup(sched: AgentScheduler) -> None:
         id="mcp_log_retention",
         replace_existing=True,
     )
-    logger.info("MCP 日志保留期清理任务已注册")
+    logger.info("MCP log retention cleanup job registered")
 
 
 def reload_scheduler() -> bool:
-    """重载调度器（用于配置导入/批量修改后立即生效）"""
+    """Reload the scheduler (so config imports / bulk changes take effect at once)."""
     global scheduler
     try:
         current = globals().get("scheduler")
@@ -725,10 +725,10 @@ def reload_scheduler() -> bool:
                 pass
         scheduler = build_scheduler()
         scheduler.start()
-        logger.info("Agent 调度器已重载")
+        logger.info("Agent scheduler reloaded")
         return True
     except Exception as e:
-        logger.error(f"Agent 调度器重载失败: {e}")
+        logger.error(f"Agent scheduler reload failed: {e}")
         return False
 
 
@@ -739,19 +739,19 @@ def _log_trigger_info(
     service: AIService | None,
     channels: list[NotifyChannel],
 ):
-    """打印 Agent 触发时的上下文信息"""
+    """Log the context an agent was triggered with."""
     stock_names = ", ".join(
         f"{s.name}({s.symbol})" if hasattr(s, "symbol") else str(s) for s in stocks
     )
-    ai_info = f"{service.name}/{model.model}" if model and service else "未配置"
-    channel_info = ", ".join(ch.name for ch in channels) if channels else "无"
+    ai_info = f"{service.name}/{model.model}" if model and service else "not configured"
+    channel_info = ", ".join(ch.name for ch in channels) if channels else "none"
     logger.info(
-        f"[触发] Agent={agent_name} | 股票=[{stock_names}] | AI={ai_info} | 通知=[{channel_info}]"
+        f"[Trigger] Agent={agent_name} | Stocks=[{stock_names}] | AI={ai_info} | Notify=[{channel_info}]"
     )
 
 
 def get_agent_execution_mode(agent_name: str) -> str:
-    """获取 Agent 的执行模式"""
+    """Get an agent's run mode."""
     db = SessionLocal()
     try:
         agent = db.query(AgentConfig).filter(AgentConfig.name == agent_name).first()
@@ -761,7 +761,7 @@ def get_agent_execution_mode(agent_name: str) -> str:
 
 
 def get_agent_config(agent_name: str) -> dict:
-    """获取 Agent 的配置参数"""
+    """Get an agent's config parameters."""
     db = SessionLocal()
     try:
         agent = db.query(AgentConfig).filter(AgentConfig.name == agent_name).first()
@@ -771,12 +771,12 @@ def get_agent_config(agent_name: str) -> dict:
 
 
 async def trigger_agent(agent_name: str) -> str:
-    """手动触发 Agent 执行（根据执行模式处理）"""
+    """Run an agent manually (handled by its run mode)."""
     start = time.monotonic()
     trace_id = f"man-{agent_name}-{int(time.time() * 1000)}"
     agent_cls = AGENT_REGISTRY.get(agent_name)
     if not agent_cls:
-        raise ValueError(f"Agent {agent_name} 未注册实际实现")
+        raise ValueError(f"Agent {agent_name} has no registered implementation")
 
     with log_context(
         trace_id=trace_id,
@@ -790,7 +790,7 @@ async def trigger_agent(agent_name: str) -> str:
             f"[watchlist] Agent={agent_name} count={len(watchlist)} symbols={[s.symbol for s in watchlist]}"
         )
         if not watchlist:
-            return f"Agent {agent_name} 没有关联的自选股"
+            return f"Agent {agent_name} has no linked watchlist stocks"
 
         model, service = resolve_ai_model(agent_name)
         channels = resolve_notify_channels(agent_name)
@@ -800,7 +800,7 @@ async def trigger_agent(agent_name: str) -> str:
         execution_mode = get_agent_execution_mode(agent_name)
         agent_config = get_agent_config(agent_name)
 
-        # 根据配置初始化 Agent
+        # Initialise the agent from its config
         if agent_config:
             agent = agent_cls(**agent_config)
         else:
@@ -808,13 +808,13 @@ async def trigger_agent(agent_name: str) -> str:
 
         try:
             if execution_mode == "single" and hasattr(agent, "run_single"):
-                # 单只模式：逐只股票分析
+                # Single mode: analyse stock by stock
                 results = []
                 for stock in watchlist:
                     result = await agent.run_single(context, stock.symbol)
                     if result:
                         results.append(f"{stock.name}: {result.content[:100]}...")
-                msg = "\n\n".join(results) if results else "无异动"
+                msg = "\n\n".join(results) if results else "No unusual moves"
                 record_agent_run(
                     agent_name=agent_name,
                     status="success",
@@ -826,7 +826,7 @@ async def trigger_agent(agent_name: str) -> str:
                 )
                 return msg
             else:
-                # 批量模式：所有股票一起分析
+                # Batch mode: analyse all stocks together
                 result = await agent.run(context)
                 raw = result.raw_data or {}
                 record_agent_run(
@@ -868,14 +868,14 @@ async def trigger_agent_for_stock(
     trace_id: str | None = None,
     force_refresh: bool = False,
 ) -> dict:
-    """手动触发 Agent 执行（单只股票）"""
+    """Run an agent manually (one stock)."""
     start = time.monotonic()
     trace_id = trace_id or f"man-{agent_name}-{stock.symbol}-{int(time.time() * 1000)}"
     agent_cls = AGENT_REGISTRY.get(agent_name)
     if not agent_cls:
-        raise ValueError(f"Agent {agent_name} 未注册实际实现")
-    # 自动调度等不经过 stocks.trigger API 的入口也要拥有同样的生命周期记录；
-    # 手动入口已提前写入，这里幂等调用可避免重复 AgentRun。
+        raise ValueError(f"Agent {agent_name} has no registered implementation")
+    # Entry points that don't go through the stocks.trigger API (such as scheduled runs) need the same lifecycle record;
+    # the manual entry point already wrote it, and this idempotent call avoids a duplicate AgentRun.
     try:
         from src.modules.automation.agent_runs import start_agent_run
         start_agent_run(
@@ -884,7 +884,7 @@ async def trigger_agent_for_stock(
             trigger_source="manual",
         )
     except Exception as e:
-        logger.warning(f"写 AgentRun running 状态失败,不影响主流程: {e}")
+        logger.warning(f"Failed to write AgentRun running state; continuing: {e}")
 
     settings = Settings()
     proxy = _get_proxy() or settings.http_proxy
@@ -900,7 +900,7 @@ async def trigger_agent_for_stock(
         market=market,
     )
 
-    # 加载该股票的持仓信息
+    # Load the stock's positions
     portfolio = load_portfolio_for_stock(stock.id)
 
     model, service = resolve_ai_model(agent_name, stock_agent_id)
@@ -920,19 +920,19 @@ async def trigger_agent_for_stock(
         model_label=model_label,
         suppress_notify=suppress_notify,
     )
-    # 暴露 trace_id / force_refresh 给 agent(供 TradingAgents 进度反馈 + 缓存控制使用)。
-    # AgentContext 不强制声明此字段,通过 setattr 注入,其他 agent 不受影响。
+    # Expose trace_id / force_refresh to the agent (for TradingAgents progress and cache control).
+    # AgentContext doesn't declare this field; it is injected with setattr, so other agents are unaffected.
     setattr(context, "_trace_id", trace_id)
     setattr(context, "_force_refresh", force_refresh)
 
-    # 创建 agent，支持手动触发参数。TradingAgents 等新 agent 从 AgentConfig 读 config。
+    # Create the agent, with manual trigger parameters. Newer agents such as TradingAgents read config from AgentConfig.
     if agent_name == "intraday_monitor":
         agent = agent_cls(
             bypass_throttle=bypass_throttle,
             bypass_market_hours=bypass_market_hours,
         )
     elif agent_name == "tradingagents":
-        # 从 AgentConfig.config 读取实例化参数
+        # Read the instantiation parameters from AgentConfig.config
         agent_kwargs = get_agent_config(agent_name) or {}
         try:
             agent = agent_cls(**agent_kwargs)
@@ -978,7 +978,7 @@ async def trigger_agent_for_stock(
             )
             raise
 
-    # 返回详细结果
+    # Return the detailed result
     skipped = bool(result.raw_data.get("skipped", False))
     should_alert = bool(
         result.raw_data.get("should_alert", False if skipped else True)
@@ -997,7 +997,7 @@ async def trigger_agent_for_stock(
 
 @asynccontextmanager
 async def lifespan(app):
-    """应用生命周期: 初始化 + 启动调度器"""
+    """App lifecycle: initialise + start the schedulers."""
     # Compliance first: an invalid ADVISORY_MODE configuration stops startup (ADR-002).
     from src.platform.compliance import get_compliance_settings
     from src.platform.compliance.audit import install_audit_sink
@@ -1007,24 +1007,24 @@ async def lifespan(app):
     install_audit_sink()
     setup_logging()
     logger.info("Advisory mode: %s", compliance.mode.value)
-    # OTel 导出(可选,默认关闭):仅当配置了 OTEL_EXPORTER_OTLP_ENDPOINT 且装了
-    # opentelemetry SDK 时启用,否则静默 no-op,不影响现有部署。
+    # OTel export (optional, off by default): enabled only when OTEL_EXPORTER_OTLP_ENDPOINT is set and
+    # the opentelemetry SDK is installed; otherwise a silent no-op that doesn't affect existing deployments.
     try:
         from src.platform.observability.otel import init_otel
 
         init_otel()
-    except Exception as e:  # 兜底:OTel 初始化异常绝不阻断服务启动
-        logger.warning(f"OTel 初始化跳过: {e}")
-    setup_proxy()  # 设置进程 env 代理(HTTP_PROXY/NO_PROXY);所有 httpx(trust_env=True)据此走代理
+    except Exception as e:  # catch-all: an OTel init error must never block startup
+        logger.warning(f"OTel init skipped: {e}")
+    setup_proxy()  # set the process env proxy (HTTP_PROXY/NO_PROXY); every httpx client (trust_env=True) follows it
     setup_ssl()
 
-    # 从环境变量初始化认证（Docker 部署用）
+    # Initialise auth from environment variables (for Docker deployments)
     from src.modules.administration.api.auth import init_auth_from_env
 
     db = SessionLocal()
     try:
         if init_auth_from_env(db):
-            logger.info("已从环境变量初始化认证账号")
+            logger.info("Auth account initialised from environment variables")
     finally:
         db.close()
 
@@ -1032,9 +1032,9 @@ async def lifespan(app):
     seed_strategies()
     seed_sample_stocks()
 
-    # 启动时回填历史 TradingAgents 决策到建议池(stock_suggestions)
-    # 早期 TA 运行没写建议池,这次启动一次性补齐,让「AI 建议」面板能看到。
-    # 幂等:已存在不重复写;每次启动重跑代价极低(只查最近 7 天 + dedupe)。
+    # At startup, backfill past TradingAgents decisions into the suggestion pool (stock_suggestions).
+    # Early TA runs didn't write to the pool; this one-off backfill at startup makes them visible in the "AI items" panel.
+    # Idempotent: existing rows aren't written again; rerunning on every start is cheap (only the last 7 days + dedupe).
     from src.platform.compliance import Feature, is_feature_enabled
 
     if is_feature_enabled(Feature.SUGGESTION_POOL):
@@ -1042,13 +1042,13 @@ async def lifespan(app):
             from src.modules.automation.tradingagents.operations import backfill_tradingagents_suggestions
             backfill_tradingagents_suggestions(days=7)
         except Exception as e:
-            logger.warning(f"TradingAgents 建议回填失败,跳过: {e}")
+            logger.warning(f"TradingAgents item backfill failed; skipping: {e}")
 
 
     global scheduler, price_alert_scheduler, paper_trading_scheduler, context_maintenance_scheduler
     scheduler = build_scheduler()
     scheduler.start()
-    logger.info("Agent 调度器已启动")
+    logger.info("Agent scheduler started")
     try:
         settings = Settings()
         price_alert_scheduler = PriceAlertScheduler(
@@ -1056,9 +1056,9 @@ async def lifespan(app):
             interval_seconds=60,
         )
         price_alert_scheduler.start()
-        logger.info("价格提醒调度器已启动")
+        logger.info("Price alert scheduler started")
     except Exception as e:
-        logger.error(f"价格提醒调度器启动失败: {e}")
+        logger.error(f"Price alert scheduler failed to start: {e}")
     if not is_feature_enabled(Feature.AI_PAPER_TRADING):
         logger.info("AI-driven paper trading is disabled in research-only mode")
     else:
@@ -1069,9 +1069,9 @@ async def lifespan(app):
                 interval_seconds=60,
             )
             paper_trading_scheduler.start()
-            logger.info("模拟盘调度器已启动")
+            logger.info("Simulation scheduler started")
         except Exception as e:
-            logger.error(f"模拟盘调度器启动失败: {e}")
+            logger.error(f"Simulation scheduler failed to start: {e}")
     try:
         settings = Settings()
         context_maintenance_scheduler = ContextMaintenanceScheduler(
@@ -1081,35 +1081,35 @@ async def lifespan(app):
             outcome_retention_days=365,
         )
         context_maintenance_scheduler.start()
-        logger.info("上下文维护调度器已启动")
+        logger.info("Context maintenance scheduler started")
     except Exception as e:
-        logger.error(f"上下文维护调度器启动失败: {e}")
-    # MCP 调用日志保留期清理:每日 04:00 清理超期审计记录
+        logger.error(f"Context maintenance scheduler failed to start: {e}")
+    # MCP call log retention: expired audit records are deleted daily at 04:00
     try:
         register_mcp_log_cleanup(scheduler)
     except Exception as e:
-        logger.error(f"MCP 日志清理任务注册失败: {e}")
+        logger.error(f"Failed to register the MCP log cleanup job: {e}")
     yield
     if scheduler:
         scheduler.shutdown()
-        logger.info("Agent 调度器已关闭")
+        logger.info("Agent scheduler stopped")
     if price_alert_scheduler:
         price_alert_scheduler.shutdown()
-        logger.info("价格提醒调度器已关闭")
+        logger.info("Price alert scheduler stopped")
     if paper_trading_scheduler:
         paper_trading_scheduler.shutdown()
-        logger.info("模拟盘调度器已关闭")
+        logger.info("Simulation scheduler stopped")
     if context_maintenance_scheduler:
         context_maintenance_scheduler.shutdown()
-        logger.info("上下文维护调度器已关闭")
+        logger.info("Context maintenance scheduler stopped")
 
 
-# 模块级 app 实例，供 uvicorn reload 使用
+# Module-level app instance, for uvicorn reload
 from src.bootstrap.application import app  # noqa: E402
 
 app.router.lifespan_context = lifespan
 
-# 生产环境静态文件服务
+# Static file serving in production
 static_dir = os.path.join(os.path.dirname(__file__), "static")
 if os.path.exists(static_dir):
     from fastapi.staticfiles import StaticFiles
@@ -1117,20 +1117,20 @@ if os.path.exists(static_dir):
 
     from src.platform.security.static_files import resolve_static_file
 
-    # SPA 路由：所有非 API 请求返回 index.html
+    # SPA routes: every non-API request returns index.html
     @app.get("/{path:path}")
     async def serve_spa(path: str):
         return FileResponse(resolve_static_file(static_dir, path))
 
-    logger.info(f"静态文件服务已启用: {static_dir}")
+    logger.info(f"Static file serving enabled: {static_dir}")
 
 
 if __name__ == "__main__":
-    print("盯盘侠启动: http://127.0.0.1:8000")
-    print("API 文档: http://127.0.0.1:8000/docs")
-    # 生产(Docker `python server.py`)不应开 reload:uvicorn 文件监听会多起一个 reloader
-    # 子进程、浪费资源,且监听 data/ 写入易误触发重启。本地热重载用 `make dev-api`
-    # (uvicorn --reload),或显式设 DEV_RELOAD=1。
+    print("PanWatch running at http://127.0.0.1:8000")
+    print("API docs: http://127.0.0.1:8000/docs")
+    # Production (Docker `python server.py`) shouldn't reload: uvicorn's file watcher starts an extra reloader
+    # process, wastes resources, and writes under data/ easily trigger restarts. For local hot reload use `make dev-api`
+    # (uvicorn --reload), or set DEV_RELOAD=1 explicitly.
     _dev_reload = os.environ.get("DEV_RELOAD", "").lower() in ("1", "true", "yes")
     uvicorn.run(
         "server:app",

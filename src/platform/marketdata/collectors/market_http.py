@@ -1,14 +1,14 @@
-"""行情/数据采集的统一 HTTP 工具。
+"""Shared HTTP helper for quote/data collection.
 
-把散落在各 collector 的样板收敛到一处,避免每个文件各写一套且各有缺漏:
-- **走系统代理**:默认 trust_env=True,遵循进程 env 的 HTTP_PROXY/NO_PROXY(由 apply_proxy_env 按 UI 的 http_proxy 设置)。没配代理时即直连。
-- **按 host 节流**:同一域名请求最小间隔,平滑顺序/并发突发(第三方批量突发会限流)。
-- **退避重试**:空响应/异常退避 + 抖动重试。
-- **调用来源标记**:全项目共享一个 contextvar,失败日志带 [src=xxx],定位是哪个任务触发。
+Gathers boilerplate that used to be scattered across collectors, so each file doesn't write its own with its own gaps:
+- **System proxy**: trust_env=True by default, following the process env HTTP_PROXY/NO_PROXY (set by apply_proxy_env from the UI's http_proxy). Direct without a proxy.
+- **Per-host throttling**: a minimum interval between requests to one domain, smoothing sequential/concurrent bursts (third parties rate-limit bursts).
+- **Backoff retries**: backoff + jitter on empty responses/errors.
+- **Call source tag**: one contextvar shared project-wide, so failure logs carry [src=xxx] naming the task that triggered them.
 
-来源标记是全局共享的:任何调度入口 `with fetch_source("xxx"):` 包裹后,
-该任务内所有 collector(K线/报价/资金流/...)的失败日志都会带上同一来源。
-asyncio.to_thread 会传播 contextvars,异步调度里设置也能透到 worker 线程。
+The source tag is shared globally: once a scheduled entry point wraps itself in `with fetch_source("xxx"):`,
+failure logs from every collector in that task (K-line/quote/flows/...) carry the same source.
+asyncio.to_thread propagates contextvars, so a tag set in async scheduling reaches the worker thread too.
 """
 
 from __future__ import annotations
@@ -26,7 +26,7 @@ import httpx
 logger = logging.getLogger(__name__)
 
 
-# ── 调用来源标记(全局共享)──────────────────────────────────────────────
+# ── Call source tag (shared globally) ───────────────────────────────────
 _FETCH_SOURCE: contextvars.ContextVar[str] = contextvars.ContextVar(
     "fetch_source", default=""
 )
@@ -47,13 +47,13 @@ def source_suffix() -> str:
     return f" [src={src}]" if src else ""
 
 
-# ── 按 host 进程级节流 ───────────────────────────────────────────────────
+# ── Per-host, per-process throttling ─────────────────────────────────────
 _THROTTLE_LOCK = threading.Lock()
 _last_call: dict[str, float] = {}
 
 
 def throttle(host_key: str, min_interval_s: float) -> None:
-    """保证对同一 host 的请求间隔 ≥ min_interval_s,平滑顺序/并发突发。"""
+    """Keep requests to one host at least min_interval_s apart, smoothing sequential/concurrent bursts."""
     if min_interval_s <= 0:
         return
     with _THROTTLE_LOCK:
@@ -63,7 +63,7 @@ def throttle(host_key: str, min_interval_s: float) -> None:
         _last_call[host_key] = time.time()
 
 
-# ── 统一同步 GET ─────────────────────────────────────────────────────────
+# ── Shared synchronous GET ───────────────────────────────────────────────
 def market_get(
     url: str,
     *,
@@ -76,15 +76,15 @@ def market_get(
     backoff: float = 0.4,
     jitter: float = 0.25,
     parse: str = "text",  # "text" | "json" | "content"
-    encoding: str | None = None,  # 强制解码(如 "gbk")
+    encoding: str | None = None,  # forced decoding (e.g. "gbk")
     symbol: str = "",
     log_label: str = "",
     raise_for_status: bool = True,
-    trust_env: bool = True,  # 遵循进程 env 代理(HTTP_PROXY/NO_PROXY),由 apply_proxy_env 统一设
+    trust_env: bool = True,  # follow the process env proxy (HTTP_PROXY/NO_PROXY), set centrally by apply_proxy_env
     follow_redirects: bool = True,
     verify: bool = True,
 ) -> Any | None:
-    """按系统代理(env)+ host 节流 + 退避重试。成功返回解析结果,失败返回 None 并打带来源的日志。"""
+    """System proxy (env) + per-host throttling + backoff retries. Returns the parsed result on success; None and a log with the source on failure."""
     last_err: Any = None
     for attempt in range(max(1, retries + 1)):
         throttle(host_key, min_interval_s)
@@ -114,15 +114,15 @@ def market_get(
     if last_err is not None:
         label = log_label or host_key
         sym = f" symbol={symbol}" if symbol else ""
-        logger.warning(f"{label} 获取失败{sym}: {last_err}{source_suffix()}")
+        logger.warning(f"{label} fetch failed{sym}: {last_err}{source_suffix()}")
     return None
 
 
-# ── 轻量 TTL 缓存 ────────────────────────────────────────────────────────
-# 与 src/core/providers/cache.py 等价,但定义在采集层最底层模块,供各 collector
-# 直接复用——避免 collector 反向 import providers 包触发循环依赖。
+# ── Lightweight TTL cache ─────────────────────────────────────────────────
+# Equivalent to src/core/providers/cache.py, but defined in the lowest collection-layer module so collectors
+# can reuse it directly, without collectors importing the providers package and creating an import cycle.
 class TTLCache:
-    """单进程内存 TTL 缓存,线程安全,过期 key 在下次 get 时被动剔除。"""
+    """In-process memory TTL cache, thread-safe; expired keys are dropped lazily on the next get."""
 
     def __init__(self, default_ttl_sec: float = 20.0, max_size: int = 2048):
         self._default_ttl = default_ttl_sec
@@ -145,7 +145,7 @@ class TTLCache:
     def set(self, key: str, value: Any, ttl_sec: float | None = None) -> None:
         ttl = ttl_sec if ttl_sec is not None else self._default_ttl
         if ttl <= 0:
-            return  # 显式不缓存
+            return  # explicitly not cached
         expires = time.monotonic() + ttl
         with self._lock:
             if len(self._store) >= self._max_size and key not in self._store:

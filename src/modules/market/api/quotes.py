@@ -10,7 +10,7 @@ router = APIRouter()
 
 
 class QuoteItem(BaseModel):
-    symbol: str = Field(..., description="股票代码")
+    symbol: str = Field(..., description="Stock symbol")
     market: str = Field(..., description="Market: IN (NSE/BSE)")
 
 
@@ -22,7 +22,7 @@ def _parse_market(market: str) -> MarketCode:
     try:
         return MarketCode(market)
     except ValueError:
-        raise HTTPException(400, f"不支持的市场: {market}")
+        raise HTTPException(400, f"Unsupported market: {market}")
 
 
 def _quote_to_response(symbol: str, market: MarketCode, quote: dict | None) -> dict:
@@ -71,21 +71,21 @@ def _quote_to_response(symbol: str, market: MarketCode, quote: dict | None) -> d
 
 @router.get("/{symbol}")
 async def get_quote(symbol: str, market: str = "IN"):
-    """获取单只股票实时行情"""
+    """Live quote for one stock."""
     market_code = _parse_market(market)
     rows = await asyncio.to_thread(md_quote_rows, [symbol], market_code.value)
     if not rows:
-        raise HTTPException(404, "行情不存在")
+        raise HTTPException(404, "Quote not found")
     quote_map = {item.get("symbol"): item for item in rows}
     quote = quote_map.get(symbol)
     if not quote:
-        raise HTTPException(404, "行情不存在")
+        raise HTTPException(404, "Quote not found")
     return _quote_to_response(symbol, market_code, quote)
 
 
 @router.post("/batch")
 async def get_quotes_batch(payload: QuoteBatchRequest):
-    """批量获取股票实时行情"""
+    """Live quotes in bulk."""
     if not payload.items:
         return []
 

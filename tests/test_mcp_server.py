@@ -1,7 +1,7 @@
-"""MCP Server + PAT 鉴权测试。
+"""Tests for the MCP server + PAT auth.
 
-全用内存库与 TestClient,不触网:tools/call 只测纯 DB 工具(get_watchlist),
-覆盖协议握手/发现/调用/鉴权拒绝(缺失/无效/吊销)/JWT 不能进 MCP。
+In-memory DB and TestClient only, no network: tools/call only tests a pure DB tool (get_watchlist),
+covering the protocol handshake / discovery / calls / auth rejection (missing/invalid/revoked) / JWT can't enter MCP.
 """
 
 import pytest
@@ -18,7 +18,7 @@ from src.platform.persistence.database import Base, get_db
 
 @pytest.fixture()
 def client_and_session(monkeypatch):
-    """内存库 + 挂 pats(/api/pats)与 mcp(/mcp)的测试应用。"""
+    """In-memory DB + a test app mounting pats (/api/pats) and mcp (/mcp)."""
     engine = create_engine(
         "sqlite://",
         connect_args={"check_same_thread": False},
@@ -34,7 +34,7 @@ def client_and_session(monkeypatch):
         finally:
             db.close()
 
-    # 审计日志写库也指向内存库,避免污染真实库
+    # Audit log writes go to the in-memory DB too, so the real DB isn't polluted
     monkeypatch.setattr(mcp_api, "SessionLocal", TestSession)
 
     app = FastAPI()
@@ -60,14 +60,14 @@ def _rpc(method, params=None, rid=1):
 
 
 def test_missing_auth_rejected(client_and_session):
-    """缺少 Authorization → 401"""
+    """Missing Authorization -> 401."""
     client, _ = client_and_session
     r = client.post("/mcp", json=_rpc("initialize"))
     assert r.status_code == 401
 
 
 def test_jwt_cannot_enter_mcp(client_and_session):
-    """非 PAT(如 JWT)的 Bearer → 403,JWT 不能进 MCP"""
+    """A non-PAT Bearer (such as a JWT) -> 403; a JWT can't enter MCP."""
     client, _ = client_and_session
     r = client.post(
         "/mcp",
@@ -78,7 +78,7 @@ def test_jwt_cannot_enter_mcp(client_and_session):
 
 
 def test_invalid_pat_rejected(client_and_session):
-    """PAT 前缀正确但库里查不到 → 401"""
+    """Correct PAT prefix but not in the DB -> 401."""
     client, _ = client_and_session
     r = client.post(
         "/mcp",
@@ -89,7 +89,7 @@ def test_invalid_pat_rejected(client_and_session):
 
 
 def test_initialize_handshake(client_and_session):
-    """initialize 返回 protocolVersion / capabilities / serverInfo"""
+    """initialize returns protocolVersion / capabilities / serverInfo."""
     client, _ = client_and_session
     token = _create_pat(client)
     r = client.post(
@@ -108,7 +108,7 @@ def test_initialize_handshake(client_and_session):
 
 
 def test_tools_list_discovery(client_and_session):
-    """tools/list 暴露 4 个只读工具(research-only 移除 AI 建议工具),含 inputSchema"""
+    """tools/list exposes 4 read-only tools (research-only removes the AI items tool), with inputSchema."""
     client, _ = client_and_session
     token = _create_pat(client)
     r = client.post(
@@ -129,7 +129,7 @@ def test_tools_list_discovery(client_and_session):
 
 
 def test_tools_call_and_audit_log(client_and_session):
-    """tools/call 执行纯 DB 工具并落审计日志"""
+    """tools/call runs a pure DB tool and writes an audit log."""
     client, TestSession = client_and_session
     token = _create_pat(client)
     r = client.post(
@@ -143,7 +143,7 @@ def test_tools_call_and_audit_log(client_and_session):
     assert res["content"][0]["type"] == "text"
     assert isinstance(res["content"][0]["text"], str)
 
-    # 审计日志落库
+    # Audit log written
     from src.platform.persistence.models import MCPCallLog
 
     db = TestSession()
@@ -157,7 +157,7 @@ def test_tools_call_and_audit_log(client_and_session):
 
 
 def test_tools_call_unknown_tool(client_and_session):
-    """调用不在白名单的工具 → JSON-RPC 参数错误"""
+    """Calling a tool outside the allowlist -> JSON-RPC invalid params."""
     client, _ = client_and_session
     token = _create_pat(client)
     r = client.post(
@@ -170,12 +170,12 @@ def test_tools_call_unknown_tool(client_and_session):
 
 
 def test_revoked_pat_rejected(client_and_session):
-    """吊销后的 PAT 立即失效 → 401"""
+    """A revoked PAT stops working at once -> 401."""
     client, _ = client_and_session
     create = client.post("/api/pats", json={"name": "tmp"}).json()
     token = create["token"]
     pat_id = create["id"]
-    # 吊销
+    # Revoke
     assert client.delete(f"/api/pats/{pat_id}").status_code == 200
     r = client.post(
         "/mcp",
@@ -186,7 +186,7 @@ def test_revoked_pat_rejected(client_and_session):
 
 
 def test_notification_returns_202(client_and_session):
-    """通知类消息(无 id)无需响应 → 202"""
+    """Notifications (no id) need no response -> 202."""
     client, _ = client_and_session
     token = _create_pat(client)
     r = client.post(

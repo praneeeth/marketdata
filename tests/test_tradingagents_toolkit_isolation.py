@@ -1,12 +1,12 @@
-"""TradingAgents toolkit 并发数据隔离回归测试。
+"""Regression tests for TradingAgents toolkit data isolation under concurrency.
 
-根因 bug:_PANWATCH_DATA_CACHE 曾是模块级全局 dict,两只标的并发深度分析时
-(asyncio.to_thread worker 线程)互相覆盖 —— 广汽 601238 的报告混入赛力斯 601127
-的 K线/价格。改成 ContextVar 后,每个并发任务(copy_context)拿独立副本,互不串台。
+Root-cause bug: _PANWATCH_DATA_CACHE used to be a module-level global dict, so two concurrent deep research runs
+(asyncio.to_thread worker threads) overwrote each other: one stock's report picked up the other's
+K-lines/prices. With a ContextVar, each concurrent task (copy_context) gets its own copy and they don't mix.
 
-本测试用 contextvars.copy_context() 模拟两个并发任务,直接复现并验证修复。
-注意:只测 _serve_from_panwatch / _stock_meta_header 的直接路径,不经过
-_patched_route_to_vendor(避免触发 _emit_toolkit_log → log_context/DB)。
+This test simulates two concurrent tasks with contextvars.copy_context() to reproduce the bug and check the fix.
+Note: it only tests the direct _serve_from_panwatch / _stock_meta_header paths, not
+_patched_route_to_vendor (to avoid _emit_toolkit_log -> log_context/DB).
 """
 
 from __future__ import annotations
@@ -33,68 +33,68 @@ def _data(symbol: str, name: str, close: float):
     }
 
 
-GAC = _data("601238", "广汽集团", 9.50)        # 广汽
-SERES = _data("601127", "赛力斯", 83.26)        # 赛力斯
+GAC = _data("TATAMOTORS", "Tata Motors", 9.50)
+SERES = _data("MARUTI", "Maruti Suzuki", 83.26)
 
 
 def test_stock_meta_header_uses_current_context():
-    """_stock_meta_header 读当前 context 的 stock,而非进程全局。"""
+    """_stock_meta_header reads the stock from the current context, not a process global."""
     def _run():
         with ta.panwatch_data_context(GAC):
-            return ta._stock_meta_header("601238")
+            return ta._stock_meta_header("TATAMOTORS")
     header = contextvars.copy_context().run(_run)
-    assert "广汽集团" in header
-    assert "赛力斯" not in header
+    assert "Tata Motors" in header
+    assert "Maruti Suzuki" not in header
     assert "9.50" in header
 
 
 def test_two_concurrent_contexts_do_not_cross_talk():
-    """复现生产 bug:任务A(广汽)运行中,任务B(赛力斯)注入数据,
-    A 后续工具调用必须仍读到广汽 —— 旧的全局 dict 实现这里会串成赛力斯。"""
+    """Reproduces the production bug: while task A (Tata Motors) runs, task B (Maruti Suzuki) injects its data;
+    A's later tool calls must still read Tata Motors; the old global dict would have mixed in Maruti Suzuki here."""
     ctx_a = contextvars.copy_context()
     ctx_b = contextvars.copy_context()
 
-    # A 先进入 context(模拟 worker A 开始,数据已注入但还没跑完工具)
+    # A enters its context first (worker A starts; data injected but tools not run yet)
     ctx_a.run(lambda: ta._PANWATCH_DATA.set(dict(GAC)))
-    # B 随后进入 context(并发任务 B 启动)—— 旧实现此处会覆盖全局
+    # B enters its context next (concurrent task B starts); the old implementation overwrote the global here
     ctx_b.run(lambda: ta._PANWATCH_DATA.set(dict(SERES)))
 
-    # A 继续跑工具调用:get_stock_data(601238) 必须返回广汽 K线/价格
-    out_a = ctx_a.run(lambda: ta._serve_from_panwatch("get_stock_data", "601238", {}, args=("601238",)))
-    out_b = ctx_b.run(lambda: ta._serve_from_panwatch("get_stock_data", "601127", {}, args=("601127",)))
+    # A keeps calling tools: get_stock_data(TATAMOTORS) must return Tata Motors' K-lines/price
+    out_a = ctx_a.run(lambda: ta._serve_from_panwatch("get_stock_data", "TATAMOTORS", {}, args=("TATAMOTORS",)))
+    out_b = ctx_b.run(lambda: ta._serve_from_panwatch("get_stock_data", "MARUTI", {}, args=("MARUTI",)))
 
-    assert "广汽集团" in out_a and "赛力斯" not in out_a
-    assert "9.5" in out_a            # 广汽收盘价
-    assert "83.26" not in out_a      # 不含赛力斯价格
+    assert "Tata Motors" in out_a and "Maruti Suzuki" not in out_a
+    assert "9.5" in out_a            # Tata Motors' close
+    assert "83.26" not in out_a      # not Maruti Suzuki's price
 
-    assert "赛力斯" in out_b and "广汽集团" not in out_b
+    assert "Maruti Suzuki" in out_b and "Tata Motors" not in out_b
 
 
 def test_context_restored_after_exit():
-    """panwatch_data_context 退出后,当前 context 的数据还原为空。"""
+    """After panwatch_data_context exits, the current context's data is empty again."""
     def _run():
         assert ta._cache() == {}
         with ta.panwatch_data_context(SERES):
-            assert ta._cache().get("stock").symbol == "601127"
-        # 退出后还原
+            assert ta._cache().get("stock").symbol == "MARUTI"
+        # Restored after exit
         return ta._cache()
     assert contextvars.copy_context().run(_run) == {}
 
 
 def test_nested_contexts_restore_outer():
-    """嵌套 context:内层退出后外层数据恢复(token reset 语义)。"""
+    """Nested contexts: after the inner one exits, the outer data comes back (token reset semantics)."""
     def _run():
         with ta.panwatch_data_context(GAC):
-            assert ta._cache().get("stock").symbol == "601238"
+            assert ta._cache().get("stock").symbol == "TATAMOTORS"
             with ta.panwatch_data_context(SERES):
-                assert ta._cache().get("stock").symbol == "601127"
-            # 内层退出,外层广汽恢复
-            assert ta._cache().get("stock").symbol == "601238"
+                assert ta._cache().get("stock").symbol == "MARUTI"
+            # The inner one exited; the outer Tata Motors data is back
+            assert ta._cache().get("stock").symbol == "TATAMOTORS"
     contextvars.copy_context().run(_run)
 
 
 # ---------------------------------------------------------------------------
-# 行业/主题新闻关键词搜索(B 功能:get_news 非 ticker 词 → 实时搜中文新闻)
+# Industry/theme news keyword search (feature B: get_news with a non-ticker word searches live news)
 # ---------------------------------------------------------------------------
 
 

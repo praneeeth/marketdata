@@ -1,7 +1,7 @@
-"""组合诊断(Phase 4):只读分析模拟盘持仓的集中度 / 分布 / 风险。
+"""Portfolio diagnostics (Phase 4): read-only analysis of simulation positions' concentration / split / risk.
 
-对标 PortfolioPilot 的「只读不下单」诊断 —— 纯读取持仓,**绝不下单**,只产出诊断与提示。
-纯函数 diagnose_positions 可单测;diagnose_paper_portfolio 读 DB。
+Modelled on PortfolioPilot's "read-only, never trades" diagnostics: only reads positions, **never places orders**, and only produces diagnostics and notes.
+The pure function diagnose_positions is unit-testable; diagnose_paper_portfolio reads the DB.
 """
 
 from __future__ import annotations
@@ -13,15 +13,15 @@ from src.platform.persistence.models import PaperTradingPosition
 
 logger = logging.getLogger(__name__)
 
-# 风险阈值(可后续配置化)
-MAX_SINGLE_WEIGHT = 0.40   # 单仓占比上限
-HIGH_HHI = 0.50            # HHI 集中度高线
-MAX_MARKET_WEIGHT = 0.70   # 单市场占比上限
-MIN_POSITIONS = 3          # 最少分散持仓数
+# Risk thresholds (could be made configurable later)
+MAX_SINGLE_WEIGHT = 0.40   # maximum weight of one position
+HIGH_HHI = 0.50            # HHI concentration high mark
+MAX_MARKET_WEIGHT = 0.70   # maximum weight of one market
+MIN_POSITIONS = 3          # minimum positions for diversification
 
 
 def herfindahl(values: list[float]) -> float:
-    """HHI 集中度 = Σ(w_i)²(w 为归一化权重)。范围 [1/n, 1],越大越集中。"""
+    """HHI concentration = sum(w_i^2) (w = normalised weights). Range [1/n, 1]; higher is more concentrated."""
     total = sum(values)
     if total <= 0:
         return 0.0
@@ -29,7 +29,7 @@ def herfindahl(values: list[float]) -> float:
 
 
 def diagnose_positions(positions: list[dict]) -> dict:
-    """纯函数诊断。
+    """Pure diagnostics function.
 
     positions: [{symbol, market, strategy_code, market_value, unrealized_pnl}]
     """
@@ -62,15 +62,15 @@ def diagnose_positions(positions: list[dict]) -> dict:
 
     alerts: list[str] = []
     if max_w >= MAX_SINGLE_WEIGHT:
-        alerts.append(f"单仓集中度过高:最大持仓占 {max_w * 100:.0f}%")
+        alerts.append(f"Single position too concentrated: the largest is {max_w * 100:.0f}%")
     if hhi >= HIGH_HHI:
-        alerts.append(f"组合高度集中(HHI={hhi:.2f})")
+        alerts.append(f"Portfolio highly concentrated (HHI={hhi:.2f})")
     if len(positions) < MIN_POSITIONS and total > 0:
-        alerts.append(f"持仓数过少({len(positions)}),分散不足")
+        alerts.append(f"Too few positions ({len(positions)}); not diversified enough")
     if total > 0:
         for m, v in by_market.items():
             if v / total >= MAX_MARKET_WEIGHT:
-                alerts.append(f"{m} 市场占比过高({v / total * 100:.0f}%)")
+                alerts.append(f"{m} market weight too high ({v / total * 100:.0f}%)")
 
     return {
         "position_count": len(positions),
@@ -85,7 +85,7 @@ def diagnose_positions(positions: list[dict]) -> dict:
 
 
 def diagnose_paper_portfolio() -> dict:
-    """读模拟盘 open 持仓 → 组合诊断(只读)。"""
+    """Read open simulation positions -> portfolio diagnostics (read-only)."""
     db = SessionLocal()
     try:
         rows = (

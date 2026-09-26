@@ -1,4 +1,4 @@
-"""首页 Phase A:今日提醒命中聚合 + 组合待办(空态用)。"""
+"""Home page Phase A: today's alert triggers aggregated + portfolio to-dos (for the empty state)."""
 
 from __future__ import annotations
 
@@ -32,16 +32,16 @@ def db():
 
 
 def _seed(s):
-    acc = M.Account(name="测试", available_funds=1000, enabled=True)
+    acc = M.Account(name="Test", available_funds=1000, enabled=True)
     s.add(acc)
     s.flush()
-    mt = M.Stock(symbol="600519", name="贵州茅台", market="CN")
-    pa = M.Stock(symbol="000001", name="平安银行", market="CN")
+    mt = M.Stock(symbol="INFY", name="Infosys", market="IN")
+    pa = M.Stock(symbol="HDFCBANK", name="HDFC Bank", market="IN")
     s.add_all([mt, pa])
     s.flush()
     s.add(M.Position(account_id=acc.id, stock_id=mt.id, cost_price=1700, quantity=100))
     s.add(M.Position(account_id=acc.id, stock_id=pa.id, cost_price=10, quantity=1000))
-    rule = M.PriceAlertRule(stock_id=mt.id, name="茅台破位", enabled=True)  # 仅茅台有提醒
+    rule = M.PriceAlertRule(stock_id=mt.id, name="Infosys breakdown", enabled=True)  # only Infosys has an alert
     s.add(rule)
     s.flush()
     s.commit()
@@ -49,16 +49,16 @@ def _seed(s):
 
 
 def test_todos_flags_holding_without_alert(db):
-    """持仓但未设提醒的标的应进待办;已设提醒的不进。"""
+    """Held stocks without an alert go into the to-dos; ones with an alert don't."""
     _, mt, pa, _ = _seed(db)
     res = accounts_api.portfolio_todos(db=db)
     msgs = [t["message"] for t in res["todos"]]
-    assert any("平安银行" in m for m in msgs), msgs
-    assert not any("贵州茅台" in m for m in msgs), msgs
+    assert any("HDFC Bank" in m for m in msgs), msgs
+    assert not any("Infosys" in m for m in msgs), msgs
 
 
 def test_today_hits_aggregate_with_stock_name(db):
-    """今日命中跨规则聚合,带标的名/代码。"""
+    """Today's triggers are aggregated across rules, with the stock name/symbol."""
     _, mt, pa, rule = _seed(db)
     now = datetime.now(timezone.utc).replace(tzinfo=None)
     db.add(
@@ -73,13 +73,13 @@ def test_today_hits_aggregate_with_stock_name(db):
     db.commit()
     res = alerts_api.list_today_hits(db=db)
     assert len(res) == 1
-    assert res[0]["symbol"] == "600519"
-    assert res[0]["name"] == "贵州茅台"
-    assert res[0]["rule_name"] == "茅台破位"
+    assert res[0]["symbol"] == "INFY"
+    assert res[0]["name"] == "Infosys"
+    assert res[0]["rule_name"] == "Infosys breakdown"
 
 
 def test_today_hits_excludes_old(db):
-    """昨天及更早的命中不计入今日。"""
+    """Triggers from yesterday or earlier don't count for today."""
     _, mt, pa, rule = _seed(db)
     old = datetime(2020, 1, 1)
     db.add(

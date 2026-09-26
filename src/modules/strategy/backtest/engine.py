@@ -1,17 +1,17 @@
-"""轻量事件式回测内核(纯 Python,无第三方依赖)。
+"""Lightweight event-driven back-test core (pure Python, no third-party dependencies).
 
-职责:给定信号 + 历史 K 线 → 模拟「信号次日开盘入场、逐日止损/止盈/到期平仓」,
-扣 A 股交易成本,产出每笔交易、净值曲线与绩效指标。
+Job: given signals + historical K-lines, simulate "enter at the next day's open, then exit daily on stop / target / expiry",
+deduct trading costs, and produce each trade, an equity curve and performance metrics.
 
-设计取舍(Phase 0):
-- 入场:信号日之后的**下一交易日开盘价**入场(无未来函数);T+1 起才可平仓(符合 A 股)。
-- 平仓(event):逐日检查止损/止盈;同日双触保守判为先止损;达最大持有交易日按收盘平。
-- 跳空:开盘已越过止损/止盈则按开盘价成交(gap)。
-- 仓位:默认每笔固定名义资金,买 A 股 100 股整数倍(可注入 sizer 供 Phase 1 替换)。
-- 净值曲线:按平仓日累积已实现盈亏(简化);并发持仓的逐日浮动 mark 留作后续扩展。
-- 涨跌停无法成交约束未建模(TODO:需前收 + 板块判定)。
+Design trade-offs (Phase 0):
+- Entry: at the **next trading day's open** after the signal date (no look-ahead); exits allowed from T+1 (an inherited A-share rule).
+- Exit (event): stop/target checked daily; if both hit on one day, the stop is assumed first (conservative); at the maximum holding days, exit at the close.
+- Gaps: if the open is already past the stop/target, fill at the open (gap).
+- Sizing: fixed notional per trade by default, bought in lot multiples (inherited 100-share lot; a sizer can be injected for Phase 1).
+- Equity curve: realised P&L accumulated by exit date (simplified); daily marking of concurrent positions is left for later.
+- Price-band limits that block fills aren't modelled (TODO: needs the previous close + band rules).
 
-另提供 horizon_return():复刻 strategy_engine.evaluate_strategy_outcomes 口径,用于交叉验证。
+Also provides horizon_return(), matching strategy_engine.evaluate_strategy_outcomes, for cross-checking.
 """
 
 from __future__ import annotations
@@ -30,15 +30,15 @@ logger = logging.getLogger(__name__)
 
 @dataclass(frozen=True)
 class Signal:
-    """一条待回测信号(对齐 StrategySignalRun 的可执行字段)。"""
+    """One signal to back-test (the executable fields of StrategySignalRun)."""
 
     symbol: str
     market: str
-    signal_date: str                  # YYYY-MM-DD(信号产生日)
-    entry_price: float | None = None  # None = 用下一交易日开盘价
+    signal_date: str                  # YYYY-MM-DD (signal date)
+    entry_price: float | None = None  # None = next trading day's open
     stop_loss: float | None = None
     target_price: float | None = None
-    holding_days: int = 10            # 最大持有交易日(event 模式)
+    holding_days: int = 10            # maximum holding trading days (event mode)
 
 
 @dataclass
@@ -71,7 +71,7 @@ PositionSizer = Callable[[float], int]  # price -> qty
 
 
 def fixed_cash_sizer(cash_per_trade: float, lot: int = 100) -> PositionSizer:
-    """每笔固定名义资金,买入 lot 的整数倍。"""
+    """Fixed notional per trade, bought in multiples of lot."""
 
     def _size(price: float) -> int:
         if price <= 0:
@@ -103,7 +103,7 @@ class Backtester:
         self.sizer = sizer or fixed_cash_sizer(cash_per_trade, lot)
 
     def run_single(self, signal: Signal, bars: list[PriceBar]) -> BTTrade | None:
-        """单信号回测:下一交易日开盘入场,逐日止损/止盈/到期平仓。"""
+        """Back-test one signal: enter at the next trading day's open, exit daily on stop / target / expiry."""
         if not bars:
             return None
         ei = first_index_after(bars, signal.signal_date)
@@ -123,19 +123,19 @@ class Backtester:
 
         exit_price = exit_date = exit_reason = None
         held = 0
-        # T+1 起逐日检查(入场日当天不可卖)
+        # Check daily from T+1 (no selling on the entry day)
         for j in range(ei + 1, len(bars)):
             held = j - ei
             bar = bars[j]
             if stop and stop > 0:
-                if bar.open <= stop:  # 跳空跌破
+                if bar.open <= stop:  # gap down through the stop
                     exit_price, exit_date, exit_reason = bar.open, bar.date, "stop_loss"
                     break
                 if bar.low <= stop:
                     exit_price, exit_date, exit_reason = stop, bar.date, "stop_loss"
                     break
             if target and target > 0:
-                if bar.open >= target:  # 跳空冲高
+                if bar.open >= target:  # gap up through the target
                     exit_price, exit_date, exit_reason = bar.open, bar.date, "target"
                     break
                 if bar.high >= target:
@@ -169,9 +169,9 @@ class Backtester:
     def run(
         self, signals: list[Signal], bars_by_symbol: dict
     ) -> BacktestResult:
-        """批量回测,聚合净值曲线与绩效指标。
+        """Back-test in bulk, aggregating the equity curve and performance metrics.
 
-        bars_by_symbol: 键可为 (symbol, market) 或 symbol。
+        bars_by_symbol: keys may be (symbol, market) or symbol.
         """
         trades: list[BTTrade] = []
         skipped = 0
@@ -207,10 +207,10 @@ class Backtester:
 
 
 def horizon_return(signal: Signal, bars: list[PriceBar], horizon_days: int) -> float | None:
-    """复刻 strategy_engine.evaluate_strategy_outcomes 口径,用于交叉验证。
+    """Matches strategy_engine.evaluate_strategy_outcomes, for cross-checking.
 
-    base = signal.entry_price;target_day = signal_date + horizon_days(自然日);
-    outcome = 最近 <= target_day 的收盘价;return% = (outcome-base)/base*100。
+    base = signal.entry_price; target_day = signal_date + horizon_days (calendar days);
+    outcome = the latest close <= target_day; return% = (outcome-base)/base*100.
     """
     snap = _parse_day(signal.signal_date)
     base = signal.entry_price

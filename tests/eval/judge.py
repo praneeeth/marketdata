@@ -1,12 +1,12 @@
-"""LLM-as-judge：语义维度评分框架（相关性/有据性/清晰度）。
+"""LLM-as-judge: a scoring framework for semantic dimensions (relevance/groundedness/clarity).
 
-设计约束：
-- judge 模型配置**只从环境变量读取**（EVAL_JUDGE_BASE_URL / EVAL_JUDGE_API_KEY /
-  EVAL_JUDGE_MODEL），绝不读用户数据库里的 AI 服务配置；
-- 固定模型 + 低温（temperature=0），保证评分可复现；
-- 单测里注入 mock 客户端，不发任何真实请求；真实运行由作者
-  `EVAL_JUDGE_*=... make eval EVAL_ARGS=--judge` 触发；
-- 评分结果建议抽样人工校准后再纳入门禁参考——规则断言（framework.py）永远优先。
+Design constraints:
+- the judge model config is **read only from environment variables** (EVAL_JUDGE_BASE_URL / EVAL_JUDGE_API_KEY /
+  EVAL_JUDGE_MODEL), never from the AI service config in the user's database;
+- fixed model + low temperature (temperature=0), so scores are reproducible;
+- unit tests inject a mock client and send no real requests; real runs are triggered by the author with
+  `EVAL_JUDGE_*=... make eval EVAL_ARGS=--judge`;
+- calibrate scores against a manual sample before using them as a gate; the rule assertions (framework.py) always come first.
 """
 
 from __future__ import annotations
@@ -15,29 +15,29 @@ import json
 import os
 from dataclasses import dataclass
 
-# 评分维度（1-5 分）
+# Scoring dimensions (1-5)
 JUDGE_DIMENSIONS = {
-    "relevance": "相关性：回答是否切中用户问题",
-    "groundedness": "有据性：结论是否仅基于工具返回的数据，未编造价格/指标等具体数值",
-    "clarity": "清晰度：表达是否简洁、结构清楚、结论明确",
+    "relevance": "Relevance: does the answer address the user's question",
+    "groundedness": "Groundedness: are conclusions based only on the tool data, with no invented prices/indicator values",
+    "clarity": "Clarity: is it concise, well structured and clear in its conclusion",
 }
 
-JUDGE_SYSTEM_PROMPT = """你是严格的 AI 投资助手回答评审员。
+JUDGE_SYSTEM_PROMPT = """You are a strict reviewer of an AI research assistant's answers.
 
-给你：用户问题、助手可用的工具返回数据、助手的最终回答。
-请按以下维度打 1-5 分（5 最好）：
-- relevance（相关性）：回答是否切中用户问题
-- groundedness（有据性）：结论是否仅基于工具返回的数据；出现工具数据里没有的具体价格、
-  指标数值即视为编造，最多 2 分；工具失败时如实说明应得高分
-- clarity（清晰度）：表达是否简洁、结构清楚、给出明确观点
+You get: the user's question, the tool data available to the assistant, and the assistant's final answer.
+Score each dimension from 1 to 5 (5 is best):
+- relevance: does the answer address the user's question
+- groundedness: are conclusions based only on the tool data; any specific price or indicator value not in the
+  tool data counts as invented, 2 at most; saying plainly that a tool failed deserves a high score
+- clarity: is it concise, well structured, with a clear view
 
-只输出 JSON，不要任何其他文字：
-{"relevance": 1-5, "groundedness": 1-5, "clarity": 1-5, "comment": "一句话点评"}"""
+Output only JSON, with no other text:
+{"relevance": 1-5, "groundedness": 1-5, "clarity": 1-5, "comment": "a one-sentence comment"}"""
 
 
 @dataclass
 class JudgeConfig:
-    """judge 模型配置（固定模型 + 低温）。"""
+    """Judge model config (fixed model + low temperature)."""
 
     base_url: str
     api_key: str
@@ -46,7 +46,7 @@ class JudgeConfig:
 
     @classmethod
     def from_env(cls) -> "JudgeConfig | None":
-        """从环境变量读取；不全则返回 None（judge 环节跳过）。"""
+        """Read from environment variables; None if incomplete (the judge step is skipped)."""
         base_url = os.environ.get("EVAL_JUDGE_BASE_URL", "").strip()
         api_key = os.environ.get("EVAL_JUDGE_API_KEY", "").strip()
         model = os.environ.get("EVAL_JUDGE_MODEL", "").strip()
@@ -68,7 +68,7 @@ class JudgeScore:
 
 
 class LLMJudge:
-    """调用固定 judge 模型对回答打分。client 可注入（测试用 mock）。"""
+    """Score answers with the fixed judge model. The client can be injected (a mock in tests)."""
 
     def __init__(self, config: JudgeConfig, client=None):
         self.config = config
@@ -84,12 +84,12 @@ class LLMJudge:
             )
 
     async def judge(self, question: str, tool_results: list[str], answer: str) -> JudgeScore:
-        """对一条 (问题, 工具数据, 回答) 打分。"""
-        tool_block = "\n\n".join(tool_results) if tool_results else "（本轮未调用工具）"
+        """Score one (question, tool data, answer)."""
+        tool_block = "\n\n".join(tool_results) if tool_results else "(no tools called this round)"
         user_content = (
-            f"## 用户问题\n{question}\n\n"
-            f"## 工具返回数据\n{tool_block}\n\n"
-            f"## 助手回答\n{answer}"
+            f"## User question\n{question}\n\n"
+            f"## Tool data\n{tool_block}\n\n"
+            f"## Assistant answer\n{answer}"
         )
         raw = await self.client.chat(
             JUDGE_SYSTEM_PROMPT, user_content, temperature=self.config.temperature
@@ -98,7 +98,7 @@ class LLMJudge:
 
     @staticmethod
     def parse_score(raw: str) -> JudgeScore:
-        """解析 judge 输出（容忍 ```json 代码围栏），非法输出抛 ValueError。"""
+        """Parse the judge output (tolerating a ```json fence); raises ValueError on malformed output."""
         text = (raw or "").strip()
         if text.startswith("```"):
             lines = text.splitlines()
@@ -107,15 +107,15 @@ class LLMJudge:
         try:
             obj = json.loads(text)
         except json.JSONDecodeError as e:
-            raise ValueError(f"judge 输出不是合法 JSON: {raw[:200]!r}") from e
+            raise ValueError(f"judge output is not valid JSON: {raw[:200]!r}") from e
         if not isinstance(obj, dict):
-            raise ValueError(f"judge 输出不是 JSON 对象: {raw[:200]!r}")
+            raise ValueError(f"judge output is not a JSON object: {raw[:200]!r}")
 
         def clamp(key: str) -> int:
             try:
                 return max(1, min(5, int(obj.get(key))))
             except (TypeError, ValueError) as e:
-                raise ValueError(f"judge 输出缺少/非法维度 {key}: {obj!r}") from e
+                raise ValueError(f"judge output is missing/invalid dimension {key}: {obj!r}") from e
 
         return JudgeScore(
             relevance=clamp("relevance"),

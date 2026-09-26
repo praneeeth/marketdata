@@ -1,7 +1,7 @@
-"""共用 pytest fixtures。
+"""Shared pytest fixtures.
 
-默认情况下所有通知发送函数被替换为 no-op，避免单测误发通知。
-传入 --notify 参数可恢复真实发送（用于集成测试）。
+By default every notification send function is replaced with a no-op so unit tests never send notifications.
+Pass --notify to restore real sending (for integration tests).
 """
 
 from __future__ import annotations
@@ -12,7 +12,7 @@ import pytest
 
 
 def pytest_itemcollected(item):
-    """用测试函数的中文 docstring 替换 pytest -v 输出中的节点名。"""
+    """Replace node names in pytest -v output with the test function's docstring."""
     doc = (item.function.__doc__ or "").strip().split("\n")[0]
     if doc:
         item._nodeid = f"{item.parent.nodeid}::{doc}"
@@ -23,13 +23,13 @@ def pytest_addoption(parser: pytest.Parser):
         "--notify",
         action="store_true",
         default=False,
-        help="启用真实通知发送（默认关闭）",
+        help="enable real notification sending (off by default)",
     )
 
 
 @pytest.fixture(autouse=True)
 def _suppress_notifications(request, monkeypatch):
-    """自动屏蔽通知发送，除非传入 --notify。"""
+    """Block notification sending automatically unless --notify is passed."""
     if request.config.getoption("--notify"):
         return
 
@@ -44,7 +44,7 @@ def _suppress_notifications(request, monkeypatch):
 
 @pytest.fixture(autouse=True)
 def _mock_stock_link_platform(monkeypatch):
-    """避免 stock_link 模块访问数据库读取平台设置。"""
+    """Stop the stock_link module reading platform settings from the database."""
     monkeypatch.setattr(
         "src.modules.administration.stock_link.get_platform",
         lambda: "nse",
@@ -76,13 +76,13 @@ def _clear_market_caches():
 
 @pytest.fixture(autouse=True, scope="session")
 def _ensure_db_schema():
-    """确保真实 DB 引擎已建表。
+    """Make sure the real DB engine has its tables.
 
-    少数用例直接用 SessionLocal 传给 async 接口(只读查询),CI 全新环境的
-    data/panwatch.db 无表会报 'no such table: stocks'。这里在会话开始时幂等建表
-    (本地已有表则无副作用),与各用例自建的内存库互不影响。
+    A few cases pass SessionLocal straight to async endpoints (read-only queries); in a fresh CI environment
+    data/panwatch.db has no tables and fails with 'no such table: stocks'. Tables are created idempotently at session start
+    (no side effect when they exist locally), independent of the in-memory databases the cases create themselves.
     """
-    import src.platform.persistence.models  # noqa: F401  注册所有 ORM 模型到 Base.metadata
+    import src.platform.persistence.models  # noqa: F401  registers every ORM model on Base.metadata
     from src.platform.persistence.database import Base, engine
 
     Base.metadata.create_all(engine)
@@ -90,15 +90,15 @@ def _ensure_db_schema():
 
 
 # ---------------------------------------------------------------------------
-# 共用工厂 fixtures
+# Shared factory fixtures
 # ---------------------------------------------------------------------------
 
 @pytest.fixture
 def mock_account() -> dict:
-    """模拟盘账户数据。"""
+    """Simulation account data."""
     return {
         "id": 1,
-        "name": "测试账户",
+        "name": "Test account",
         "initial_capital": 100_000.0,
         "current_capital": 100_000.0,
     }
@@ -106,14 +106,14 @@ def mock_account() -> dict:
 
 @pytest.fixture
 def mock_signal() -> dict:
-    """模拟策略信号。"""
+    """Mock strategy signal."""
     return {
         "strategy": "trend_follow",
         "symbol": "002837",
         "market": "CN",
         "action": "BUY",
         "confidence": 0.85,
-        "reason": "趋势向上突破",
+        "reason": "trend breaking out upwards",
     }
 
 

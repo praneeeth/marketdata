@@ -1,4 +1,4 @@
-"""TradingAgents 运行生命周期与采集阶段回归测试。"""
+"""Regression tests for the TradingAgents run lifecycle and the collection stage."""
 
 from __future__ import annotations
 
@@ -182,7 +182,7 @@ def test_data_collection_source_error_is_visible_in_progress_snapshot():
 
 
 def test_progress_exposes_active_llm_tool_operation():
-    """LLM/工具未结束时，快照要告诉前端具体卡在哪个操作。"""
+    """While an LLM/tool call hasn't finished, the snapshot tells the frontend which operation it's stuck on."""
     from src.modules.automation.tradingagents.observability import aggregate_progress
 
     result = aggregate_progress([
@@ -227,7 +227,7 @@ def test_progress_active_operation_includes_agent_when_callback_provides_it():
 
 
 def test_progress_keeps_other_parallel_tool_active_after_one_finishes():
-    """并行工具中一个完成时，另一个长请求仍要显示为当前活动操作。"""
+    """When one of several parallel tools finishes, the other long request still shows as the current operation."""
     from src.modules.automation.tradingagents.observability import aggregate_progress
 
     result = aggregate_progress([
@@ -249,7 +249,7 @@ def test_progress_keeps_other_parallel_tool_active_after_one_finishes():
 
 
 def test_progress_handler_uses_run_id_to_close_the_same_langgraph_node():
-    """LangChain 1.x 的 on_chain_end 不再稳定提供 name，必须按 run_id 关联。"""
+    """LangChain 1.x's on_chain_end no longer reliably provides name, so it must be linked by run_id."""
     from src.modules.automation.tradingagents.observability import PanWatchProgressHandler
 
     handler = PanWatchProgressHandler(trace_id="trace-1")
@@ -263,7 +263,7 @@ def test_progress_handler_uses_run_id_to_close_the_same_langgraph_node():
         run_id="node-1",
         metadata={"langgraph_node": "Market Analyst"},
     )
-    # 真实 LangChain 1.x 回调这里只有 run_id/parent_run_id，没有 name。
+    # Real LangChain 1.x callbacks only have run_id/parent_run_id here, no name.
     handler.on_chain_end({}, run_id="node-1", parent_run_id="root-1")
 
     assert [(stage, action) for stage, action, _ in emitted] == [
@@ -275,7 +275,7 @@ def test_progress_handler_uses_run_id_to_close_the_same_langgraph_node():
 
 
 def test_progress_handler_drops_empty_node_name_instead_of_data_collection():
-    """空名称不能命中 `n in stage`，否则所有未知结束事件都会变成数据采集完成。"""
+    """An empty name must not match `n in stage`, or every unknown end event would become 'data collection done'."""
     from src.modules.automation.tradingagents.observability import PanWatchProgressHandler
 
     handler = PanWatchProgressHandler(trace_id="trace-2")
@@ -288,7 +288,7 @@ def test_progress_handler_drops_empty_node_name_instead_of_data_collection():
 
 
 def test_progress_handler_exposes_agent_for_llm_and_tool_operations():
-    """活动操作必须能解释是哪个子 Agent 发起的，避免 UI 只显示一个泛化工具名。"""
+    """The active operation must say which sub-agent started it, so the UI shows more than a generic tool name."""
     from src.modules.automation.tradingagents.observability import PanWatchProgressHandler
 
     handler = PanWatchProgressHandler(trace_id="trace-3")

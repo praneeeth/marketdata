@@ -186,6 +186,8 @@ RULES: tuple[Rule, ...] = (
             r"|\bhold\s+karo\b|\bprofit\s+book\s+karo\b"
         ),
     ),
+    # Chinese directives are detection data: models can answer in Chinese even when
+    # prompted in English.
     Rule(
         "D13_chinese",
         Category.DIRECTIVE,
@@ -214,10 +216,22 @@ RULES: tuple[Rule, ...] = (
         "R02_rating_value",
         Category.RATING,
         _rx(
-            r"\b(?:rating|rated|stance|recommendation|verdict)\s*(?:of|is|:|-|to|as|at)?\s*(?:a\s+|an\s+)?"
+            r"\b(?:rating|rated|stance|recommendation|verdict|(?:final\s+)?(?:trade\s+)?decision"
+            r"|(?:final\s+)?transaction\s+proposal)\s*(?:of|is|:|-|to|as|at)?\s*(?:a\s+|an\s+)?"
             r"[\"']?(?:buy|sell|hold|accumulate|reduce|neutral|outperform|underperform|overweight"
             r"|underweight|add|market\s*perform|sector\s*perform|equal\s*weight)\b"
         ),
+    ),
+    Rule(
+        "R05_trailing_action_label",
+        Category.RATING,
+        _rx(r"[:\-—|]\s*(?:strong\s+)?(?:buy|sell|overweight|underweight|accumulate)\s*[.!]?\s*$"),
+    ),
+    Rule(
+        "R06_action_label",
+        Category.RATING,
+        # "Action: Sell" as a label; "price action" is descriptive and excluded.
+        _rx(r"(?<!price )\baction\s*[:\-]\s*(?:buy|sell|hold|add|reduce|exit|accumulate|avoid)\b"),
     ),
     Rule(
         "R03_rating_word",
@@ -364,6 +378,19 @@ RULES: tuple[Rule, ...] = (
         ),
     ),
     Rule("P03_lots_of", Category.POSITION_SIZE, _rx(r"\b\d+\s+lots?\s+(?:of|in)\b")),
+    Rule(
+        "P05_position_change",
+        Category.POSITION_SIZE,
+        _rx(
+            r"\b(?:cut|trim|reduce|increase|raise|lift|build|scale\s+(?:in|out|up|down))\s+"
+            r"(?:the\s+|your\s+|this\s+)?(?:position|positions|stake|holding|holdings|exposure)\s+"
+            r"(?:by|to)\s+\d+(?:\.\d+)?\s*(?:%|percent)"
+            r"|\b(?:build|enter|buy|accumulate|add)\s+(?:the\s+position\s+|it\s+)?in\s+"
+            r"(?:two|three|four|five|\d+)\s+(?:tranches|tranche|instalments|installments|parts|lots)\b"
+            r"|\b(?:first|second|third|each)\s+tranche\s+(?:of\s+)?\d+(?:\.\d+)?\s*(?:%|percent)"
+        ),
+        veto_before=_CORPORATE_ACTOR,
+    ),
     Rule(
         "P04_position_sizing",
         Category.POSITION_SIZE,

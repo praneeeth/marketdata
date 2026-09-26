@@ -1,1 +1,1 @@
-"""进程运行期的横切技术配置，不包含任何产品业务规则。"""
+"""Cross-cutting technical config for the running process; no product business rules."""

@@ -1,7 +1,7 @@
-"""运行中调度器的轻量注册表,供系统自检读取健康状态。
+"""Lightweight registry of running schedulers, read by the system self-check for health.
 
-各调度器 start() 时把自身的 APScheduler(有 .running / .get_jobs())register 进来;
-自检的 probe_scheduler 据此判断"调度器是否在跑"。CLI 等无调度的进程注册表为空 → 优雅跳过。
+Each scheduler registers its APScheduler (with .running / .get_jobs()) in start();
+the self-check's probe_scheduler uses it to tell whether schedulers are running. Processes without schedulers (such as the CLI) have an empty registry and are skipped gracefully.
 """
 
 from __future__ import annotations

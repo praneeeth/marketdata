@@ -1,20 +1,20 @@
 #!/usr/bin/env python3
-"""Agent 过程评测入口（make eval）。
+"""Agent process evaluation entry point (make eval).
 
-跑两组用例：
-1. structured_output 解析（纯规则，无需模型，永远执行）；
-2. chat 工具循环（需要真实模型）——配置**只从环境变量读取**：
+Runs two groups of cases:
+1. structured_output parsing (pure rules, no model needed, always runs);
+2. the chat tool loop (needs a real model); config is **read only from environment variables**:
    EVAL_AI_BASE_URL / EVAL_AI_API_KEY / EVAL_AI_MODEL
-   （不读用户数据库里的 AI 服务配置；未配置则跳过并提示）。
+   (never the AI service config in the user's database; skipped with a note when unset).
 
-可选 --judge：对 chat 用例的答案追加 LLM-as-judge 语义评分
-（需 EVAL_JUDGE_BASE_URL / EVAL_JUDGE_API_KEY / EVAL_JUDGE_MODEL）。
+Optional --judge: adds LLM-as-judge semantic scores to the chat case answers
+(needs EVAL_JUDGE_BASE_URL / EVAL_JUDGE_API_KEY / EVAL_JUDGE_MODEL).
 
-门禁用法：prompts/*.txt 或工具 schema 变更时跑本脚本；
-通过率低于阈值（EVAL_PASS_THRESHOLD，默认 0.9）时退出码非 0，阻断提交。
+As a gate: run this script when prompts/*.txt or a tool schema changes;
+a pass rate below the threshold (EVAL_PASS_THRESHOLD, default 0.9) exits non-zero and blocks the commit.
 
-示例：
-    make eval                                   # 只跑规则用例（未配模型时）
+Examples:
+    make eval                                   # rule cases only (without a model)
     EVAL_AI_BASE_URL=... EVAL_AI_API_KEY=... EVAL_AI_MODEL=... make eval
     ... make eval EVAL_ARGS="--judge --only quote-1"
 """
@@ -27,7 +27,7 @@ import os
 import sys
 from pathlib import Path
 
-# 支持 `python tests/eval/run_eval.py` 直跑
+# Supports running `python tests/eval/run_eval.py` directly
 REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
@@ -52,7 +52,7 @@ _LOCAL_EVAL_ENV_KEYS = {
 
 
 def load_local_eval_env() -> None:
-    """加载本地 .env.eval；终端/CI 已显式设置的值优先。"""
+    """Load the local .env.eval; values already set in the terminal/CI win."""
     env_file = REPO_ROOT / ".env.eval"
     if not env_file.is_file():
         return
@@ -72,7 +72,7 @@ def load_local_eval_env() -> None:
 
 
 def _eval_ai_config() -> tuple[str, str, str] | None:
-    """chat 用例的被测模型配置（仅环境变量，缺任一即跳过）。"""
+    """Model config for the chat cases (environment variables only; skipped if any is missing)."""
     base_url = os.environ.get("EVAL_AI_BASE_URL", "").strip()
     api_key = os.environ.get("EVAL_AI_API_KEY", "").strip()
     model = os.environ.get("EVAL_AI_MODEL", "").strip()
@@ -82,10 +82,10 @@ def _eval_ai_config() -> tuple[str, str, str] | None:
 
 
 def run_structured(only: str | None) -> tuple[int, int]:
-    """跑结构化解析用例，返回 (通过数, 总数)。"""
+    """Run the structured parsing cases; returns (passed, total)."""
     passed = 0
     cases = [c for c in STRUCTURED_CASES if not only or c.id == only]
-    print(f"\n=== structured_output 解析用例（{len(cases)} 条，纯规则）===")
+    print(f"\n=== structured_output parsing cases ({len(cases)}, pure rules) ===")
     for case in cases:
         failures = check_structured_case(case)
         if failures:
@@ -97,14 +97,14 @@ def run_structured(only: str | None) -> tuple[int, int]:
 
 
 async def run_chat(only: str | None, use_judge: bool) -> tuple[int, int]:
-    """跑 chat 工具循环用例，返回 (通过数, 总数)。未配模型时返回 (0, 0)。"""
+    """Run the chat tool-loop cases; returns (passed, total). Returns (0, 0) without a model."""
     cases = [c for c in CHAT_CASES if not only or c.id == only]
     config = _eval_ai_config()
     if config is None:
         print(
-            f"\n=== chat 工具循环用例（{len(cases)} 条）：跳过 ===\n"
-            "  需要环境变量 EVAL_AI_BASE_URL / EVAL_AI_API_KEY / EVAL_AI_MODEL\n"
-            "  （只从环境变量读取，不使用数据库里的 AI 服务配置）"
+            f"\n=== chat tool-loop cases ({len(cases)}): skipped ===\n"
+            "  Needs the environment variables EVAL_AI_BASE_URL / EVAL_AI_API_KEY / EVAL_AI_MODEL\n"
+            "  (read only from environment variables, never the AI service config in the database)"
         )
         return 0, 0
 
@@ -117,12 +117,12 @@ async def run_chat(only: str | None, use_judge: bool) -> tuple[int, int]:
     if use_judge:
         judge_config = JudgeConfig.from_env()
         if judge_config is None:
-            print("  [WARN] --judge 需要 EVAL_JUDGE_* 环境变量，本次跳过 judge 评分")
+            print("  [WARN] --judge needs the EVAL_JUDGE_* environment variables; skipping judge scores this time")
         else:
             judge = LLMJudge(judge_config)
 
     passed = 0
-    print(f"\n=== chat 工具循环用例（{len(cases)} 条，模型: {model}）===")
+    print(f"\n=== chat tool-loop cases ({len(cases)}, model: {model}) ===")
     for case in cases:
         result = await runner.run_case(case)
         failures = evaluate_case(case, result)
@@ -137,19 +137,19 @@ async def run_chat(only: str | None, use_judge: bool) -> tuple[int, int]:
                     case.question, list(case.tool_data.values()), result.answer
                 )
                 print(
-                    f"         judge: 相关性{score.relevance} 有据性{score.groundedness} "
-                    f"清晰度{score.clarity} 均分{score.mean:.1f} — {score.comment}"
+                    f"         judge: relevance {score.relevance} groundedness {score.groundedness} "
+                    f"clarity {score.clarity} mean {score.mean:.1f} — {score.comment}"
                 )
             except Exception as e:  # noqa: BLE001
-                print(f"         judge 评分失败: {e}")
+                print(f"         judge scoring failed: {e}")
     return passed, len(cases)
 
 
 def main() -> int:
     load_local_eval_env()
-    parser = argparse.ArgumentParser(description="Agent 过程评测")
-    parser.add_argument("--judge", action="store_true", help="对 chat 用例追加 LLM-as-judge 评分")
-    parser.add_argument("--only", default="", help="只跑指定 id 的用例")
+    parser = argparse.ArgumentParser(description="Agent process evaluation")
+    parser.add_argument("--judge", action="store_true", help="add LLM-as-judge scores to the chat cases")
+    parser.add_argument("--only", default="", help="run only the case with this id")
     args = parser.parse_args()
     only = args.only or None
 
@@ -159,16 +159,16 @@ def main() -> int:
     total = s_total + c_total
     passed = s_passed + c_passed
     if total == 0:
-        print("\n没有匹配的用例")
+        print("\nNo matching cases")
         return 1
 
     rate = passed / total
     threshold = float(os.environ.get("EVAL_PASS_THRESHOLD", "0.9"))
-    print(f"\n=== 汇总 ===\n  通过 {passed}/{total}（{rate:.0%}），阈值 {threshold:.0%}")
+    print(f"\n=== Summary ===\n  Passed {passed}/{total} ({rate:.0%}), threshold {threshold:.0%}")
     if rate < threshold:
-        print("  ✗ 低于阈值，评测不通过")
+        print("  ✗ Below the threshold; evaluation failed")
         return 1
-    print("  ✓ 评测通过")
+    print("  ✓ Evaluation passed")
     return 0
 
 

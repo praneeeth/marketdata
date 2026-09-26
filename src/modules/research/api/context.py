@@ -1,4 +1,4 @@
-"""上下文与后验评估 API。"""
+"""Context and outcome evaluation API."""
 
 from __future__ import annotations
 

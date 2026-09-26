@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 
 from src.platform.marketdata.collectors.market_http import fetch_source
 from src.platform.marketdata.models import MarketCode
@@ -30,7 +31,7 @@ def get_index_klines(index_code: str, market: MarketCode = MarketCode.IN, days: 
 
 @dataclass
 class KlineData:
-    """K线数据"""
+    """One daily K-line."""
 
     date: str
     open: float
@@ -42,9 +43,9 @@ class KlineData:
 
 @dataclass
 class TechnicalIndicators:
-    """技术指标"""
+    """Technical indicators."""
 
-    # 均线
+    # Moving averages
     ma5: float | None = None
     ma10: float | None = None
     ma20: float | None = None
@@ -53,8 +54,8 @@ class TechnicalIndicators:
     macd_dif: float | None = None
     macd_dea: float | None = None
     macd_hist: float | None = None
-    macd_cross: str | None = None  # 金叉/死叉
-    macd_cross_days: int | None = None  # 距离上次交叉天数
+    macd_cross: str | None = None  # golden cross / death cross
+    macd_cross_days: int | None = None  # days since the last cross
     # RSI
     rsi6: float | None = None
     rsi12: float | None = None
@@ -63,38 +64,38 @@ class TechnicalIndicators:
     kdj_k: float | None = None
     kdj_d: float | None = None
     kdj_j: float | None = None
-    kdj_cross: str | None = None  # 金叉/死叉
-    # 布林带
+    kdj_cross: str | None = None  # golden cross / death cross
+    # Bollinger bands
     boll_upper: float | None = None
     boll_mid: float | None = None
     boll_lower: float | None = None
-    boll_width: float | None = None  # 带宽百分比
-    # 量能
-    volume_ratio: float | None = None  # 量比（今日成交量/5日均量）
+    boll_width: float | None = None  # band width, %
+    # Volume
+    volume_ratio: float | None = None  # volume ratio (today's volume / 5-day average)
     volume_ma5: float | None = None
     volume_ma10: float | None = None
-    volume_trend: str | None = None  # 放量/缩量/平量
-    # 涨跌幅
+    volume_trend: str | None = None  # volume up / volume down / volume flat
+    # Change
     change_5d: float | None = None
     change_20d: float | None = None
-    # 振幅
-    amplitude: float | None = None  # 今日振幅
-    amplitude_avg5: float | None = None  # 5日平均振幅
-    # 波动率(ATR)
-    atr: float | None = None  # 平均真实波幅(绝对值)
-    atr_pct: float | None = None  # ATR / 最新收盘 * 100(相对波动率%)
-    # 支撑压力（多级别）
-    support_s: float | None = None  # 短期支撑（5日）
-    support_m: float | None = None  # 中期支撑（20日）
-    support_l: float | None = None  # 长期支撑（60日）
-    resistance_s: float | None = None  # 短期压力
-    resistance_m: float | None = None  # 中期压力
-    resistance_l: float | None = None  # 长期压力
-    # 兼容旧字段
+    # Range
+    amplitude: float | None = None  # today's range
+    amplitude_avg5: float | None = None  # 5-day average range
+    # Volatility (ATR)
+    atr: float | None = None  # average true range (absolute)
+    atr_pct: float | None = None  # ATR / last close * 100 (relative volatility %)
+    # Support and resistance (several horizons)
+    support_s: float | None = None  # short-term support (5 days)
+    support_m: float | None = None  # medium-term support (20 days)
+    support_l: float | None = None  # long-term support (60 days)
+    resistance_s: float | None = None  # short-term resistance
+    resistance_m: float | None = None  # medium-term resistance
+    resistance_l: float | None = None  # long-term resistance
+    # Legacy fields
     support: float | None = None
     resistance: float | None = None
-    # K线形态
-    kline_pattern: str | None = None  # 十字星/锤子线/吞没等
+    # Candlestick pattern
+    kline_pattern: str | None = None  # doji / hammer / engulfing, etc.
 
 
 def _calculate_ma(closes: list[float], period: int) -> float | None:
@@ -104,7 +105,7 @@ def _calculate_ma(closes: list[float], period: int) -> float | None:
 
 
 def _ema(data: list[float], period: int) -> list[float]:
-    """计算 EMA"""
+    """Exponential moving average."""
     if not data:
         return []
     result = [data[0]]
@@ -115,14 +116,14 @@ def _ema(data: list[float], period: int) -> list[float]:
 
 
 def _calculate_atr(klines: list[KlineData], period: int = 14) -> float | None:
-    """计算 ATR(平均真实波幅)。
+    """ATR (average true range).
 
-    TR = max(high-low, |high-prevClose|, |low-prevClose|)。
-    与本模块其它指标一致,取最近 period 个 TR 的简单均值(非 Wilder 递归平滑),
-    便于复现与手算校验。
+    TR = max(high-low, |high-prevClose|, |low-prevClose|).
+    Like the other indicators here, it is the simple mean of the last ``period`` TRs
+    (not Wilder smoothing), so it is easy to reproduce by hand.
 
-    需要至少 period+1 根 K 线(才能算出 period 个含前收的 TR);
-    数据不足或异常一律返回 None,不抛异常(fail-soft)。
+    Needs at least period+1 candles (for period TRs with a previous close); returns None
+    on insufficient or bad data instead of raising.
     """
     try:
         if not klines or len(klines) < period + 1:
@@ -147,7 +148,7 @@ def _calculate_atr(klines: list[KlineData], period: int = 14) -> float | None:
 def _calculate_macd(
     closes: list[float], fast: int = 12, slow: int = 26, signal: int = 9
 ) -> tuple[list[float], list[float], list[float]] | None:
-    """计算 MACD，返回完整序列用于判断交叉"""
+    """MACD; returns the full series so crosses can be detected."""
     if len(closes) < slow + signal:
         return None
 
@@ -160,7 +161,7 @@ def _calculate_macd(
 
 
 def _calculate_rsi(closes: list[float], period: int) -> float | None:
-    """计算 RSI"""
+    """Relative strength index."""
     if len(closes) < period + 1:
         return None
 
@@ -175,7 +176,7 @@ def _calculate_rsi(closes: list[float], period: int) -> float | None:
             gains.append(0)
             losses.append(abs(change))
 
-    # 使用最近 period 天计算
+    # Use the last ``period`` days
     avg_gain = sum(gains[-period:]) / period
     avg_loss = sum(losses[-period:]) / period
 
@@ -188,7 +189,7 @@ def _calculate_rsi(closes: list[float], period: int) -> float | None:
 def _calculate_kdj(
     klines: list[KlineData], n: int = 9, m1: int = 3, m2: int = 3
 ) -> tuple[list[float], list[float], list[float]] | None:
-    """计算 KDJ，返回完整序列"""
+    """KDJ; returns the full series."""
     if len(klines) < n:
         return None
 
@@ -226,7 +227,7 @@ def _calculate_kdj(
 def _calculate_boll(
     closes: list[float], period: int = 20, num_std: int = 2
 ) -> tuple[float, float, float, float] | None:
-    """计算布林带：上轨、中轨、下轨、带宽"""
+    """Bollinger bands: upper, middle, lower and width."""
     if len(closes) < period:
         return None
 
@@ -243,7 +244,7 @@ def _calculate_boll(
 
 
 def _detect_kline_pattern(klines: list[KlineData]) -> str | None:
-    """检测 K 线形态"""
+    """Detect the latest candlestick pattern."""
     if len(klines) < 2:
         return None
 
@@ -260,46 +261,46 @@ def _detect_kline_pattern(klines: list[KlineData]) -> str | None:
 
     body_ratio = body / total_range
 
-    # 十字星：实体很小
+    # Doji: very small body
     if body_ratio < 0.1:
         if upper_shadow > body * 2 and lower_shadow > body * 2:
-            return "十字星"
+            return "doji"
         elif upper_shadow > body * 3:
-            return "倒T字"
+            return "gravestone doji"
         elif lower_shadow > body * 3:
-            return "T字线"
+            return "dragonfly doji"
 
-    # 锤子线：下影线很长，实体在上方
+    # Hammer: long lower shadow, body near the top
     if lower_shadow > body * 2 and upper_shadow < body * 0.5:
         if curr.close > curr.open:
-            return "锤子线(阳)"
+            return "hammer (bullish body)"
         else:
-            return "锤子线(阴)"
+            return "hammer (bearish body)"
 
-    # 倒锤子：上影线很长
+    # Inverted hammer: long upper shadow
     if upper_shadow > body * 2 and lower_shadow < body * 0.5:
         if curr.close > curr.open:
-            return "倒锤子(阳)"
+            return "inverted hammer"
         else:
-            return "射击之星"
+            return "shooting star"
 
-    # 吞没形态
+    # Engulfing
     prev_body = abs(prev.close - prev.open)
     if body > prev_body * 1.5:
-        if prev.close < prev.open and curr.close > curr.open:  # 前阴后阳
+        if prev.close < prev.open and curr.close > curr.open:  # bearish then bullish
             if curr.close > prev.open and curr.open < prev.close:
-                return "看涨吞没"
-        elif prev.close > prev.open and curr.close < curr.open:  # 前阳后阴
+                return "bullish engulfing"
+        elif prev.close > prev.open and curr.close < curr.open:  # bullish then bearish
             if curr.open > prev.close and curr.close < prev.open:
-                return "看跌吞没"
+                return "bearish engulfing"
 
-    # 大阳线/大阴线
+    # Long bullish / bearish candle
     if body_ratio > 0.7:
         change_pct = (curr.close - curr.open) / curr.open * 100 if curr.open > 0 else 0
         if change_pct > 3:
-            return "大阳线"
+            return "long bullish candle"
         elif change_pct < -3:
-            return "大阴线"
+            return "long bearish candle"
 
     return None
 
@@ -307,17 +308,17 @@ def _detect_kline_pattern(klines: list[KlineData]) -> str | None:
 def _find_cross_days(
     series1: list[float], series2: list[float], cross_type: str
 ) -> int | None:
-    """找到最近一次交叉距今的天数"""
+    """Days since the most recent cross."""
     if len(series1) < 2 or len(series2) < 2:
         return None
 
     for i in range(len(series1) - 2, -1, -1):
-        if cross_type == "金叉":
-            # 金叉：series1 从下方穿越 series2
+        if cross_type == "golden cross":
+            # Golden cross: series1 crosses series2 from below
             if series1[i] <= series2[i] and series1[i + 1] > series2[i + 1]:
                 return len(series1) - 1 - i
         else:
-            # 死叉：series1 从上方穿越 series2
+            # Death cross: series1 crosses series2 from above
             if series1[i] >= series2[i] and series1[i + 1] < series2[i + 1]:
                 return len(series1) - 1 - i
 
@@ -341,7 +342,7 @@ class KlineCollector:
     def get_technical_indicators(
         self, symbol: str = "", klines: list[KlineData] | None = None
     ) -> TechnicalIndicators:
-        """计算技术指标(可传入已取的 klines 复用,避免重复联网)。"""
+        """Technical indicators (pass already-fetched klines to avoid another fetch)."""
         if klines is None:
             klines = self.get_klines(symbol, days=120)
 
@@ -351,7 +352,7 @@ class KlineCollector:
         closes = [k.close for k in klines]
         volumes = [k.volume for k in klines]
 
-        # 均线
+        # Moving averages
         ma5 = _calculate_ma(closes, 5)
         ma10 = _calculate_ma(closes, 10)
         ma20 = _calculate_ma(closes, 20)
@@ -366,13 +367,13 @@ class KlineCollector:
             macd_dif = dif_list[-1]
             macd_dea = dea_list[-1]
             macd_hist = hist_list[-1]
-            # 判断金叉/死叉
+            # Golden cross / death cross
             if macd_dif > macd_dea:
-                macd_cross = "金叉"
-                macd_cross_days = _find_cross_days(dif_list, dea_list, "金叉")
+                macd_cross = "golden cross"
+                macd_cross_days = _find_cross_days(dif_list, dea_list, "golden cross")
             else:
-                macd_cross = "死叉"
-                macd_cross_days = _find_cross_days(dif_list, dea_list, "死叉")
+                macd_cross = "death cross"
+                macd_cross_days = _find_cross_days(dif_list, dea_list, "death cross")
 
         # RSI
         rsi6 = _calculate_rsi(closes, 6)
@@ -389,17 +390,17 @@ class KlineCollector:
             kdj_d = d_list[-1]
             kdj_j = j_list[-1]
             if kdj_k > kdj_d:
-                kdj_cross = "金叉"
+                kdj_cross = "golden cross"
             else:
-                kdj_cross = "死叉"
+                kdj_cross = "death cross"
 
-        # 布林带
+        # Bollinger bands
         boll_upper, boll_mid, boll_lower, boll_width = None, None, None, None
         boll_result = _calculate_boll(closes)
         if boll_result:
             boll_upper, boll_mid, boll_lower, boll_width = boll_result
 
-        # 量能分析
+        # Volume
         volume_ma5 = _calculate_ma(volumes, 5) if volumes else None
         volume_ma10 = _calculate_ma(volumes, 10) if volumes else None
         volume_ratio = None
@@ -407,13 +408,13 @@ class KlineCollector:
         if volumes and volume_ma5 and volume_ma5 > 0:
             volume_ratio = volumes[-1] / volume_ma5
             if volume_ratio > 1.5:
-                volume_trend = "放量"
+                volume_trend = "volume up"
             elif volume_ratio < 0.7:
-                volume_trend = "缩量"
+                volume_trend = "volume down"
             else:
-                volume_trend = "平量"
+                volume_trend = "volume flat"
 
-        # 涨跌幅
+        # Change
         change_5d = None
         change_20d = None
         if len(closes) >= 6:
@@ -421,7 +422,7 @@ class KlineCollector:
         if len(closes) >= 21:
             change_20d = (closes[-1] - closes[-21]) / closes[-21] * 100
 
-        # 振幅
+        # Range
         amplitude = None
         amplitude_avg5 = None
         if klines:
@@ -436,13 +437,13 @@ class KlineCollector:
                 if amps:
                     amplitude_avg5 = sum(amps) / len(amps)
 
-        # ATR(波动率):个股自身波动基准,供自适应异动判定使用
+        # ATR (volatility): the stock's own baseline, used by the adaptive unusual-move check
         atr = _calculate_atr(klines, period=14)
         atr_pct = None
         if atr is not None and closes and closes[-1]:
             atr_pct = round(atr / closes[-1] * 100, 2)
 
-        # 多级支撑压力位
+        # Support and resistance levels
         support_s, support_m, support_l = None, None, None
         resistance_s, resistance_m, resistance_l = None, None, None
         if len(klines) >= 5:
@@ -455,11 +456,11 @@ class KlineCollector:
             support_l = min(k.low for k in klines[-60:])
             resistance_l = max(k.high for k in klines[-60:])
 
-        # 兼容旧字段
+        # Legacy fields
         support = support_m
         resistance = resistance_m
 
-        # K线形态
+        # Candlestick pattern
         kline_pattern = _detect_kline_pattern(klines)
 
         return TechnicalIndicators(
@@ -505,13 +506,13 @@ class KlineCollector:
         )
 
     def get_kline_summary(self, symbol: str) -> dict:
-        """获取 K 线摘要（用于 prompt 和前端展示）"""
+        """K-line summary for prompts and the UI."""
         klines = self.get_klines(symbol, days=120)
         if not klines:
-            return {"error": "无K线数据"}
+            return {"error": "No K-line data"}
         indicators = self.get_technical_indicators(klines=klines)
 
-        # 最近5日表现
+        # Last 5 days
         recent_5 = klines[-5:] if len(klines) >= 5 else klines
         up_days = sum(
             1
@@ -519,65 +520,65 @@ class KlineCollector:
             if i > 0 and k.close > recent_5[i - 1].close
         )
 
-        # 趋势判断
-        trend = "数据不足"
+        # Trend
+        trend = "insufficient data"
         if indicators.ma5 and indicators.ma10 and indicators.ma20:
             if indicators.ma5 > indicators.ma10 > indicators.ma20:
-                trend = "多头排列"
+                trend = "bullish alignment"
             elif indicators.ma5 < indicators.ma10 < indicators.ma20:
-                trend = "空头排列"
+                trend = "bearish alignment"
             else:
-                trend = "均线交织"
+                trend = "mixed MAs"
 
-        # MACD 状态（更详细）
-        macd_status = "无数据"
+        # MACD status
+        macd_status = "no data"
         if indicators.macd_cross:
             days_str = (
-                f"({indicators.macd_cross_days}日)"
+                f" ({indicators.macd_cross_days}d)"
                 if indicators.macd_cross_days
                 else ""
             )
             macd_status = f"{indicators.macd_cross}{days_str}"
 
-        # RSI 状态
+        # RSI status
         rsi_status = None
         if indicators.rsi6 is not None:
             if indicators.rsi6 > 80:
-                rsi_status = "超买"
+                rsi_status = "overbought"
             elif indicators.rsi6 > 70:
-                rsi_status = "偏强"
+                rsi_status = "strong"
             elif indicators.rsi6 < 20:
-                rsi_status = "超卖"
+                rsi_status = "oversold"
             elif indicators.rsi6 < 30:
-                rsi_status = "偏弱"
+                rsi_status = "weak"
             else:
-                rsi_status = "中性"
+                rsi_status = "neutral"
 
-        # KDJ 状态
+        # KDJ status
         kdj_status = None
         if indicators.kdj_k is not None and indicators.kdj_d is not None:
             if indicators.kdj_j is not None and indicators.kdj_j > 100:
-                kdj_status = f"{indicators.kdj_cross}/超买"
+                kdj_status = f"{indicators.kdj_cross}/overbought"
             elif indicators.kdj_j is not None and indicators.kdj_j < 0:
-                kdj_status = f"{indicators.kdj_cross}/超卖"
+                kdj_status = f"{indicators.kdj_cross}/oversold"
             else:
                 kdj_status = indicators.kdj_cross
 
-        # 布林带状态
+        # Bollinger status
         boll_status = None
         last_close = klines[-1].close if klines else None
         if last_close and indicators.boll_upper and indicators.boll_lower:
             if last_close > indicators.boll_upper:
-                boll_status = "突破上轨"
+                boll_status = "above upper band"
             elif last_close < indicators.boll_lower:
-                boll_status = "跌破下轨"
+                boll_status = "below lower band"
             elif indicators.boll_width:
                 if indicators.boll_width < 5:
-                    boll_status = "收口窄幅"
+                    boll_status = "bands narrowing"
                 elif indicators.boll_width > 15:
-                    boll_status = "开口放大"
+                    boll_status = "bands widening"
                 else:
-                    boll_status = "正常波动"
+                    boll_status = "normal range"
 
         last_date = klines[-1].date if klines else None
         now = datetime.now(timezone.utc).isoformat()
@@ -611,39 +612,39 @@ class KlineCollector:
             "kdj_d": indicators.kdj_d,
             "kdj_j": indicators.kdj_j,
             "kdj_status": kdj_status,
-            # 布林带
+            # Bollinger bands
             "boll_upper": indicators.boll_upper,
             "boll_mid": indicators.boll_mid,
             "boll_lower": indicators.boll_lower,
             "boll_width": indicators.boll_width,
             "boll_status": boll_status,
-            # 量能
+            # Volume
             "volume_ratio": indicators.volume_ratio,
             "volume_trend": indicators.volume_trend,
-            # 均线
+            # Moving averages
             "ma5": indicators.ma5,
             "ma10": indicators.ma10,
             "ma20": indicators.ma20,
             "ma60": indicators.ma60,
-            # 涨跌幅
+            # Change
             "change_5d": indicators.change_5d,
             "change_20d": indicators.change_20d,
-            # 振幅
+            # Range
             "amplitude": indicators.amplitude,
             "amplitude_avg5": indicators.amplitude_avg5,
-            # 波动率(ATR)
+            # Volatility (ATR)
             "atr": indicators.atr,
             "atr_pct": indicators.atr_pct,
-            # 多级支撑压力
+            # Support and resistance
             "support_s": indicators.support_s,
             "support_m": indicators.support_m,
             "support_l": indicators.support_l,
             "resistance_s": indicators.resistance_s,
             "resistance_m": indicators.resistance_m,
             "resistance_l": indicators.resistance_l,
-            # 兼容旧字段
+            # Legacy fields
             "support": indicators.support,
             "resistance": indicators.resistance,
-            # K线形态
+            # Candlestick pattern
             "kline_pattern": indicators.kline_pattern,
         }

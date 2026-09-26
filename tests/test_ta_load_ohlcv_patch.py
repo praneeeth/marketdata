@@ -1,7 +1,7 @@
-"""TA load_ohlcv 接管:A股/港股走 PanWatch K线,美股透传 yfinance。
+"""TA load_ohlcv takeover: Indian stocks use PanWatch K-lines; US stocks pass through to yfinance.
 
-新上游 get_verified_market_snapshot → load_ohlcv 直连 yfinance,A股(无 .SS)拉不到
-→ NoMarketDataError 整个分析失败。这里验证 PanWatch 接管能为 A股构建 OHLCV,且不误伤美股。
+The newer upstream get_verified_market_snapshot -> load_ohlcv goes straight to yfinance, which can't fetch symbols without
+an exchange suffix -> NoMarketDataError fails the whole analysis. This checks PanWatch's takeover builds OHLCV for them without affecting US stocks.
 """
 
 from __future__ import annotations
@@ -32,7 +32,7 @@ def _sample_klines(n: int = 40) -> list[KlineData]:
 
 
 def test_build_df_columns_and_date_filter(monkeypatch):
-    """构建的 DataFrame 含 Date/OHLCV 列,Date 为 datetime,且按 curr_date 截断。"""
+    """The built DataFrame has Date/OHLCV columns, Date as datetime, truncated at curr_date."""
     monkeypatch.setattr(KlineCollector, "get_klines", lambda self, symbol, days=60: _sample_klines(40))
     df = ta._build_panwatch_ohlcv_df("601238", "2026-04-20")
     assert list(df.columns) == ["Date", "Open", "High", "Low", "Close", "Volume"]
@@ -42,7 +42,7 @@ def test_build_df_columns_and_date_filter(monkeypatch):
 
 
 def test_build_df_reuses_injected_klines_before_fetching_again(monkeypatch):
-    """验证快照应复用采集阶段的 K 线，避免 analyst 再发一轮外部请求。"""
+    """The verification snapshot reuses the K-lines from the collection stage, so analysts don't make another round of external requests."""
     cached = _sample_klines(12)
 
     def unexpected_fetch(*args, **kwargs):
@@ -57,7 +57,7 @@ def test_build_df_reuses_injected_klines_before_fetching_again(monkeypatch):
 
 
 def test_build_df_reuses_empty_injected_klines_without_retrying(monkeypatch):
-    """采集阶段已确认无 K 线时，后续工具不应再次联网重试同一标的。"""
+    """When the collection stage already found no K-lines, later tools don't retry the same symbol over the network."""
     calls = []
 
     def unexpected_fetch(self, symbol, days=60):
@@ -73,7 +73,7 @@ def test_build_df_reuses_empty_injected_klines_without_retrying(monkeypatch):
 
 
 def test_build_df_does_not_reuse_klines_for_another_symbol(monkeypatch):
-    """模型误传其它代码时，不能把当前标的缓存冒充成对方行情。"""
+    """When the model passes another symbol by mistake, the current symbol's cache must not pose as that symbol's data."""
     cached = _sample_klines(12)
     fetched = _sample_klines(8)
     calls = []
@@ -92,7 +92,7 @@ def test_build_df_does_not_reuse_klines_for_another_symbol(monkeypatch):
 
 
 def test_cancelled_ta_context_does_not_fetch_another_symbol(monkeypatch):
-    """任务超时后，残留 worker 再调用行情工具时必须立即停止。"""
+    """After the task times out, a leftover worker calling the quote tool must stop at once."""
     calls = []
 
     def unexpected_fetch(self, symbol, days=60):
@@ -131,11 +131,11 @@ def test_load_ohlcv_routes_a_share_to_panwatch(monkeypatch):
     monkeypatch.setattr(ta, "_real_load_ohlcv", fake_real)
     df = ta._panwatch_load_ohlcv("601238", "2026-06-18")
     assert not df.empty
-    assert real_calls["n"] == 0, "A股不应回落到 yfinance"
+    assert real_calls["n"] == 0, "must not fall back to yfinance"
 
 
 def test_verified_snapshot_returns_unavailable_message_when_all_sources_fail(monkeypatch):
-    """行情源全失败时，验证快照应返回不可用提示而非向 LangGraph 抛异常。"""
+    """When every quote source fails, the verification snapshot returns an unavailable message instead of raising into LangGraph."""
     from tradingagents.dataflows.errors import NoMarketDataError
 
     def no_data(*args, **kwargs):
@@ -150,7 +150,7 @@ def test_verified_snapshot_returns_unavailable_message_when_all_sources_fail(mon
 
 
 def test_verified_snapshot_preserves_indicators_argument_when_degraded(monkeypatch):
-    """安全包装器必须保持上游的 indicators 参数，避免调用方因签名变化中断。"""
+    """The safe wrapper must keep upstream's indicators parameter so callers don't break on a signature change."""
     from tradingagents.dataflows.errors import NoMarketDataError
 
     seen = {}
@@ -170,7 +170,7 @@ def test_verified_snapshot_preserves_indicators_argument_when_degraded(monkeypat
 
 
 def test_install_load_ohlcv_patch_updates_yfinance_indicator_import(monkeypatch):
-    """技术指标工具持有的 load_ohlcv 引用也必须接入同一个 US fallback。"""
+    """The load_ohlcv reference held by the technical indicator tool must also use the same US fallback."""
     from tradingagents.dataflows import market_data_validator, stockstats_utils, y_finance
 
     def upstream_load_ohlcv(*args, **kwargs):
@@ -187,9 +187,9 @@ def test_install_load_ohlcv_patch_updates_yfinance_indicator_import(monkeypatch)
 
 
 def test_load_ohlcv_a_share_no_klines_raises_not_fallback(monkeypatch):
-    """A股取不到 K线时,直接抛 NoMarketDataError 报清晰错,**不回退 yfinance**。
+    """When K-lines can't be fetched, NoMarketDataError is raised with a clear message and there's **no fallback to yfinance**.
 
-    A股/港股在 Yahoo 无数据 + 限流,回退只会把"K线获取失败"变成误导的"Yahoo no rows"。
+    Yahoo has no data (and rate-limits) for these symbols, so a fallback would only turn "K-line fetch failed" into a misleading "Yahoo no rows".
     """
     import pytest
     from tradingagents.dataflows.errors import NoMarketDataError
@@ -204,11 +204,11 @@ def test_load_ohlcv_a_share_no_klines_raises_not_fallback(monkeypatch):
     monkeypatch.setattr(ta, "_real_load_ohlcv", fake_real)
     with pytest.raises(NoMarketDataError):
         ta._panwatch_load_ohlcv("601238", "2026-06-18")
-    assert real_calls["n"] == 0, "A股拉空不应回退 yfinance"
+    assert real_calls["n"] == 0, "an empty fetch must not fall back to yfinance"
 
 
 def test_route_to_vendor_keeps_numeric_requested_symbol(monkeypatch):
-    """数字股票代码也是合法 ticker，不能因全是数字而复用缓存标的。"""
+    """An all-digit stock code is also a valid ticker; being all digits mustn't make it reuse the cached symbol."""
     stock = type("Stock", (), {"symbol": "300624"})()
     monkeypatch.setattr(
         ta,
@@ -223,7 +223,7 @@ def test_route_to_vendor_keeps_numeric_requested_symbol(monkeypatch):
 
 
 def test_route_to_vendor_rejects_cached_snapshot_for_different_numeric_symbol(monkeypatch):
-    """缓存快照与请求标的不一致时，不能静默把万兴科技数据当成其它股票。"""
+    """When the cached snapshot and the requested symbol differ, one stock's data must never silently stand in for another."""
     stock = type("Stock", (), {"symbol": "601238"})()
     monkeypatch.setattr(
         ta,
@@ -239,7 +239,7 @@ def test_route_to_vendor_rejects_cached_snapshot_for_different_numeric_symbol(mo
 
 
 def test_route_to_vendor_marks_expected_upstream_outage_as_data_unavailable(monkeypatch):
-    """已知外部数据不可用应给 LLM 明确信号，而不是吞成空字符串。"""
+    """Known unavailable external data should give the LLM a clear signal instead of being swallowed as an empty string."""
     monkeypatch.setenv("APP_ENV", "development")
     monkeypatch.setenv("ALLOW_UNOFFICIAL_DATA", "true")
 
@@ -254,7 +254,7 @@ def test_route_to_vendor_marks_expected_upstream_outage_as_data_unavailable(monk
 
 
 def test_route_to_vendor_propagates_programming_errors(monkeypatch):
-    """调用契约/实现错误不能伪装成数据缺失，否则会掩盖升级回归。"""
+    """Contract/implementation errors mustn't pose as missing data, or they would hide upgrade regressions."""
     monkeypatch.setenv("APP_ENV", "development")
     monkeypatch.setenv("ALLOW_UNOFFICIAL_DATA", "true")
 
@@ -269,7 +269,7 @@ def test_route_to_vendor_propagates_programming_errors(monkeypatch):
 
 
 def test_route_to_vendor_does_not_misclassify_generic_not_set_error(monkeypatch):
-    """只有数据源配置缺失才可降级，内部状态未设置仍应暴露。"""
+    """Only missing data source config may degrade; an unset internal state must still surface."""
     monkeypatch.setenv("APP_ENV", "development")
     monkeypatch.setenv("ALLOW_UNOFFICIAL_DATA", "true")
 

@@ -1,4 +1,4 @@
-"""模拟盘通知系统单元测试。"""
+"""Unit tests for simulation notifications."""
 
 import unittest
 from types import SimpleNamespace
@@ -20,7 +20,7 @@ from src.modules.paper_trading.paper_trading_notifier import (
 
 
 def _make_signal(**kwargs):
-    """创建模拟 StrategySignalRun ORM 对象。"""
+    """Create a mock StrategySignalRun ORM object."""
     defaults = {
         "id": 1,
         "stock_symbol": "INFY",
@@ -42,7 +42,7 @@ def _make_signal(**kwargs):
 
 
 def _make_position(**kwargs):
-    """创建模拟 PaperTradingPosition ORM 对象。"""
+    """Create a mock PaperTradingPosition ORM object."""
     defaults = {
         "id": 1,
         "stock_symbol": "INFY",
@@ -67,7 +67,7 @@ def _make_position(**kwargs):
 
 
 def _make_trade(**kwargs):
-    """创建模拟 PaperTradingTrade ORM 对象。"""
+    """Create a mock PaperTradingTrade ORM object."""
     defaults = {
         "id": 1,
         "stock_symbol": "INFY",
@@ -102,13 +102,13 @@ def _make_account(**kwargs):
 
 
 # ---------------------------------------------------------------------------
-# 盘前计划去重测试
+# Pre-market plan dedupe tests
 # ---------------------------------------------------------------------------
 
 
 class TestPremarketDedup(unittest.TestCase):
     def test_dedup_same_stock_multiple_strategies(self):
-        """盘前去重 — 同股票4策略合并为1条"""
+        """Pre-market dedupe: 4 strategies on one stock merge into 1 row."""
         signals = [
             _make_signal(id=1, strategy_code="trend_follow", rank_score=100.0),
             _make_signal(id=2, strategy_code="macd_golden", rank_score=90.0),
@@ -123,10 +123,10 @@ class TestPremarketDedup(unittest.TestCase):
         self.assertEqual(sig.rank_score, 100.0)
 
     def test_dedup_different_stocks(self):
-        """盘前去重 — 不同股票各自保留"""
+        """Pre-market dedupe: different stocks each stay."""
         signals = [
             _make_signal(id=1, stock_symbol="INFY", rank_score=100.0),
-            _make_signal(id=2, stock_symbol="000001", stock_name="平安银行", rank_score=95.0),
+            _make_signal(id=2, stock_symbol="HDFCBANK", stock_name="HDFC Bank", rank_score=95.0),
             _make_signal(id=3, stock_symbol="INFY", strategy_code="macd_golden", rank_score=80.0),
         ]
         deduped = _dedup_signals(signals)
@@ -137,7 +137,7 @@ class TestPremarketDedup(unittest.TestCase):
         self.assertEqual(deduped[1][1], 1)
 
     def test_premarket_plan_format_with_dedup(self):
-        """盘前计划 — 去重后格式化含策略数和链接"""
+        """Pre-market plan: formatted after dedupe, with the strategy count and link."""
         signals = [
             _make_signal(id=1, strategy_code="trend_follow", rank_score=100.0),
             _make_signal(id=2, strategy_code="macd_golden", rank_score=90.0),
@@ -148,29 +148,29 @@ class TestPremarketDedup(unittest.TestCase):
         title, body = _format_premarket_plan(signals, account)
 
         self.assertIn("[SIMULATION] Pre-market plan", title)
-        # 股票只出现 1 次（symbol 出现在 "INFY.CN" 和 URL 中）
+        # The stock appears once (the symbol appears in "INFY.CN" and the URL)
         lines_with_stock = [l for l in body.split("\n") if "INFY" in l]
         self.assertEqual(len(lines_with_stock), 1)
-        # 显示中文策略名 + 数量
-        self.assertIn("趋势延续 等4个策略", body)
-        # 包含雪球链接
+        # Shows the strategy name + count
+        self.assertIn("Trend continuation and 3 more", body)
+        # Includes the stock link
         self.assertIn("nseindia.com", body)
 
     def test_premarket_plan_no_signals(self):
-        """盘前计划 — 空信号显示无候选"""
+        """Pre-market plan: no signals shows no candidates."""
         account = _make_account()
         title, body = _format_premarket_plan([], account)
-        self.assertIn("无候选", body)
+        self.assertIn("No candidates", body)
 
 
 # ---------------------------------------------------------------------------
-# 消息格式化测试（dict 输入）
+# Message formatting tests (dict input)
 # ---------------------------------------------------------------------------
 
 
 class TestMessageFormat(unittest.TestCase):
     def test_entry_message_format(self):
-        """建仓通知 — 格式含价格/策略/链接"""
+        """Entry notification: includes price/strategy/link."""
         pos_data = {
             "stock_symbol": "INFY",
             "stock_market": "IN",
@@ -192,11 +192,11 @@ class TestMessageFormat(unittest.TestCase):
         self.assertIn("104.00", body)
         self.assertIn("130.00", body)
         self.assertIn("100.0", body)  # rank_score
-        self.assertIn("趋势延续", body)  # 中文策略名
-        self.assertIn("nseindia.com", body)  # 股票链接
+        self.assertIn("Trend continuation", body)  # strategy name
+        self.assertIn("nseindia.com", body)  # stock link
 
     def test_entry_message_no_signal(self):
-        """建仓通知 — 无信号时不报错"""
+        """Entry notification: no error without a signal."""
         pos_data = {
             "stock_symbol": "INFY",
             "stock_market": "IN",
@@ -209,10 +209,10 @@ class TestMessageFormat(unittest.TestCase):
         }
         title, body = _format_entry_message(pos_data, None)
         self.assertIn("[SIMULATION] Simulated entry", title)
-        self.assertIn("趋势延续", body)
+        self.assertIn("Trend continuation", body)
 
     def test_exit_message_format(self):
-        """平仓通知 — 盈利格式含止盈/持仓天数"""
+        """Exit notification: a profit shows take profit / days held."""
         pos_data = {
             "stock_symbol": "INFY",
             "stock_market": "IN",
@@ -229,14 +229,14 @@ class TestMessageFormat(unittest.TestCase):
         title, body = _format_exit_message(pos_data, trade_data)
         self.assertIn("[SIMULATION] Simulated exit", title)
         self.assertIn("+700.00", title)
-        self.assertIn("止盈", body)
+        self.assertIn("Take profit", body)
         self.assertIn("113.00", body)
         self.assertIn("120.00", body)
-        self.assertIn("3天", body)
-        self.assertIn("nseindia.com", body)  # 股票链接
+        self.assertIn("3 days", body)
+        self.assertIn("nseindia.com", body)  # stock link
 
     def test_exit_message_loss(self):
-        """平仓通知 — 亏损时显示负号和止损"""
+        """Exit notification: a loss shows the minus sign and stop loss."""
         pos_data = {"stock_symbol": "INFY", "stock_market": "IN", "stock_name": "Infosys"}
         trade_data = {
             "entry_price": 113.0,
@@ -248,28 +248,28 @@ class TestMessageFormat(unittest.TestCase):
         }
         title, body = _format_exit_message(pos_data, trade_data)
         self.assertIn("-800.00", title)
-        self.assertIn("止损", body)
+        self.assertIn("Stop loss", body)
 
     def test_daily_summary_format(self):
-        """日终摘要 — 含总资产/平仓笔数/持仓数"""
+        """End-of-day summary: includes total assets / trades closed / open positions."""
         trades = [_make_trade()]
         positions = [_make_position()]
         account = _make_account()
         title, body = _format_daily_summary(trades, positions, account)
         self.assertIn("[SIMULATION] Daily summary", title)
-        self.assertIn("总资产", body)
-        self.assertIn("当日平仓 1 笔", body)
-        self.assertIn("持仓中 1 只", body)
+        self.assertIn("Total assets", body)
+        self.assertIn("Closed today: 1 trade,", body)
+        self.assertIn("Open positions: 1", body)
 
 
 # ---------------------------------------------------------------------------
-# 序列化函数测试
+# Serialisation tests
 # ---------------------------------------------------------------------------
 
 
 class TestSerialize(unittest.TestCase):
     def test_serialize_position(self):
-        """序列化 — 持仓对象转 dict"""
+        """Serialisation: a position object to a dict."""
         pos = _make_position()
         d = _serialize_position(pos)
         self.assertEqual(d["stock_symbol"], "INFY")
@@ -278,7 +278,7 @@ class TestSerialize(unittest.TestCase):
         self.assertIn("id", d)
 
     def test_serialize_trade(self):
-        """序列化 — 交易记录转 dict"""
+        """Serialisation: a trade record to a dict."""
         trade = _make_trade()
         d = _serialize_trade(trade)
         self.assertEqual(d["exit_price"], 120.0)
@@ -286,7 +286,7 @@ class TestSerialize(unittest.TestCase):
         self.assertEqual(d["exit_reason"], "target_price")
 
     def test_serialize_signal(self):
-        """序列化 — 策略信号转 dict"""
+        """Serialisation: a strategy signal to a dict."""
         sig = _make_signal()
         d = _serialize_signal(sig)
         self.assertEqual(d["stock_symbol"], "INFY")
@@ -296,14 +296,14 @@ class TestSerialize(unittest.TestCase):
 
 class TestHelpers(unittest.TestCase):
     def test_strategy_label_known(self):
-        """策略名映射 — 已知策略返回中文"""
-        self.assertEqual(_strategy_label("trend_follow"), "趋势延续")
-        self.assertEqual(_strategy_label("macd_golden"), "MACD金叉")
-        self.assertEqual(_strategy_label("momentum"), "动量策略")
-        self.assertEqual(_strategy_label("market_scan"), "市场扫描")
+        """Strategy name mapping: known strategies return their display name."""
+        self.assertEqual(_strategy_label("trend_follow"), "Trend continuation")
+        self.assertEqual(_strategy_label("macd_golden"), "MACD golden cross")
+        self.assertEqual(_strategy_label("momentum"), "Momentum")
+        self.assertEqual(_strategy_label("market_scan"), "Market scan")
 
     def test_strategy_label_unknown(self):
-        """策略名映射 — 未知策略原样返回"""
+        """Strategy name mapping: unknown strategies are returned as is."""
         self.assertEqual(_strategy_label("some_new_strategy"), "some_new_strategy")
 
 

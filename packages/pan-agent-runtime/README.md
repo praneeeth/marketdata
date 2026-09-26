@@ -1,94 +1,98 @@
 # PanAgent Runtime
 
-<code>pan-agent-runtime</code> 是一个轻量、与业务无关的 Python Agent 执行内核，负责把
-“模型输出工具调用”安全地变成“可观测、可暂停、可恢复的任务”。它不绑定 FastAPI、
-数据库、具体模型供应商或任何业务领域，适合被 PanWatch、BeeCount-Cloud 以及其他项目
-作为底层依赖复用。
+<code>pan-agent-runtime</code> is a lightweight, business-agnostic Python agent execution core. It
+safely turns "the model asked for a tool call" into "an observable task that can pause and
+resume". It isn't tied to FastAPI, a database, a model provider or any business domain, so
+PanWatch, BeeCount-Cloud and other projects can reuse it as a dependency.
 
-> 当前版本：<code>0.1.0</code><br>
-> Python：<code>>=3.10</code><br>
-> 运行时依赖：<code>pydantic>=2.0</code>
+> Current version: <code>0.1.0</code><br>
+> Python: <code>>=3.10</code><br>
+> Runtime dependencies: <code>pydantic>=2.0</code>
 
-## 为什么单独抽成 runtime
+## Why a separate runtime
 
-业务项目通常会同时遇到几类 Agent 需求：
+Business projects usually run into the same set of agent needs:
 
-- 模型需要调用宿主项目提供的查询、写入或外部服务工具；
-- 写入类工具必须先经过用户确认，确认后还能从中断处继续；
-- 前端需要实时看到 token、工具开始/结束和审批请求；
-- 任务必须有步骤数、工具调用数、单次超时和总超时上限；
-- 模型偶尔会重复提交相同工具调用，需要被及时熔断。
+- the model needs to call the host project's lookup, write or external service tools;
+- write tools must be confirmed by the user first, and continue from where they paused once confirmed;
+- the frontend needs to see tokens, tool start/finish and approval requests live;
+- a task needs limits on steps, tool calls, per-call timeouts and a total timeout;
+- a model occasionally resubmits the same tool call and must be stopped quickly.
 
-这些能力与“股票、记账、CRM”等业务无关，因此放在 runtime 中统一实现。业务项目
-只负责提供模型适配器、工具实现、权限策略、事件传输和持久化。
+None of this depends on the business (stocks, bookkeeping, CRM...), so the runtime implements
+it once. The business project only supplies the model adapter, tool implementations,
+permission policy, event transport and persistence.
 
-## 设计边界
+## Design boundaries
 
-### runtime 负责
+### The runtime handles
 
-- provider-neutral 的消息、工具、权限、审批、checkpoint 和事件契约；
-- 有界的串行 Agent loop；
-- 工具可见性和每次调用的权限决策；
-- Human-in-the-loop 暂停、部分审批和恢复；
-- 工具超时、重试、总超时、最大步骤数和重复调用检测；
-- 工具目录描述、确定性检索和策略过滤（Tool Research）；
-- 将执行过程转换为稳定的结构化事件。
+- provider-neutral contracts for messages, tools, permissions, approvals, checkpoints and events;
+- a bounded, sequential agent loop;
+- tool visibility and a permission decision for every call;
+- human-in-the-loop pauses, partial approval and resume;
+- tool timeouts, retries, a total timeout, a maximum step count and repeated-call detection;
+- tool catalogue descriptions, deterministic retrieval and policy filtering (Tool Research);
+- turning execution into stable, structured events.
 
-### 宿主项目负责
+### The host project handles
 
-- 调用 OpenAI-compatible、Anthropic 或本地模型的 <code>ModelPort</code> 适配器；
-- 具体业务工具和工具结果；
-- 用户、租户、角色和工具权限的持久化；
-- 审批卡片展示、审批决定保存和 checkpoint 持久化；
-- SSE、WebSocket、消息队列或其他 UI 传输；
-- 数据库事务、缓存、限流和业务审计。
+- the <code>ModelPort</code> adapter that calls OpenAI-compatible, Anthropic or local models;
+- the concrete business tools and their results;
+- persistence of users, tenants, roles and tool permissions;
+- showing approval cards, saving approval decisions and persisting checkpoints;
+- SSE, WebSocket, message queues or other UI transport;
+- database transactions, caching, rate limiting and business audit.
 
-runtime 不会直接连接数据库，也不会替宿主决定“谁可以执行什么”。默认策略只允许
-无须确认的读工具，写入和外部副作用必须由宿主显式注入策略。
+The runtime never connects to a database and never decides for the host "who can run what".
+The default policy only allows read tools that need no confirmation; writes and external side
+effects need a policy the host injects explicitly.
 
-### 持久化与部署边界
+### Persistence and deployment boundaries
 
-`pan-agent-runtime` 只产生 provider-neutral 的 `RunResult`、`AgentCheckpoint`
-和 `RuntimeEvent`，不内置 SQLite、Redis、队列、worker 进程或 SSE。宿主可以把这些
-对象映射到关系库、对象存储或其他任务系统，并自行决定是否需要跨进程执行。
+`pan-agent-runtime` only produces provider-neutral `RunResult`, `AgentCheckpoint` and
+`RuntimeEvent` objects; it has no built-in SQLite, Redis, queue, worker process or SSE. The
+host can map these objects onto a relational database, object storage or another task system,
+and decide whether cross-process execution is needed.
 
-当前 PanWatch 的宿主适配使用 SQLite 保存任务快照、事件和审批 checkpoint；浏览器刷新
-通过数据库事件 replay/tail 恢复展示，不代表 runtime 自己拥有持久化能力。
+PanWatch's host adapter stores task snapshots, events and approval checkpoints in SQLite; a
+browser refresh restores the view by replaying/tailing database events. That doesn't mean the
+runtime owns any persistence itself.
 
-## 安装
+## Installation
 
-### 在 monorepo 中本地安装
+### Local install in the monorepo
 
-从仓库根目录执行：
+From the repository root:
 
 ~~~bash
 python -m pip install -e packages/pan-agent-runtime
 ~~~
 
-PowerShell 也可以使用：
+In PowerShell:
 
 ~~~powershell
 python -m pip install -e .\packages\pan-agent-runtime
 ~~~
 
-### 作为独立包安装
+### As a standalone package
 
-发布到包索引后，其他项目只需要：
+Once published to a package index, other projects only need:
 
 ~~~bash
 python -m pip install pan-agent-runtime
 ~~~
 
-包的 import 名称是 <code>pan_agent</code>，不是带连字符的发行包名：
+The import name is <code>pan_agent</code>, not the hyphenated distribution name:
 
 ~~~python
 from pan_agent import AgentRuntime, ToolRegistry
 ~~~
 
-## 5 分钟示例：运行一个只读 Agent
+## Five-minute example: a read-only agent
 
-下面的示例使用一个假的模型适配器，展示 runtime 的最小接入面。真实项目只需要把
-<code>DemoModel</code> 换成自己的模型 SDK 适配器。
+This example uses a fake model adapter to show the runtime's minimal surface. A real project
+replaces <code>DemoModel</code> with an adapter for its model SDK.
 
 ~~~python
 import asyncio
@@ -110,10 +114,10 @@ from pan_agent import (
 
 
 class DemoModel:
-    """真实项目中，这里负责把 ModelPort 调用转换成模型供应商协议。"""
+    """In a real project, this translates ModelPort calls into the model provider's protocol."""
 
     async def run_turn(self, messages, tools, emit_token):
-        # 第一次返回工具调用；下一次直接返回最终答案。
+        # First return a tool call; next time return the final answer.
         if not any(message.role == "tool" for message in messages):
             return ModelTurn(
                 tool_calls=[
@@ -124,8 +128,8 @@ class DemoModel:
                     )
                 ]
             )
-        await emit_token("账户余额查询完成。")
-        return ModelTurn(content="账户余额查询完成。")
+        await emit_token("Balance looked up.")
+        return ModelTurn(content="Balance looked up.")
 
 
 class ConsoleSink:
@@ -135,7 +139,7 @@ class ConsoleSink:
 
 async def lookup_balance(_request, arguments):
     return ToolResult.success(
-        summary=f"账户 {arguments['account_id']} 余额为 100.00。",
+        summary=f"Account {arguments['account_id']} has a balance of 100.00.",
         data={"account_id": arguments["account_id"], "balance": 100.0},
         sources=[{"name": "demo ledger"}],
         observed_at=datetime.now(UTC),
@@ -147,8 +151,8 @@ async def main():
     tools.register(
         ToolSpec(
             name="lookup_balance",
-            title="查询余额",
-            description="查询一个账户的当前余额。",
+            title="Look up balance",
+            description="Look up an account's current balance.",
             risk=ToolRisk.READ,
             input_schema={
                 "type": "object",
@@ -161,7 +165,7 @@ async def main():
 
     request = RunRequest(
         run_id="demo-run-1",
-        messages=[ModelMessage(role="user", content="查询我的余额")],
+        messages=[ModelMessage(role="user", content="What's my balance?")],
     )
     runtime = AgentRuntime(DemoModel(), tools, policy=ReadOnlyToolPolicy())
     result = await runtime.run(request, ConsoleSink())
@@ -171,39 +175,42 @@ async def main():
 asyncio.run(main())
 ~~~
 
-宿主提供的工具执行器必须是异步 callable，签名为：
+A tool executor supplied by the host must be an async callable with this signature:
 
 ~~~python
 async def executor(request: RunRequest, arguments: dict) -> ToolResult:
     ...
 ~~~
 
-<code>ToolResult.summary</code> 是给模型和 UI 的短摘要，<code>data</code> 才是模型后续
-推理所需的结构化数据，<code>sources</code> 用于来源展示。建议摘要简洁、数据可序列化，
-并避免把整张数据库表或完整响应原样塞进上下文。
+<code>ToolResult.summary</code> is a short summary for the model and the UI; <code>data</code>
+holds the structured data the model needs for later reasoning; <code>sources</code> is for
+showing where it came from. Keep summaries short and data serialisable, and avoid dumping
+whole database tables or raw responses into the context.
 
-## 运行生命周期
+## Run lifecycle
 
-一次 <code>AgentRuntime.run()</code> 的流程如下：
+One <code>AgentRuntime.run()</code> goes like this:
 
 ~~~text
 RunRequest
    │
    ├─ RUN_CREATED
-   ├─ 模型回合（只看到 policy 允许暴露的工具）
-   ├─ 工具权限决策
+   ├─ model turn (sees only the tools the policy exposes)
+   ├─ tool permission decision
    │    ├─ ALLOW → TOOL_STARTED → TOOL_COMPLETED
-   │    ├─ DENY  → 返回 permission_denied 工具结果，模型可以继续
-   │    └─ ASK   → APPROVAL_REQUIRED + AgentCheckpoint，暂停
-   ├─ ANSWER_TOKEN（模型适配器持续 emit）
+   │    ├─ DENY  → a permission_denied tool result; the model can continue
+   │    └─ ASK   → APPROVAL_REQUIRED + AgentCheckpoint; pause
+   ├─ ANSWER_TOKEN (emitted continuously by the model adapter)
    └─ RUN_COMPLETED / RUN_FAILED
 ~~~
 
-## Optional Runtime Extensions
+## Optional runtime extensions
 
-runtime 只定义通用的 `RuntimeExtension` 协议，不内置 Tool Research、记忆、MCP 或具体
-可观测性实现。扩展可以在每个模型回合前读取请求、消息和当前已通过策略的工具集合，
-选择已注册工具、提供虚拟扩展工具，并在模型调用虚拟工具时处理它；它不能扩大权限边界。
+The runtime only defines a generic `RuntimeExtension` protocol; it has no built-in Tool
+Research, memory, MCP or specific observability implementation. Before each model turn, an
+extension can read the request, the messages and the tools that already passed the policy,
+choose registered tools, provide virtual extension tools, and handle calls to those virtual
+tools. It can't widen the permission boundary.
 
 ~~~python
 from pan_agent import AgentRuntime
@@ -216,25 +223,28 @@ runtime = AgentRuntime(
 )
 ~~~
 
-扩展通过 `emit_event()` 发送通用的 `extension_event`，事件数据包含扩展名、事件名和
-业务负载。扩展失败时 runtime 会发出 fallback 事件并继续使用默认工具集合。Tool Research
-是一个独立的可选包，PanWatch 通过显式组装接入；不安装它时，`pan-agent-runtime` 仍可
-单独运行。
+Extensions send generic `extension_event`s through `emit_event()`; the event data holds the
+extension name, event name and payload. When an extension fails, the runtime emits a
+fallback event and carries on with the default tool set. Tool Research is a separate optional
+package that PanWatch wires in explicitly; without it, `pan-agent-runtime` still runs on its
+own.
 
-模型返回多个工具调用时，runtime 会按原顺序处理。只要有一个调用需要审批，当前
-任务就返回 <code>WAITING_FOR_APPROVAL</code>，尚未批准的调用不会执行。
+When the model returns several tool calls, the runtime handles them in order. If any call
+needs approval, the task returns <code>WAITING_FOR_APPROVAL</code>, and calls not yet
+approved don't run.
 
-## Human-in-the-loop 审批
+## Human-in-the-loop approval
 
-### 默认只读策略
+### The default read-only policy
 
-<code>ReadOnlyToolPolicy</code> 只暴露 <code>risk=read</code> 且
-<code>confirmation_required=False</code> 的工具。它适合公开查询、离线分析或尚未接入
-宿主权限系统的安全默认场景。
+<code>ReadOnlyToolPolicy</code> only exposes tools with <code>risk=read</code> and
+<code>confirmation_required=False</code>. It suits public lookups, offline analysis, or a safe
+default before the host's permission system is connected.
 
-### 宿主自定义策略
+### Custom host policies
 
-需要写入或外部副作用时，宿主实现 <code>ToolPolicy</code>。策略至少包含两个方法：
+For writes or external side effects, the host implements <code>ToolPolicy</code>. A policy has
+at least two methods:
 
 ~~~python
 from pan_agent import ToolPermissionDecision, ToolRisk
@@ -242,23 +252,25 @@ from pan_agent import ToolPermissionDecision, ToolRisk
 
 class MyPolicy:
     def is_tool_visible(self, request, tool):
-        # 决定模型本轮能发现哪些工具
+        # Decide which tools the model can see this turn
         return True
 
     async def decide(self, request, tool, call):
-        # 决定本次调用是 allow、ask 还是 deny
+        # Decide whether this call is allow, ask or deny
         if tool.risk is ToolRisk.READ and not tool.confirmation_required:
             return ToolPermissionDecision.allow()
-        return ToolPermissionDecision.ask("该操作会修改数据，需要用户确认")
+        return ToolPermissionDecision.ask("This action changes data and needs the user's confirmation")
 ~~~
 
-生产环境的 <code>decide</code> 通常会读取当前用户、租户和工具权限设置，并对写入、
-删除、外部发送等操作返回 <code>ask</code>。不要让模型通过参数覆盖策略结果。
+In production, <code>decide</code> usually reads the current user, tenant and tool permission
+settings, and returns <code>ask</code> for writes, deletes, external sends and the like. Don't
+let the model override the policy result through arguments.
 
-### 暂停与恢复
+### Pause and resume
 
-审批请求返回后，宿主应持久化 <code>RunResult.checkpoint</code>，并把其中的
-<code>pending_approvals</code> 转成 UI 卡片。用户决定后调用 <code>resume</code>：
+When an approval request comes back, the host should persist <code>RunResult.checkpoint</code>
+and turn its <code>pending_approvals</code> into UI cards. Once the user decides, call
+<code>resume</code>:
 
 ~~~python
 from pan_agent import ApprovalDecision, RunStatus
@@ -266,41 +278,43 @@ from pan_agent import ApprovalDecision, RunStatus
 paused = await runtime.run(request, sink)
 if paused.status is RunStatus.WAITING_FOR_APPROVAL:
     checkpoint = paused.checkpoint
-    # 可以只决定一张卡，剩余卡片会保留在新的 checkpoint 中。
+    # You can decide just one card; the rest stay in the new checkpoint.
     decisions = {
         checkpoint.pending_approvals[0].call_id: ApprovalDecision.APPROVED,
     }
     resumed = await runtime.resume(request, checkpoint, decisions, sink)
 ~~~
 
-<code>resume</code> 不要求使用同一个 runtime 实例，因此只要宿主已经持久化了 checkpoint，
-就可以在新的 runtime 实例或进程中恢复。runtime 不负责启动任务、租约、重试或保证进程
-重启后自动续跑；这些属于宿主的 task runner/queue 层。建议将 checkpoint 以 JSON 形式
-持久化，并使用任务 ID、用户 ID 和版本号做并发校验，避免同一张审批卡被重复消费。
+<code>resume</code> doesn't need the same runtime instance, so as long as the host has
+persisted the checkpoint it can resume in a new runtime instance or process. The runtime
+doesn't start tasks, hold leases, retry, or guarantee automatic continuation after a process
+restart; those belong to the host's task runner/queue layer. Persist checkpoints as JSON, and
+use the task ID, user ID and a version number for concurrency checks so an approval card is
+never consumed twice.
 
-## 核心公开 API
+## Core public API
 
-### Context Engineering 扩展
+### Context engineering
 
-长会话的上下文控制已经作为 `pan_agent.context` 的通用能力提供，不依赖
-PanWatch 的数据库、FastAPI 或模型厂商。它包括：
+Context control for long conversations is provided generically in `pan_agent.context`,
+independent of PanWatch's database, FastAPI or model vendors. It includes:
 
-- `ContextBudget`：最大 token、soft/hard 阈值和最近消息窗口；
-- `ContextUsage`：系统指令、历史消息、最近消息、页面上下文和摘要的分段用量；
-- `ContextSummary`：目标、约束、决定、事实、当前状态、未完成事项和工具发现；
-- `ContextEngine`：自动压缩和 `force_compress=True` 主动压缩；
-- `ContextSummarizer`：宿主接入任意摘要模型的协议；
-- `ExtractiveContextSummarizer`：模型不可用时的确定性 fallback。
+- `ContextBudget`: maximum tokens, soft/hard thresholds and the recent-message window;
+- `ContextUsage`: usage broken down into system instructions, history, recent messages, page context and summary;
+- `ContextSummary`: goal, constraints, decisions, facts, current state, open items and tool findings;
+- `ContextEngine`: automatic compression and forced compression with `force_compress=True`;
+- `ContextSummarizer`: the protocol for plugging in any summary model;
+- `ExtractiveContextSummarizer`: a deterministic fallback when no model is available.
 
-Token 统计也遵循可插拔边界：runtime 只定义 `TokenMeter` 和
-`TokenMeasurement` 协议，默认使用无依赖的粗略估算，不绑定 tokenizer。需要更准确的
-预估或 provider 用量归一化时，宿主可以安装可选的
-`pan-agent-token-meter` 包；其中 `TiktokenTokenMeter` 通过可选依赖提供 tokenizer
-计数，`normalize_provider_usage()` 将不同 provider 的响应转换为统一的
-`ModelUsage`。provider 返回的真实用量通过 `model_usage` 事件上报，但不会反向改变
-已经完成的上下文压缩决策。
+Token counting has a pluggable boundary too: the runtime only defines the `TokenMeter` and
+`TokenMeasurement` protocols and by default uses a dependency-free rough estimate, with no
+tokenizer bound. For more accurate estimates or normalised provider usage, the host can
+install the optional `pan-agent-token-meter` package: `TiktokenTokenMeter` provides tokenizer
+counts through an optional dependency, and `normalize_provider_usage()` turns different
+providers' responses into a uniform `ModelUsage`. Actual provider usage is reported through
+`model_usage` events but never changes a context compression decision already made.
 
-示例：
+Example:
 
 ~~~python
 from pan_agent import ContextBudget, ContextEngine
@@ -318,48 +332,49 @@ result = await ContextEngine(my_summarizer).prepare(
 next_request_messages = result.messages
 ~~~
 
-runtime 只负责这组 provider-neutral contracts。摘要模型选择、snapshot
-持久化、HTTP/SSE 和 UI 都由宿主项目注入。更完整的边界说明见
-[`docs/architecture.md`](docs/architecture.md) 和
-[`docs/context.md`](docs/context.md)。
+The runtime only owns these provider-neutral contracts. The choice of summary model,
+snapshot persistence, HTTP/SSE and the UI are injected by the host project. See
+[`docs/architecture.md`](docs/architecture.md) and [`docs/context.md`](docs/context.md) for
+the full boundaries.
 
-| 类型 | 用途 |
+| Type | Purpose |
 | --- | --- |
-| <code>AgentRuntime</code> | 启动、暂停和恢复有界 Agent loop |
-| <code>ToolRegistry</code> | 注册工具、按策略暴露工具、执行工具 |
-| <code>ToolSpec</code> | 工具名称、描述、风险等级、暴露层级和 JSON Schema |
-| <code>ToolResult</code> | 工具成功/失败、摘要、结构化数据和来源 |
-| <code>ToolPolicy</code> | 宿主定义工具可见性和每次调用权限 |
-| <code>ReadOnlyToolPolicy</code> | 安全默认策略，只允许无确认读工具 |
-| <code>ModelPort</code> | 宿主接入模型供应商的异步协议 |
-| <code>EventSink</code> | 宿主接收结构化运行事件的异步协议 |
-| <code>RunRequest</code> | 一次运行的消息、上下文和限制 |
-| <code>RunLimits</code> | 步骤数、工具调用数、超时和重试上限 |
-| <code>AgentCheckpoint</code> | 审批暂停后可持久化的恢复状态 |
-| <code>RunResult</code> | 运行状态、答案、错误码和 checkpoint |
-| <code>RuntimeEvent</code> | SSE/WebSocket 等传输使用的统一事件 |
-| <code>RuntimeExtension</code> | 可选的模型回合扩展协议 |
-| <code>ToolExposureDecision</code> | 扩展选择已注册工具并提供虚拟工具 schema |
-| <code>TokenMeter</code> | 可选的上下文 token 预估协议 |
-| <code>ModelUsage</code> | provider 返回的单回合实际用量 |
+| <code>AgentRuntime</code> | Start, pause and resume the bounded agent loop |
+| <code>ToolRegistry</code> | Register tools, expose them by policy, run them |
+| <code>ToolSpec</code> | Tool name, description, risk level, exposure tier and JSON Schema |
+| <code>ToolResult</code> | Tool success/failure, summary, structured data and sources |
+| <code>ToolPolicy</code> | The host's tool visibility and per-call permissions |
+| <code>ReadOnlyToolPolicy</code> | The safe default policy; only read tools without confirmation |
+| <code>ModelPort</code> | The async protocol for plugging in a model provider |
+| <code>EventSink</code> | The async protocol for receiving structured run events |
+| <code>RunRequest</code> | One run's messages, context and limits |
+| <code>RunLimits</code> | Limits on steps, tool calls, timeouts and retries |
+| <code>AgentCheckpoint</code> | Persistable resume state after an approval pause |
+| <code>RunResult</code> | Run status, answer, error code and checkpoint |
+| <code>RuntimeEvent</code> | The uniform event used by SSE/WebSocket and other transports |
+| <code>RuntimeExtension</code> | The optional per-turn extension protocol |
+| <code>ToolExposureDecision</code> | An extension choosing registered tools and providing virtual tool schemas |
+| <code>TokenMeter</code> | The optional context token estimate protocol |
+| <code>ModelUsage</code> | A provider's actual usage for one turn |
 
-### 风险与权限
+### Risk and permissions
 
-<code>ToolRisk</code> 当前包含：
+<code>ToolRisk</code> currently has:
 
-- <code>read</code>：读取数据，不产生业务副作用；
-- <code>write</code>：创建或修改数据，通常应询问用户；
-- <code>external</code>：发送消息、调用外部系统等副作用；
-- <code>destructive</code>：删除或不可逆操作，建议在宿主策略中默认拒绝或强制二次确认。
+- <code>read</code>: reads data, with no business side effects;
+- <code>write</code>: creates or changes data; usually ask the user;
+- <code>external</code>: side effects such as sending messages or calling external systems;
+- <code>destructive</code>: deletes or irreversible actions; deny by default or require a second confirmation in the host policy.
 
-<code>PermissionMode</code> 的三个结果是 <code>allow</code>、<code>ask</code>、<code>deny</code>。
-风险等级只是工具声明，最终决定权始终在宿主的 <code>ToolPolicy</code>。
+<code>PermissionMode</code> has three results: <code>allow</code>, <code>ask</code> and
+<code>deny</code>. The risk level is only the tool's declaration; the final decision always
+belongs to the host's <code>ToolPolicy</code>.
 
-### 运行限制
+### Run limits
 
-<code>RunLimits</code> 默认值如下：
+<code>RunLimits</code> defaults:
 
-| 限制 | 默认值 | 可配置范围 |
+| Limit | Default | Allowed range |
 | --- | ---: | ---: |
 | <code>max_steps</code> | 6 | 1–32 |
 | <code>max_tool_calls</code> | 8 | 1–64 |
@@ -367,177 +382,190 @@ runtime 只负责这组 provider-neutral contracts。摘要模型选择、snapsh
 | <code>run_timeout_seconds</code> | 90 | 1–600 |
 | <code>step_retry_count</code> | 1 | 0–3 |
 
-runtime 还会检测连续重复的相同工具调用。达到阈值后返回
-<code>repeated_tool_call</code>，防止模型在错误参数上无限循环。
+The runtime also detects consecutive identical tool calls. At the threshold it returns
+<code>repeated_tool_call</code>, so a model can't loop forever on wrong arguments.
 
-## 事件与流式输出
+## Events and streaming
 
-<code>RuntimeEvent.type</code> 可能是：
+<code>RuntimeEvent.type</code> can be:
 
-| 事件 | 典型用途 |
+| Event | Typical use |
 | --- | --- |
-| <code>run_created</code> | 创建前端任务状态 |
-| <code>plan_created</code> | 预留给宿主展示计划 |
-| <code>step_updated</code> | 显示当前 Agent 步骤 |
-| <code>extension_event</code> | 持久化可选扩展的结构化事实 |
-| <code>tool_started</code> | 显示工具开始执行 |
-| <code>tool_completed</code> | 显示工具结果摘要和错误码 |
-| <code>model_usage</code> | 记录 provider 返回的单回合实际用量 |
-| <code>answer_token</code> | 增量渲染模型答案 |
-| <code>approval_required</code> | 创建一张或多张审批卡 |
-| <code>run_completed</code> | 任务成功结束 |
-| <code>run_failed</code> | 任务以错误或部分结果结束 |
+| <code>run_created</code> | Create the frontend task state |
+| <code>plan_created</code> | Reserved for hosts that show a plan |
+| <code>step_updated</code> | Show the current agent step |
+| <code>extension_event</code> | Persist structured facts from optional extensions |
+| <code>tool_started</code> | Show that a tool started |
+| <code>tool_completed</code> | Show the tool's result summary and error code |
+| <code>model_usage</code> | Record a provider's actual usage for one turn |
+| <code>answer_token</code> | Render the model's answer incrementally |
+| <code>approval_required</code> | Create one or more approval cards |
+| <code>run_completed</code> | The task finished successfully |
+| <code>run_failed</code> | The task ended with an error or a partial result |
 
-runtime 本身不实现 SSE。简单场景下，FastAPI 宿主可以在 <code>EventSink.publish()</code>
-中把事件写入 <code>asyncio.Queue</code>；需要刷新、断线重连或审计时，宿主应先将事件
-持久化到 Event Store，再由 SSE 层 replay/tail。这样浏览器传输格式、事件保存策略和
-runtime 的执行逻辑保持解耦。
+The runtime doesn't implement SSE itself. In simple cases a FastAPI host can write events to an
+<code>asyncio.Queue</code> in <code>EventSink.publish()</code>; when refreshes, reconnects or
+audit matter, the host should persist events to an event store first and let the SSE layer
+replay/tail them. That keeps the browser transport format, the event storage policy and the
+runtime's execution logic decoupled.
 
-## BeeCount-Cloud 接入建议
+## Integrating with BeeCount-Cloud
 
-推荐把接入分成五层：
+Split the integration into five layers:
 
-1. **模型适配层**：在 <code>ModelPort.run_turn()</code> 中把 BeeCount-Cloud 当前模型
-   客户端的流式 token、tool call 和 finish reason 转成 <code>ModelTurn</code>。
-2. **业务工具层**：在 Cloud 自己的模块中注册记账、账户、报表等工具；工具实现只
-   依赖 Cloud 的 service/repository，不进入 <code>pan-agent-runtime</code>。
-3. **权限策略层**：实现 <code>ToolPolicy</code>，根据用户、租户、角色和工具设置返回
-   <code>allow/ask/deny</code>。写入、删除和外部通知建议默认 <code>ask</code>。
-4. **持久化层**：把 <code>RunRequest</code>、<code>RuntimeEvent</code>、<code>RunResult</code>
-   和 <code>AgentCheckpoint</code> 映射到 Cloud 自己的任务/消息/审批表。
-5. **传输层**：将 <code>EventSink</code> 接到现有 SSE 或 WebSocket 通道；前端只消费
-   统一事件，不需要知道底层模型供应商。
+1. **Model adapter**: in <code>ModelPort.run_turn()</code>, turn the streamed tokens, tool calls
+   and finish reason of BeeCount-Cloud's current model client into a <code>ModelTurn</code>.
+2. **Business tools**: register bookkeeping, account, report and other tools in Cloud's own
+   modules; tool implementations depend only on Cloud's service/repository and never enter
+   <code>pan-agent-runtime</code>.
+3. **Permission policy**: implement <code>ToolPolicy</code> to return
+   <code>allow/ask/deny</code> from the user, tenant, role and tool settings. Default writes,
+   deletes and external notifications to <code>ask</code>.
+4. **Persistence**: map <code>RunRequest</code>, <code>RuntimeEvent</code>, <code>RunResult</code>
+   and <code>AgentCheckpoint</code> onto Cloud's own task/message/approval tables.
+5. **Transport**: connect the <code>EventSink</code> to the existing SSE or WebSocket channel;
+   the frontend only consumes uniform events and doesn't need to know the model provider.
 
-示意目录：
+Suggested layout:
 
 ~~~text
 beecount-cloud/
 ├─ src/modules/assistant/
 │  ├─ model_adapter.py       # ModelPort
-│  ├─ policy.py              # ToolPolicy + 用户权限
-│  ├─ tools.py               # Cloud 业务工具注册
-│  ├─ event_sink.py          # SSE/WebSocket 事件桥接
-│  └─ repository.py          # checkpoint / approval 持久化
-└─ pyproject.toml            # 依赖 pan-agent-runtime
+│  ├─ policy.py              # ToolPolicy + user permissions
+│  ├─ tools.py               # Cloud business tool registration
+│  ├─ event_sink.py          # SSE/WebSocket event bridge
+│  └─ repository.py          # checkpoint / approval persistence
+└─ pyproject.toml            # depends on pan-agent-runtime
 ~~~
 
-不要把 FastAPI <code>Request</code>、SQLAlchemy <code>Session</code>、Cloud 的模型类或
-业务异常传进 runtime 包的公共接口。这样未来换数据库、换模型供应商或把 runtime 发布
-到其他项目时，不会形成反向耦合。
+Don't pass a FastAPI <code>Request</code>, a SQLAlchemy <code>Session</code>, Cloud's model
+classes or business exceptions into the runtime package's public interface. That way,
+changing the database or model provider, or publishing the runtime to other projects later,
+doesn't create reverse coupling.
 
-## 工具变多后的上下文控制
+## Context control as tools grow
 
-runtime 会在每一轮调用 <code>ToolRegistry.model_tools(request, policy)</code>，因此
-默认行为是“把策略允许的工具定义交给模型”。工具数量少时最直观；工具增长后，工具
-定义和工具结果都会成为上下文成本。
+The runtime calls <code>ToolRegistry.model_tools(request, policy)</code> every turn, so by
+default it "hands the model every tool definition the policy allows". That's simplest with few
+tools; as tools grow, tool definitions and tool results both become context cost.
 
-当前 runtime 已支持工具渐进式暴露：`ToolSpec.exposure` 可设置为
-`direct`、`deferred` 或 `hidden`。默认只把 Direct 工具交给模型；Tool Research 等
-可选扩展可以通过虚拟工具发现并加载 Deferred 工具。无论工具如何被发现，执行时仍然
-必须经过宿主 `ToolPolicy` 和 Registry。
+The runtime already supports progressive tool exposure: `ToolSpec.exposure` can be `direct`,
+`deferred` or `hidden`. By default only direct tools go to the model; optional extensions such
+as Tool Research can discover and load deferred tools through a virtual tool. However a tool is
+discovered, execution still goes through the host `ToolPolicy` and the Registry.
 
-建议按以下顺序继续优化：
+Further optimisations, in order:
 
-### 1. 按能力域动态暴露工具
+### 1. Expose tools dynamically by capability domain
 
-在 <code>ToolPolicy.is_tool_visible()</code> 中根据当前请求上下文只暴露相关工具，例如：
+In <code>ToolPolicy.is_tool_visible()</code>, expose only the tools relevant to the current
+request context, for example:
 
-- 用户问余额，只暴露账户和持仓查询；
-- 用户问账单，只暴露交易和分类工具；
-- 用户要求修改数据，再临时暴露对应写工具。
+- the user asks about a balance: only account and holdings lookups;
+- the user asks about bills: only transaction and category tools;
+- the user wants to change data: expose the matching write tool for that request only.
 
-更大规模的系统可以只暴露一个“工具目录/搜索工具”，模型先检索能力，再由扩展把
-命中的 Deferred 工具加入后续回合。虚拟扩展工具通过 `ToolExposureDecision.additional_tools`
-提供 schema，并通过 `RuntimeExtension.handle_tool_call()` 处理，不需要把扩展执行器注册
-进业务 Tool Registry。
+Larger systems can expose just one "tool catalogue/search" tool: the model searches for a
+capability first, and the extension then adds the matching deferred tools to later turns.
+Virtual extension tools provide their schema through `ToolExposureDecision.additional_tools`
+and are handled by `RuntimeExtension.handle_tool_call()`, with no need to register the
+extension's executor in the business Tool Registry.
 
-### 2. 工具结果摘要化
+### 2. Summarise tool results
 
-<code>ToolResult.summary</code> 用于快速理解，<code>data</code> 只保留后续推理需要的字段。
-列表查询返回 ID、名称和关键状态，详情通过下一次工具调用按 ID 查询。不要每次把完整
-行情、完整日志或整张账单表复制到对话历史。
+<code>ToolResult.summary</code> is for quick understanding; <code>data</code> keeps only the
+fields later reasoning needs. List queries return IDs, names and key status, and details are
+fetched by ID in a later tool call. Don't copy full quote data, full logs or a whole billing
+table into the conversation history every time.
 
-### 3. 历史消息分层
+### 3. Tiered history
 
-- 保留最近几轮原始消息和工具结果；
-- 将更早的对话压缩成稳定摘要；
-- 将可复用事实放入宿主的结构化 context 或外部存储，按需检索；
-- 对单次任务设置最大输入长度。
+- keep the last few rounds of raw messages and tool results;
+- compress earlier conversation into a stable summary;
+- put reusable facts in the host's structured context or external storage and retrieve them on demand;
+- set a maximum input length per task.
 
-### 4. 缓存和重复调用保护
+### 4. Caching and repeated-call protection
 
-对相同用户、标的、时间窗口和参数的只读查询做短 TTL 缓存；在工具层或宿主层去重
-并发请求。runtime 自带连续相同 tool call 熔断，宿主还可以在 <code>ToolPolicy</code>
-或工具适配层增加更细的幂等键。
+Cache read-only lookups with the same user, symbol, time window and arguments for a short
+TTL; deduplicate concurrent requests in the tool layer or the host. The runtime already stops
+consecutive identical tool calls, and the host can add finer idempotency keys in
+<code>ToolPolicy</code> or the tool adapter layer.
 
-### 5. 预算和可观测性
+### 5. Budgets and observability
 
-根据任务类型设置 <code>RunLimits</code>，记录每步 token、工具耗时、重试次数和错误码。
-发现工具调用异常增长时，优先检查模型提示、工具描述和权限策略，而不是简单无限增大
-<code>max_steps</code>。
+Set <code>RunLimits</code> by task type, and record per-step tokens, tool durations, retries
+and error codes. When tool calls grow unusually, check the model prompt, tool descriptions and
+permission policy first rather than simply raising <code>max_steps</code>.
 
-## 错误处理与状态
+## Errors and states
 
-工具异常会在 runtime 边界被转换为稳定的 <code>ToolResult</code>/<code>RunResult</code>，
-不会把数据库堆栈直接发送给模型或浏览器。常见终态包括：
+Tool exceptions are converted into stable <code>ToolResult</code>/<code>RunResult</code> values
+at the runtime boundary, so database stack traces never reach the model or the browser. Common
+final states:
 
-| 状态 | 含义 |
+| State | Meaning |
 | --- | --- |
-| <code>completed</code> | 模型返回最终答案 |
-| <code>waiting_for_approval</code> | 有待处理的审批卡 |
-| <code>partial</code> | 达到步骤/工具/超时上限，或工具失败 |
-| <code>failed</code> | runtime 边界发生未预期错误 |
-| <code>cancelled</code> | 宿主取消了任务 |
-| <code>pending</code> / <code>running</code> | 宿主持久化或展示中的中间状态 |
+| <code>completed</code> | The model returned a final answer |
+| <code>waiting_for_approval</code> | There are approval cards pending |
+| <code>partial</code> | A step/tool/timeout limit was reached, or a tool failed |
+| <code>failed</code> | An unexpected error at the runtime boundary |
+| <code>cancelled</code> | The host cancelled the task |
+| <code>pending</code> / <code>running</code> | Intermediate states the host persists or shows |
 
-对外接口应优先使用 <code>RunResult.error_code</code> 做机器判断，再用事件中的
-<code>summary</code> 做人类可读提示。不要依赖异常文本作为前端协议。
+External interfaces should use <code>RunResult.error_code</code> for machine decisions and the
+event <code>summary</code> for human-readable messages. Don't rely on exception text as a
+frontend protocol.
 
-## 测试与本地开发
+## Testing and local development
 
-在仓库根目录运行 runtime 测试：
+Run the runtime tests from the repository root:
 
 ~~~bash
 python -m pytest packages/pan-agent-runtime/tests -q
 ~~~
 
-建议宿主项目至少覆盖：
+Host projects should at least cover:
 
-- 只读工具能被暴露并执行；
-- 写工具会生成审批而不是直接执行；
-- 拒绝审批不会产生业务写入；
-- 部分审批只执行已决定的调用；
-- checkpoint 序列化后可以在新进程恢复；
-- 工具超时、重试、重复调用和未知工具会得到预期错误码；
-- 事件顺序与前端流式协议一致。
+- read tools are exposed and run;
+- write tools produce an approval instead of running directly;
+- a rejected approval causes no business write;
+- partial approval runs only the calls that were decided;
+- a checkpoint can be serialised and resumed in a new process;
+- tool timeouts, retries, repeated calls and unknown tools give the expected error codes;
+- the event order matches the frontend streaming protocol.
 
-## 独立发布检查清单
+## Standalone release checklist
 
-发布新版本前建议确认：
+Before releasing a new version:
 
-1. 更新 <code>pyproject.toml</code> 中的 <code>version</code>；
-2. 检查 <code>README.md</code> 示例与公共 API 一致；
-3. 运行 <code>python -m pytest packages/pan-agent-runtime/tests -q</code>；
-4. 构建 wheel 和 source distribution：
+1. update <code>version</code> in <code>pyproject.toml</code>;
+2. check the <code>README.md</code> examples match the public API;
+3. run <code>python -m pytest packages/pan-agent-runtime/tests -q</code>;
+4. build the wheel and source distribution:
 
    ~~~bash
    python -m pip install build
    python -m build packages/pan-agent-runtime
    ~~~
 
-5. 在干净虚拟环境安装生成的 wheel 并运行最小示例；
-6. 通过 PyPI Trusted Publishing 或项目约定的发布流水线上传；
-7. 为破坏性 API 变更升级主版本或明确记录迁移说明。
+5. install the built wheel in a clean virtual environment and run the minimal example;
+6. upload through PyPI Trusted Publishing or the project's release pipeline;
+7. bump the major version for breaking API changes, or document the migration clearly.
 
-## 版本兼容原则
+## Versioning principles
 
-<code>0.x</code> 阶段允许在小版本中调整尚未稳定的细节，但应尽量保持以下边界稳定：
+During <code>0.x</code>, minor versions may adjust details that aren't stable yet, but these
+boundaries should stay stable:
 
-- <code>ToolSpec</code>、<code>ToolResult</code>、<code>RunRequest</code>、<code>RunResult</code>
-  的字段语义；
-- <code>ModelPort</code>、<code>ToolPolicy</code>、<code>EventSink</code> 的异步调用约定；
-- <code>RuntimeEvent</code> 的事件类型和核心字段；
-- checkpoint 能否被同版本宿主恢复。
+- the field semantics of <code>ToolSpec</code>, <code>ToolResult</code>, <code>RunRequest</code>
+  and <code>RunResult</code>;
+- the async calling conventions of <code>ModelPort</code>, <code>ToolPolicy</code> and
+  <code>EventSink</code>;
+- the event types and core fields of <code>RuntimeEvent</code>;
+- whether a checkpoint can be resumed by a host on the same version.
 
-业务项目不应依赖 <code>pan_agent.runtime</code> 内部私有函数或未导出的实现细节，只从
-<code>pan_agent</code> 顶层导入公共 API。
+Business projects shouldn't depend on private functions or unexported details of
+<code>pan_agent.runtime</code>; import the public API only from the top-level
+<code>pan_agent</code>.

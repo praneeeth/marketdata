@@ -41,11 +41,11 @@ def _setup():
     )
     Base.metadata.create_all(engine)
     session = sessionmaker(bind=engine)()
-    session.add(Stock(symbol="600519", name="贵州茅台", market="IN"))
+    session.add(Stock(symbol="INFY", name="Infosys", market="IN"))
     session.commit()
     repository = AssistantRepository(session)
     conversation = repository.create_conversation(
-        stock_symbol="600519", stock_market="IN", initial_context=None
+        stock_symbol="INFY", stock_market="IN", initial_context=None
     )
     task = repository.create_task(
         conversation_id=conversation.id, user_message_id=None, context={}
@@ -56,7 +56,7 @@ def _setup():
 def _request(task_id: int) -> RunRequest:
     return RunRequest(
         run_id=str(task_id),
-        messages=[ModelMessage(role="user", content="贵州茅台涨到 1800 元时提醒我")],
+        messages=[ModelMessage(role="user", content="Alert me when Infosys reaches 1800")],
     )
 
 
@@ -67,7 +67,7 @@ def _proposed_price_alert(call_id: str) -> ModelTurn:
                 id=call_id,
                 name="create_price_alert",
                 arguments={
-                    "symbol": "600519",
+                    "symbol": "INFY",
                     "market": "IN",
                     "direction": "above",
                     "target_price": 1800,
@@ -98,7 +98,7 @@ def test_price_alert_is_written_only_after_the_durable_approval_is_accepted():
 
     resumed = asyncio.run(
         AgentRuntime(
-            _FixedModel([ModelTurn(content="价格提醒已创建。")]),
+            _FixedModel([ModelTurn(content="Price alert created.")]),
             build_panwatch_tool_registry(session),
             policy=service.build_tool_policy(),
         ).resume(request, outcome.checkpoint, outcome.decisions, _CollectingSink())
@@ -127,7 +127,7 @@ def test_rejected_price_alert_never_writes_a_rule():
     )
     resumed = asyncio.run(
         AgentRuntime(
-            _FixedModel([ModelTurn(content="已取消创建价格提醒。")]),
+            _FixedModel([ModelTurn(content="Price alert creation cancelled.")]),
             build_panwatch_tool_registry(session),
             policy=service.build_tool_policy(),
         ).resume(request, outcome.checkpoint, outcome.decisions, _CollectingSink())
@@ -141,7 +141,7 @@ def test_rejected_price_alert_never_writes_a_rule():
 
 def test_multiple_price_alert_approvals_execute_one_card_at_a_time():
     engine, session, service, task = _setup()
-    session.add(Stock(symbol="601238", name="广汽集团", market="IN"))
+    session.add(Stock(symbol="TATAMOTORS", name="Tata Motors", market="IN"))
     session.commit()
     request = _request(task.id)
     paused = asyncio.run(
@@ -154,7 +154,7 @@ def test_multiple_price_alert_approvals_execute_one_card_at_a_time():
                                 id="price-alert-1",
                                 name="create_price_alert",
                                 arguments={
-                                    "symbol": "600519",
+                                    "symbol": "INFY",
                                     "market": "IN",
                                     "direction": "above",
                                     "target_price": 1800,
@@ -164,7 +164,7 @@ def test_multiple_price_alert_approvals_execute_one_card_at_a_time():
                                 id="price-alert-2",
                                 name="create_price_alert",
                                 arguments={
-                                    "symbol": "601238",
+                                    "symbol": "TATAMOTORS",
                                     "market": "IN",
                                     "direction": "below",
                                     "target_price": 10,
@@ -203,7 +203,7 @@ def test_multiple_price_alert_approvals_execute_one_card_at_a_time():
     )
     completed = asyncio.run(
         AgentRuntime(
-            _FixedModel([ModelTurn(content="两条提醒已创建")]),
+            _FixedModel([ModelTurn(content="Both alerts created")]),
             build_panwatch_tool_registry(session),
             policy=service.build_tool_policy(),
         ).resume(request, second.checkpoint, second.decisions, _CollectingSink())

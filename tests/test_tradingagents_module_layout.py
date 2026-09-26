@@ -1,4 +1,4 @@
-"""TradingAgents 适配目录的模块边界契约。"""
+"""Module boundary contract for the TradingAgents adapter directory."""
 
 from __future__ import annotations
 

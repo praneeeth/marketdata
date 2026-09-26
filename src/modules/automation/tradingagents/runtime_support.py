@@ -1,10 +1,10 @@
-"""TradingAgents 运行时适配：LLM 配置、密钥注入和 LangChain 兼容补丁。
+"""TradingAgents runtime adapter: LLM config, key injection and LangChain compatibility patches.
 
-桥接 PanWatch AIClient 配置 → TradingAgents LLM config。
+Bridges the app's AIClient config to the TradingAgents LLM config.
 
-TradingAgents 通过 langchain-openai / langchain-anthropic 等驱动 LLM,
-读取 config 字典 + 环境变量(`OPENAI_API_KEY`/`DEEPSEEK_API_KEY` 等)。
-本模块把 PanWatch 的 AIClient 配置桥接过去。
+TradingAgents drives LLMs through langchain-openai / langchain-anthropic and similar,
+reading a config dict plus environment variables (`OPENAI_API_KEY`/`DEEPSEEK_API_KEY`, etc.).
+This module bridges the app's AIClient config across.
 """
 
 from __future__ import annotations
@@ -19,7 +19,7 @@ from src.platform.ai.ai_client import AIClient
 
 logger = logging.getLogger(__name__)
 
-# 这是 Agent 入口允许依赖的稳定运行时接口；兼容补丁实现留在本文件下半部。
+# The stable runtime interface the agent entry point may depend on; the compatibility patches live in the second half of this file.
 __all__ = [
     "VALID_ANALYSTS",
     "apply_compat_patches",
@@ -28,7 +28,7 @@ __all__ = [
 ]
 
 
-# TradingAgents selected_analysts 字段的合法值(见上游 graph/trading_graph.py)
+# Valid values for TradingAgents' selected_analysts field (see upstream graph/trading_graph.py)
 VALID_ANALYSTS = {"market", "social", "news", "fundamentals"}
 
 
@@ -48,39 +48,39 @@ def build_ta_llm_config(
     llm_max_retries: int = 0,
     llm_max_tokens: int = 4096,
 ) -> dict[str, Any]:
-    """生成 TradingAgents 期望的 config dict。
+    """Build the config dict TradingAgents expects.
 
-    继承 tradingagents.default_config.DEFAULT_CONFIG (含 data_cache_dir / project_dir /
-    memory_log_path 等必需字段),再覆盖 PanWatch 配置:
-    - llm_provider: 统一走 openrouter 兼容协议(走 chat completions,避开 OpenAI Responses API)
-    - backend_url: PanWatch AI 服务的 base_url
-    - deep_think_llm: 推理/辩论/风控/PM 用的"强模型"。默认走 ai_client.model;
-      可由 deep_model 参数覆盖,允许辩论用 claude-sonnet / o3 这种贵但准的模型
-    - quick_think_llm: 分析师工具调用用的"快模型"。默认 deep_model;
-      可由 quick_model 参数覆盖,允许分析师用 haiku / gpt-4o-mini 等便宜模型
-    - max_debate_rounds: 辩论轮次
+    Starts from tradingagents.default_config.DEFAULT_CONFIG (which has the required data_cache_dir / project_dir /
+    memory_log_path fields), then overrides with the app's config:
+    - llm_provider: always the openrouter-compatible protocol (chat completions, avoiding the OpenAI Responses API)
+    - backend_url: base_url of the app's AI service
+    - deep_think_llm: the "strong model" for reasoning/debate/risk/PM. Defaults to ai_client.model;
+      deep_model can override it, e.g. an expensive but accurate model such as claude-sonnet / o3 for debate
+    - quick_think_llm: the "fast model" for analyst tool calls. Defaults to deep_model;
+      quick_model can override it, e.g. a cheap model such as haiku / gpt-4o-mini for analysts
+    - max_debate_rounds: number of debate rounds
     - selected_analysts: ["market", "social", "news", "fundamentals"]
     - output_language: "Chinese" / "English"
 
-    注意:TA 上游 deep + quick 共用 backend_url,所以两个模型必须在**同一个 endpoint** 后面。
-    要混 Claude + GPT 推荐 LiteLLM proxy 把多 provider 聚合到一个 endpoint。
+    Note: upstream TA uses one backend_url for deep + quick, so both models must sit behind **the same endpoint**.
+    To mix Claude + GPT, use a LiteLLM proxy that aggregates providers behind one endpoint.
     """
     analysts = list(selected_analysts or VALID_ANALYSTS)
     invalid = [a for a in analysts if a not in VALID_ANALYSTS]
     if invalid:
         raise ValueError(
-            f"非法 analyst 名: {invalid}; 合法值: {sorted(VALID_ANALYSTS)}"
+            f"Invalid analyst names: {invalid}; valid values: {sorted(VALID_ANALYSTS)}"
         )
 
-    # 继承上游默认 config(含 data_cache_dir / project_dir / memory_log_path 等),
-    # 否则 TradingAgentsGraph.__init__ 用 os.makedirs(config["data_cache_dir"]) 会 KeyError。
+    # Start from the upstream default config (data_cache_dir / project_dir / memory_log_path, etc.),
+    # otherwise TradingAgentsGraph.__init__ raises KeyError on os.makedirs(config["data_cache_dir"]).
     try:
         from tradingagents.default_config import DEFAULT_CONFIG as _UPSTREAM_DEFAULT
         config = dict(_UPSTREAM_DEFAULT)
     except ImportError:
         config = {}
 
-    # 上游 config 含嵌套 vendor 配置；先复制，避免单次运行污染 DEFAULT_CONFIG。
+    # The upstream config has nested vendor settings; copy it so one run can't pollute DEFAULT_CONFIG.
     config["data_vendors"] = dict(config.get("data_vendors") or {})
     config["tool_vendors"] = dict(config.get("tool_vendors") or {})
 
@@ -97,26 +97,26 @@ def build_ta_llm_config(
             "memory_log_path": str(memory_dir / "trading_memory.md"),
         })
 
-    # SEC EDGAR 的三张财务报表具备 filing-date 语义，只在美股且用户显式启用时
-    # 作为首选；非 SEC 标的或暂时不可用时回退 yfinance。
+    # SEC EDGAR's three financial statements carry filing-date semantics; they are the first choice only for
+    # US stocks when the user enables them explicitly, falling back to yfinance otherwise.
     statement_vendor = "sec_edgar,yfinance" if enable_sec_edgar and market.upper() == "US" else "yfinance"
-    # set_config() 对嵌套 dict 做 merge。即使本次不启用 EDGAR，也必须显式写回
-    # yfinance，避免前一次美股运行留下的 tool_vendors 泄漏到 A/HK 分析。
+    # set_config() merges nested dicts. Even when EDGAR is off, yfinance must be written back explicitly
+    # so tool_vendors left by an earlier US run can't leak into other analyses.
     config["tool_vendors"].update({
         "get_balance_sheet": statement_vendor,
         "get_cashflow": statement_vendor,
         "get_income_statement": statement_vendor,
     })
 
-    # PanWatch 覆盖。
-    # ⚠️ llm_provider 故意不用 "openai":TA 检测到 openai 会强制开 use_responses_api=True
-    # (OpenAI Responses API,/v1/responses 端点),硅基流动/智谱/Ollama 等第三方 OpenAI 兼容
-    # 服务不支持这个端点,会 404。
-    # 用 "openrouter" 走标准 chat completions (/v1/chat/completions),同时 backend_url
-    # 覆盖默认 openrouter 端点为 PanWatch 配置的真实 base_url。
-    # 双模型解析:
-    # - deep_model 未指定 → 用 ai_client.model
-    # - quick_model 未指定 → 用 deep_model(单模型场景退化)
+    # App overrides.
+    # ⚠️ llm_provider deliberately isn't "openai": when TA sees openai it forces use_responses_api=True
+    # (the OpenAI Responses API, /v1/responses), which third-party OpenAI-compatible services such as
+    # SiliconFlow, Zhipu or Ollama don't support, so they return 404.
+    # "openrouter" uses standard chat completions (/v1/chat/completions), and backend_url
+    # replaces the default openrouter endpoint with the app's configured base_url.
+    # Two-model resolution:
+    # - no deep_model -> ai_client.model
+    # - no quick_model -> deep_model (single-model case)
     deep_llm = (deep_model or ai_client.model or "").strip() or ai_client.model
     quick_llm = (quick_model or deep_llm or "").strip() or deep_llm
 
@@ -130,10 +130,10 @@ def build_ta_llm_config(
         "selected_analysts": analysts,
         "output_language": output_language,
         "online_tools": True,
-        "checkpoint_enabled": False,  # 避免 sqlite checkpoint 文件污染
+        "checkpoint_enabled": False,  # avoid stray sqlite checkpoint files
         "holding_period_days": max(1, int(holding_period_days)),
-        # TradingAgents 0.5.0 默认把这些交给底层 SDK；不设边界时，供应商
-        # 连接断开或模型持续输出会让整个 LangGraph 永久停在当前 analyst。
+        # TradingAgents 0.5.0 leaves these to the underlying SDK; without limits, a dropped provider
+        # connection or a model that keeps generating can leave the whole LangGraph stuck on one analyst.
         "llm_timeout_seconds": max(1, int(llm_timeout_seconds)),
         "llm_max_retries": max(0, int(llm_max_retries)),
         "max_tokens": max(256, int(llm_max_tokens)),
@@ -142,20 +142,20 @@ def build_ta_llm_config(
 
 
 def inject_api_key_env(ai_client: AIClient) -> None:
-    """把 PanWatch AI 服务的 API key 注入到环境变量。
+    """Inject the app's AI service API key into environment variables.
 
-    TradingAgents llm_clients 按 provider 读不同 env var
-    (OPENAI_API_KEY / DEEPSEEK_API_KEY / OPENROUTER_API_KEY 等)。
-    我们 PanWatch 走 openrouter 兼容模式(chat completions),所以注入
-    OPENROUTER_API_KEY。同时也设 OPENAI_API_KEY 作 fallback。
+    TradingAgents llm_clients read a different env var per provider
+    (OPENAI_API_KEY / DEEPSEEK_API_KEY / OPENROUTER_API_KEY, etc.).
+    The app uses openrouter-compatible mode (chat completions), so it injects
+    OPENROUTER_API_KEY, and also sets OPENAI_API_KEY as a fallback.
 
-    注意:这是进程级 env var,如果同进程并发跑多个不同 key 的请求,可能竞态。
-    P0 假设 max_workers=2 且只用一个 AI service,可接受。
+    Note: these are process-wide env vars; concurrent requests with different keys in one process could race.
+    P0 assumes max_workers=2 and a single AI service, which is acceptable.
     """
     if not ai_client.api_key:
-        logger.warning("[TA] AIClient 没有 api_key,TradingAgents LLM 调用大概率失败")
+        logger.warning("[TA] AIClient has no api_key; TradingAgents LLM calls will most likely fail")
         return
-    # 覆盖多个候选 env var,让 TA 不管走哪条 provider 分支都能取到 key
+    # Set several candidate env vars so TA finds the key whichever provider branch it takes
     os.environ["OPENROUTER_API_KEY"] = ai_client.api_key
     os.environ["OPENAI_API_KEY"] = ai_client.api_key
     os.environ["DEEPSEEK_API_KEY"] = ai_client.api_key
@@ -169,7 +169,7 @@ _PATCH_APPLIED = False
 
 
 def apply_compat_patches() -> None:
-    """应用所有 LangChain 兼容性补丁。幂等。"""
+    """Apply all LangChain compatibility patches. Idempotent."""
     global _PATCH_APPLIED
     if _PATCH_APPLIED:
         return
@@ -180,7 +180,7 @@ def apply_compat_patches() -> None:
 
 
 def _coerce_tool_calls_args(tool_calls: Any) -> Any:
-    """把 tool_calls 列表中每项的 args 字段(若是 JSON 字符串)转成 dict。"""
+    """Turn each item's args in a tool_calls list into a dict when it is a JSON string."""
     if not isinstance(tool_calls, list):
         return tool_calls
     fixed = []
@@ -201,9 +201,9 @@ def _coerce_tool_calls_args(tool_calls: Any) -> Any:
 
 
 def _patch_ai_message_init() -> None:
-    """Patch AIMessage.__init__ 让 tool_calls 字段在校验前自动 coerce str args → dict。
+    """Patch AIMessage.__init__ so tool_calls coerce str args -> dict before validation.
 
-    这是直接拦截 AIMessage 构造的可靠路径,不论 tool_calls 走的哪个上游函数。
+    Intercepting AIMessage construction directly is reliable, whichever upstream function built the tool_calls.
     """
     try:
         from langchain_core.messages.ai import AIMessage
@@ -222,77 +222,77 @@ def _patch_ai_message_init() -> None:
 
     AIMessage.__init__ = _patched_init  # type: ignore[method-assign]
     AIMessage._panwatch_patched = True  # type: ignore[attr-defined]
-    logger.info("[TA compat] 已 patch AIMessage.__init__ 容忍 tool_calls.args 字符串")
+    logger.info("[TA compat] Patched AIMessage.__init__ to accept string tool_calls.args")
 
 
 def _patch_tool_call_args_coercion() -> None:
-    """让 ToolCall / AIMessage 接受 string 类型的 args 并自动 json.loads。"""
+    """Let ToolCall / AIMessage accept string args and json.loads them automatically."""
     try:
         from langchain_core.messages import tool as _tool_module
     except ImportError:
-        logger.debug("[TA compat] langchain_core 未装,跳过 tool_call 补丁")
+        logger.debug("[TA compat] langchain_core not installed; skipping the tool_call patch")
         return
 
-    # 找到 create_tool_call 工厂函数(langchain 1.x);旧版可能叫 ToolCall 类直接构造
+    # Find the create_tool_call factory (langchain 1.x); older versions may construct the ToolCall class directly
     create_func = getattr(_tool_module, "create_tool_call", None)
     if create_func is None:
-        logger.debug("[TA compat] create_tool_call 未找到,跳过")
+        logger.debug("[TA compat] create_tool_call not found; skipping")
         return
 
     if getattr(create_func, "_panwatch_patched", False):
-        return  # 已经 patched
+        return  # already patched
 
     original = create_func
 
     def _patched_create_tool_call(*args, **kwargs):
-        # 取出 args 参数(可能位置或关键字)
+        # Pull out the args argument (positional or keyword)
         raw_args = kwargs.get("args")
         if raw_args is None and len(args) >= 2:
-            # 位置参数:create_tool_call(name, args, ...) 顺序假设
-            # 实际签名见 langchain_core.messages.tool 源码,这里宽松处理
+            # Positional: assumes the create_tool_call(name, args, ...) order
+            # (see langchain_core.messages.tool for the real signature; handled loosely here)
             try:
-                # 重新构造 kwargs 让上游严格 validator 拿到 dict
+                # Rebuild kwargs so the strict upstream validator gets a dict
                 pass
             except Exception:
                 pass
 
-        # 修正 args 类型
+        # Fix the args type
         if isinstance(raw_args, str):
             try:
                 parsed = json.loads(raw_args)
                 if isinstance(parsed, dict):
                     kwargs["args"] = parsed
                     logger.debug(
-                        f"[TA compat] tool_call.args 字符串已自动 parse 成 dict "
-                        f"(原始长度 {len(raw_args)})"
+                        f"[TA compat] tool_call.args string parsed into a dict "
+                        f"(original length {len(raw_args)})"
                     )
                 else:
                     kwargs["args"] = {}
             except (json.JSONDecodeError, TypeError):
                 kwargs["args"] = {}
-                logger.debug("[TA compat] tool_call.args 不是合法 JSON,降级为 {}")
+                logger.debug("[TA compat] tool_call.args is not valid JSON; falling back to {}")
 
         return original(*args, **kwargs)
 
     _patched_create_tool_call._panwatch_patched = True  # type: ignore[attr-defined]
 
-    # 替换模块级符号 + 替换内部 import
+    # Replace the module-level symbol and the internal import
     _tool_module.create_tool_call = _patched_create_tool_call
     try:
-        # langchain_core.output_parsers.openai_tools 在文件顶部 from . import create_tool_call
-        # 但 import 语义是把对象绑定到本地,所以需要也替换那边
+        # langchain_core.output_parsers.openai_tools does `from . import create_tool_call` at the top,
+        # and import binds the object locally, so it has to be replaced there too
         from langchain_core.output_parsers import openai_tools as _ot
         if hasattr(_ot, "create_tool_call"):
             _ot.create_tool_call = _patched_create_tool_call
     except ImportError:
         pass
 
-    logger.info("[TA compat] 已 patch langchain_core.messages.tool.create_tool_call")
+    logger.info("[TA compat] Patched langchain_core.messages.tool.create_tool_call")
 
 
 def _patch_ai_message_validator() -> None:
-    """备用方案:直接 patch AIMessage.model_validate 在 args 是 str 时降级清洗。
+    """Fallback: patch AIMessage.model_validate to clean up str args.
 
-    目前不启用,只在 tool_call_coercion 不够用时启用。
+    Not enabled for now; only used if tool_call_coercion isn't enough.
     """
     pass

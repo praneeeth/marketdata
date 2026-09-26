@@ -1,6 +1,6 @@
-"""从环境和项目配置文件读取运行期设置的技术边界。
+"""Technical boundary for reading runtime settings from the environment and project config files.
 
-该模块可同时被 HTTP、后台任务和平台适配器使用；它不包含任何投资或产品决策。
+Used by HTTP, background tasks and platform adapters alike; it contains no investment or product decisions.
 """
 
 from dataclasses import dataclass, field
@@ -14,12 +14,12 @@ from src.platform.marketdata.models import MarketCode
 
 
 class Settings(BaseSettings):
-    """环境变量配置"""
+    """Environment variable settings."""
 
     # AI
-    ai_base_url: str = "https://open.bigmodel.cn/api/paas/v4"
+    ai_base_url: str = "https://api.openai.com/v1"
     ai_api_key: str = ""
-    ai_model: str = "glm-4"
+    ai_model: str = "gpt-4o-mini"
 
     # Assistant context engineering. The compression model is optional: when
     # unset, the host reuses the configured default assistant model.
@@ -36,27 +36,27 @@ class Settings(BaseSettings):
     notify_telegram_bot_token: str = ""
     notify_telegram_chat_id: str = ""
 
-    # 代理
+    # Proxy
     http_proxy: str = ""
 
-    # 通知策略（可通过 UI 的“系统设置”覆盖）
-    # 静默时间段（本地时区），格式: HH:MM-HH:MM，空为关闭；跨夜示例: 23:00-07:00
+    # Notification policy (can be overridden in the UI's System settings)
+    # Quiet hours (local time zone), format HH:MM-HH:MM, empty = off; overnight example: 23:00-07:00
     notify_quiet_hours: str = ""
-    # 通知失败重试次数（不含首次尝试）
+    # Notification retry attempts (not counting the first)
     notify_retry_attempts: int = 2
-    # 重试退避秒数（基数），实际会按 1x,2x,... 递增
+    # Retry backoff in seconds (base); grows 1x, 2x, ...
     notify_retry_backoff_seconds: float = 2.0
-    # 幂等窗口覆盖（JSON），示例: {"news_digest":60,"daily_report":720}
+    # Dedupe window overrides (JSON), e.g. {"news_digest":60,"daily_report":720}
     notify_dedupe_ttl_overrides: str = ""
 
-    # SSL 证书（企业环境）
+    # SSL certificates (corporate environments)
     ca_cert_file: str = ""
 
-    # 调度
-    # day_of_week 使用 POSIX cron 语义(1-5=周一到周五)
+    # Scheduling
+    # day_of_week follows POSIX cron (1-5 = Monday to Friday)
     daily_report_cron: str = "30 15 * * 1-5"
 
-    # 默认时区（用于调度、时间展示等）。
+    # Default time zone (for scheduling, time display, etc.).
     # One variable controls it: TZ (IANA name). Defaults to India time, since NSE/BSE is
     # the only market and agent schedules such as "15:30" mean IST.
     app_timezone: str = Field(
@@ -67,7 +67,7 @@ class Settings(BaseSettings):
     model_config = {
         "env_file": ".env",
         "env_file_encoding": "utf-8",
-        # .env 里可能有 HTTPS_PROXY 等未声明字段(httpx/系统标准变量),忽略不报错
+        # .env may contain undeclared fields such as HTTPS_PROXY (standard httpx/system variables); ignore them
         "extra": "ignore",
     }
 
@@ -82,7 +82,7 @@ class Settings(BaseSettings):
 
 @dataclass
 class StockConfig:
-    """自选股配置"""
+    """Watchlist config."""
 
     symbol: str
     name: str
@@ -91,14 +91,14 @@ class StockConfig:
 
 @dataclass
 class AppConfig:
-    """应用完整配置"""
+    """Full app config."""
 
     settings: Settings
     watchlist: list[StockConfig] = field(default_factory=list)
 
 
 def load_watchlist(path: str | Path = "config/watchlist.yaml") -> list[StockConfig]:
-    """从 YAML 加载自选股列表"""
+    """Load the watchlist from YAML."""
     path = Path(path)
     if not path.exists():
         return []
@@ -122,7 +122,7 @@ def load_watchlist(path: str | Path = "config/watchlist.yaml") -> list[StockConf
 
 
 def load_config() -> AppConfig:
-    """加载完整配置"""
+    """Load the full config."""
     settings = Settings()
     watchlist = load_watchlist()
     return AppConfig(settings=settings, watchlist=watchlist)

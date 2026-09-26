@@ -1,4 +1,4 @@
-"""chat SSE 流式端点单测：事件序列 / 工具循环 / 降级 / 断线续推（全 mock，不发真实请求）。"""
+"""Unit tests for the chat SSE endpoint: event sequence / tool loop / fallback / resume after disconnect (fully mocked, no real requests)."""
 
 import asyncio
 import json
@@ -18,7 +18,7 @@ from src.platform.persistence.models import ChatConversation, ChatMessage
 
 
 def _make_session_factory():
-    """内存 SQLite 会话工厂（StaticPool 保证同一连接）。"""
+    """In-memory SQLite session factory (StaticPool keeps one connection)."""
     engine = create_engine(
         "sqlite://",
         connect_args={"check_same_thread": False},
@@ -28,8 +28,8 @@ def _make_session_factory():
     return sessionmaker(bind=engine)
 
 
-def _setup_conversation(session_factory, content="持仓怎么样"):
-    """建一条对话 + 用户消息，返回 conversation_id。"""
+def _setup_conversation(session_factory, content="How are my holdings?"):
+    """Create a conversation + user message and return conversation_id."""
     db = session_factory()
     conv = ChatConversation(title="test")
     db.add(conv)
@@ -43,22 +43,22 @@ def _setup_conversation(session_factory, content="持仓怎么样"):
 
 
 class _FakeAIClient:
-    """按预设脚本逐轮响应的假 AI 客户端。
+    """A fake AI client that answers round by round from a script.
 
-    rounds 每项形如：
-    - ("tokens", ["你", "好"])：本轮流式产出文本后结束（无工具调用）；
-    - ("tools", [{"id","name","arguments"}, ...])：本轮要求调用工具；
-    - "raise"：本轮流式调用直接抛异常（触发降级路径）。
+    Each item of rounds is:
+    - ("tokens", ["Hel", "lo"]): stream the text this round and finish (no tool calls);
+    - ("tools", [{"id","name","arguments"}, ...]): this round asks for tool calls;
+    - "raise": this round's streaming call raises (triggers the fallback path).
     """
 
-    def __init__(self, rounds, chat_multi_result="降级回答", chat_multi_raises=False):
+    def __init__(self, rounds, chat_multi_result="fallback answer", chat_multi_raises=False):
         self._rounds = list(rounds)
         self._chat_multi_result = chat_multi_result
         self._chat_multi_raises = chat_multi_raises
         self.model = "fake-model"
 
     async def chat_stream(self, messages, tools=None, temperature=0.4):
-        assert self._rounds, "脚本轮次已用尽"
+        assert self._rounds, "script rounds used up"
         round_spec = self._rounds.pop(0)
         if round_spec == "raise":
             raise RuntimeError("stream unsupported")
@@ -77,7 +77,7 @@ class _FakeAIClient:
 
 
 def _run_task_and_collect(monkeypatch, session_factory, ai_client, conv_id):
-    """跑 _run_chat_stream_task 并收集全部事件，返回 [(event, data_dict), ...]。"""
+    """Run _run_chat_stream_task and collect every event; returns [(event, data_dict), ...]."""
     monkeypatch.setattr(chat_api, "SessionLocal", session_factory)
     monkeypatch.setattr(chat_api, "_get_ai_client", lambda db, model_id=None: ai_client)
 
@@ -96,17 +96,17 @@ def _run_task_and_collect(monkeypatch, session_factory, ai_client, conv_id):
 
 
 def test_stream_task_plain_answer(monkeypatch):
-    """无工具调用：token 事件逐个下发，done 携带完整回答且已落库"""
+    """No tool calls: token events go out one by one; done carries the full answer, already saved."""
     session_factory = _make_session_factory()
     conv_id = _setup_conversation(session_factory)
-    ai = _FakeAIClient([("tokens", ["你", "好"])])
+    ai = _FakeAIClient([("tokens", ["Hel", "lo"])])
 
     events = _run_task_and_collect(monkeypatch, session_factory, ai, conv_id)
 
     kinds = [e for e, _ in events]
     assert kinds == ["token", "token", "done"]
-    assert events[0][1]["text"] == "你"
-    assert events[-1][1]["content"] == "你好"
+    assert events[0][1]["text"] == "Hel"
+    assert events[-1][1]["content"] == "Hello"
 
     db = session_factory()
     saved = (
@@ -116,18 +116,18 @@ def test_stream_task_plain_answer(monkeypatch):
     )
     db.close()
     assert len(saved) == 1
-    assert saved[0].content == "你好"
+    assert saved[0].content == "Hello"
 
 
 def test_stream_task_tool_loop(monkeypatch):
-    """工具循环：tool_call_start/tool_result 事件先推，最终回答走 token 流"""
+    """Tool loop: tool_call_start/tool_result events go first; the final answer comes as a token stream."""
     session_factory = _make_session_factory()
-    conv_id = _setup_conversation(session_factory, content="茅台现在多少钱")
+    conv_id = _setup_conversation(session_factory, content="What is Infosys trading at?")
     ai = _FakeAIClient([
         ("tools", [{"id": "c1", "name": "get_stock_quote", "arguments": '{"symbol": "600519"}'}]),
-        ("tokens", ["茅台 1700 元"]),
+        ("tokens", ["Infosys at 1700"]),
     ])
-    fake_exec = AsyncMock(return_value="实时行情：贵州茅台 价格 1700")
+    fake_exec = AsyncMock(return_value="Live quote: Infosys price 1700")
     monkeypatch.setattr(chat_api, "_execute_tool", fake_exec)
 
     events = _run_task_and_collect(monkeypatch, session_factory, ai, conv_id)
@@ -137,29 +137,29 @@ def test_stream_task_tool_loop(monkeypatch):
     assert events[0][1] == {"name": "get_stock_quote", "arguments": {"symbol": "600519"}}
     assert events[1][1]["ok"] is True
     assert "1700" in events[1][1]["preview"]
-    assert events[-1][1]["content"] == "茅台 1700 元"
-    # 工具名与参数确实传给了执行器
+    assert events[-1][1]["content"] == "Infosys at 1700"
+    # The tool name and arguments really reached the executor
     fake_exec.assert_awaited_once()
     assert fake_exec.await_args.args[1] == "get_stock_quote"
     assert fake_exec.await_args.args[2] == {"symbol": "600519"}
 
 
 def test_stream_task_fallback_to_chat_multi(monkeypatch):
-    """流式不可用：降级 chat_multi，整段文本作为一个 token 事件下发并落库"""
+    """Streaming unavailable: falls back to chat_multi; the whole text goes out as one token event and is saved."""
     session_factory = _make_session_factory()
     conv_id = _setup_conversation(session_factory)
-    ai = _FakeAIClient(["raise"], chat_multi_result="降级回答")
+    ai = _FakeAIClient(["raise"], chat_multi_result="fallback answer")
 
     events = _run_task_and_collect(monkeypatch, session_factory, ai, conv_id)
 
     kinds = [e for e, _ in events]
     assert kinds == ["token", "done"]
-    assert events[0][1]["text"] == "降级回答"
-    assert events[-1][1]["content"] == "降级回答"
+    assert events[0][1]["text"] == "fallback answer"
+    assert events[-1][1]["content"] == "fallback answer"
 
 
 def test_stream_task_error_event(monkeypatch):
-    """AI 彻底不可用：推 error 事件，错误文案照常落库（与非流式行为一致）"""
+    """AI completely unavailable: an error event is pushed and the error text is saved (same as non-streaming)."""
     session_factory = _make_session_factory()
     conv_id = _setup_conversation(session_factory)
     ai = _FakeAIClient(["raise"], chat_multi_raises=True)
@@ -169,7 +169,7 @@ def test_stream_task_error_event(monkeypatch):
     kinds = [e for e, _ in events]
     assert kinds == ["error", "done"]
     assert "multi also failed" in events[0][1]["message"]
-    assert "AI 服务暂时不可用" in events[-1][1]["content"]
+    assert "AI service is unavailable" in events[-1][1]["content"]
 
     db = session_factory()
     saved = (
@@ -178,11 +178,11 @@ def test_stream_task_error_event(monkeypatch):
         .first()
     )
     db.close()
-    assert "AI 服务暂时不可用" in saved.content
+    assert "AI service is unavailable" in saved.content
 
 
 def test_send_message_stream_endpoint(monkeypatch):
-    """流式端点：保存用户消息，首条 meta 事件带 stream_id，可通过 hub 续推"""
+    """Streaming endpoint: saves the user message; the first meta event carries stream_id, resumable through the hub."""
     session_factory = _make_session_factory()
     conv_id = _setup_conversation(session_factory)
     monkeypatch.setattr(chat_api, "SessionLocal", session_factory)
@@ -195,7 +195,7 @@ def test_send_message_stream_endpoint(monkeypatch):
 
     async def run():
         resp = await chat_api.send_message_stream(
-            conv_id, chat_api.SendMessageBody(content="第二个问题")
+            conv_id, chat_api.SendMessageBody(content="second question")
         )
         assert resp.media_type == "text/event-stream"
         chunks = []
@@ -207,7 +207,7 @@ def test_send_message_stream_endpoint(monkeypatch):
     assert "event: meta\n" in body
     assert "event: done\n" in body
 
-    # meta 里的 stream_id 能从 hub 找回（断线重连的依据）
+    # The stream_id in meta can be found in the hub again (the basis for reconnecting)
     meta_line = next(
         l for l in body.split("\n") if l.startswith("data: ") and "stream_id" in l
     )
@@ -215,7 +215,7 @@ def test_send_message_stream_endpoint(monkeypatch):
     assert chat_api.chat_stream_hub.get(stream_id) is not None
     assert json.loads(meta_line[len("data: "):])["task_id"] > 0
 
-    # 用户消息已落库
+    # The user message was saved
     db = session_factory()
     user_msgs = (
         db.query(ChatMessage)
@@ -223,11 +223,11 @@ def test_send_message_stream_endpoint(monkeypatch):
         .all()
     )
     db.close()
-    assert any(m.content == "第二个问题" for m in user_msgs)
+    assert any(m.content == "second question" for m in user_msgs)
 
 
 def test_resume_stream_not_found():
-    """断线重连：未知/过期 stream_id 返回 404"""
+    """Reconnect: an unknown/expired stream_id returns 404."""
     request = SimpleNamespace(headers={})
     with pytest.raises(HTTPException) as ei:
         asyncio.run(chat_api.resume_message_stream("nonexistent", request, 0))
@@ -235,7 +235,7 @@ def test_resume_stream_not_found():
 
 
 def test_resume_stream_last_event_id(monkeypatch):
-    """断线重连：Last-Event-ID header 优先于 query 参数，从其后续推"""
+    """Reconnect: the Last-Event-ID header wins over the query parameter; resumes after it."""
     async def run():
         stream = chat_api.chat_stream_hub.create()
         await stream.publish("token", {"text": "a"})

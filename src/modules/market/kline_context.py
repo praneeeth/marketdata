@@ -32,7 +32,7 @@ def build_kline_history_context(
     if not klines:
         return {
             "available": False,
-            "error": "无K线数据",
+            "error": "No K-line data",
         }
 
     closes = [float(k.close) for k in klines if k.close is not None]
@@ -62,12 +62,12 @@ def build_kline_history_context(
         elif current <= low_20 * 1.002:
             breakout = "near_low_breakdown"
 
-    trend = str(summary.get("trend") or "未知")
+    trend = str(summary.get("trend") or "unknown")
     trend_state = (
         "bullish"
-        if "多头" in trend
+        if "bullish" in trend
         else "bearish"
-        if "空头" in trend
+        if "bearish" in trend
         else "neutral"
     )
 

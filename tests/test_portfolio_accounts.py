@@ -1,15 +1,15 @@
-"""持仓账户 HTTP 用例的持久化边界回归测试。"""
+"""Persistence boundary regression tests for the holdings account HTTP cases."""
 
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from src.platform.persistence.database import Base
-from src.platform.persistence.models import Account, Position, Stock  # noqa: F401 - 注册关系模型
+from src.platform.persistence.models import Account, Position, Stock  # noqa: F401 - registers the relationship models
 
 
 def test_delete_position_logs_relationship_names_before_commit():
-    """删除持仓后仍能完成响应，日志不能访问已脱离会话的关系对象。"""
+    """After deleting a position the response still completes, and logging mustn't touch relationship objects detached from the session."""
     from src.modules.portfolio.api.accounts import delete_position
 
     engine = create_engine(
@@ -19,8 +19,8 @@ def test_delete_position_logs_relationship_names_before_commit():
     )
     Base.metadata.create_all(engine)
     session = sessionmaker(bind=engine)()
-    account = Account(name="测试账户")
-    stock = Stock(symbol="600519", name="贵州茅台", market="CN")
+    account = Account(name="Test account")
+    stock = Stock(symbol="INFY", name="Infosys", market="IN")
     session.add_all([account, stock])
     session.flush()
     position = Position(
@@ -41,7 +41,7 @@ def test_delete_position_logs_relationship_names_before_commit():
 
 
 def test_delete_position_does_not_read_detached_relationships_after_delete():
-    """关系对象在删除提交后不可用时，删除接口仍应正常返回。"""
+    """When relationship objects are unusable after the delete commit, the delete endpoint still returns normally."""
     from src.modules.portfolio.api.accounts import delete_position
 
     class Relation:
@@ -51,7 +51,7 @@ def test_delete_position_does_not_read_detached_relationships_after_delete():
 
         def __getattribute__(self, attribute: str):
             if attribute == "name" and object.__getattribute__(self, "_owner").detached:
-                raise AssertionError("删除提交后不应再访问懒加载关系")
+                raise AssertionError("lazy-loaded relationships mustn't be accessed after the delete commit")
             return object.__getattribute__(self, attribute)
 
     class FakePosition:
@@ -59,8 +59,8 @@ def test_delete_position_does_not_read_detached_relationships_after_delete():
 
         def __init__(self):
             self.detached = False
-            self.account = Relation("测试账户", self)
-            self.stock = Relation("贵州茅台", self)
+            self.account = Relation("Test account", self)
+            self.stock = Relation("Infosys", self)
 
     class FakeQuery:
         def __init__(self, position):

@@ -1,14 +1,14 @@
-"""Agent 过程评测框架：用例结构、运行器与规则断言引擎。
+"""Agent process evaluation framework: case structure, runner and rule assertion engine.
 
-用例 = 固定输入（问题 + mock 工具数据）→ 规则断言：
-- 工具选择正确（该调的调了、不该调的没调、闲聊不调）；
-- 工具参数正确；
-- 动作在白名单内（只允许 CHAT_TOOLS 注册的只读工具）；
-- 答案引用了工具结果（有据性：mock 数据里的关键值必须出现在答案中）；
-- 工具失败时优雅降级（不编造无据数值）。
+A case = fixed input (question + mock tool data) -> rule assertions:
+- the right tools are chosen (required ones called, forbidden ones not, none for chit-chat);
+- tool arguments are correct;
+- actions stay within the allowlist (only the read-only tools registered in CHAT_TOOLS);
+- the answer cites tool results (grounding: key values from the mock data must appear in the answer);
+- tool failures degrade gracefully (no invented, ungrounded values).
 
-规则断言优先；语义维度（相关性/清晰度）由 judge.py 的 LLM-as-judge 补充。
-每个线上 bad case 修复后应固化为一条新用例（加进 cases/chat_cases.py）。
+Rule assertions come first; semantic dimensions (relevance/clarity) are added by the LLM-as-judge in judge.py.
+Every production bad case should become a new case once fixed (add it to cases/chat_cases.py).
 """
 
 from __future__ import annotations
@@ -19,42 +19,42 @@ from dataclasses import dataclass, field
 from src.modules.assistant.chat_api import SYSTEM_PROMPT
 from src.modules.assistant.legacy_chat_tools import CHAT_TOOLS
 
-# 动作白名单：chat agent 只允许调用这些只读工具
+# Action allowlist: the chat agent may only call these read-only tools
 TOOL_WHITELIST = {t["function"]["name"] for t in CHAT_TOOLS}
 MAX_TOOL_ROUNDS = 5
 
-# 用例未提供某工具 mock 数据时的默认返回（模拟工具失败）
-DEFAULT_TOOL_MISSING = "工具执行出错: eval 用例未提供该工具的 mock 数据"
+# Default return when a case gives no mock data for a tool (simulates a tool failure)
+DEFAULT_TOOL_MISSING = "Tool error: the eval case gave no mock data for this tool"
 
 
 @dataclass
 class ChatEvalCase:
-    """一条 chat 工具循环评测用例。"""
+    """One chat tool-loop evaluation case."""
 
     id: str
     question: str
-    # 工具名 → mock 返回文本（工具失败场景直接给"工具执行出错: ..."文案）
+    # tool name -> mock return text (failure cases give "Tool error: ..." text directly)
     tool_data: dict[str, str] = field(default_factory=dict)
-    # 必须调用的工具（子集断言，不要求顺序）
+    # tools that must be called (subset assertion; order not required)
     expected_tools: tuple[str, ...] = ()
-    # 明确不应调用的工具
+    # tools that must not be called
     forbidden_tools: tuple[str, ...] = ()
-    # 闲聊/概念题：完全不应调用任何工具
+    # chit-chat/concept questions: no tool may be called at all
     expect_no_tools: bool = False
-    # 工具名 → {参数名: 期望值或校验函数}；同名多次调用时任一命中即通过
+    # tool name -> {argument: expected value or check function}; with several calls of one tool, any match passes
     param_checks: dict[str, dict] = field(default_factory=dict)
-    # 有据性：答案必须包含的关键值（全部命中才通过）
+    # grounding: key values the answer must contain (all must match)
     answer_must_contain: tuple[str, ...] = ()
-    # 答案必须包含其中任意一个（如失败场景的"失败/无法/未能"类表述）
+    # the answer must contain any one of these (e.g. "failed/unable/couldn't" phrasing for failure cases)
     answer_must_contain_any: tuple[str, ...] = ()
-    # 答案不得包含（如工具失败时不得出现编造的具体数值）
+    # the answer must not contain these (e.g. invented values when a tool failed)
     answer_must_not_contain: tuple[str, ...] = ()
     notes: str = ""
 
 
 @dataclass
 class ChatEvalResult:
-    """一次用例运行的过程记录。"""
+    """The process record of one case run."""
 
     case_id: str
     tool_calls: list[tuple[str, dict]] = field(default_factory=list)
@@ -63,17 +63,17 @@ class ChatEvalResult:
 
 
 class ChatEvalRunner:
-    """驱动 chat 工具循环跑一条评测用例（工具执行被 mock 数据替代）。
+    """Drive the chat tool loop through one case (tool execution replaced by mock data).
 
-    ai_client 需实现 `chat_with_tools(messages, tools, temperature) -> message`
-    （与 src.platform.ai.ai_client.AIClient 一致）：
-    - make eval 时注入真实 AIClient（配置从环境变量读取，见 run_eval.py）；
-    - 单测里注入脚本化的假客户端，不发任何真实请求。
+    ai_client must implement `chat_with_tools(messages, tools, temperature) -> message`
+    (the same as src.platform.ai.ai_client.AIClient):
+    - make eval injects a real AIClient (config from environment variables; see run_eval.py);
+    - unit tests inject a scripted fake client that sends no real requests.
     """
 
     def __init__(self, ai_client, temperature: float = 0.0):
         self.ai_client = ai_client
-        # 评测用低温，尽量减少非确定性
+        # Low temperature for evaluation, to reduce non-determinism
         self.temperature = temperature
 
     async def run_case(self, case: ChatEvalCase) -> ChatEvalResult:
@@ -120,14 +120,14 @@ class ChatEvalRunner:
                         "content": tool_result,
                     })
             else:
-                result.error = "超过最大工具轮次仍未给出回答"
-        except Exception as e:  # noqa: BLE001 - 评测记录任何运行异常
-            result.error = f"运行异常: {e}"
+                result.error = "No answer after the maximum number of tool rounds"
+        except Exception as e:  # noqa: BLE001 - record any run error in the evaluation
+            result.error = f"Run error: {e}"
         return result
 
 
 def _param_match(actual, expected) -> bool:
-    """参数断言：expected 可为期望值或校验函数。"""
+    """Argument assertion: expected may be a value or a check function."""
     if callable(expected):
         try:
             return bool(expected(actual))
@@ -137,7 +137,7 @@ def _param_match(actual, expected) -> bool:
 
 
 def evaluate_case(case: ChatEvalCase, result: ChatEvalResult) -> list[str]:
-    """对一次运行做规则断言，返回失败原因列表（空列表即通过）。"""
+    """Rule assertions on one run; returns a list of failure reasons (empty = pass)."""
     failures: list[str] = []
     if result.error:
         failures.append(result.error)
@@ -145,44 +145,44 @@ def evaluate_case(case: ChatEvalCase, result: ChatEvalResult) -> list[str]:
     called = [name for name, _ in result.tool_calls]
     called_set = set(called)
 
-    # 1) 动作白名单：调用了未注册的工具直接失败
+    # 1) Action allowlist: calling an unregistered tool fails immediately
     for name in sorted(called_set - TOOL_WHITELIST):
-        failures.append(f"调用了白名单外的工具: {name}")
+        failures.append(f"Called a tool outside the allowlist: {name}")
 
-    # 2) 工具选择
+    # 2) Tool choice
     if case.expect_no_tools and called:
-        failures.append(f"不该调用工具却调用了: {called}")
+        failures.append(f"Called tools when none should be called: {called}")
     for name in case.expected_tools:
         if name not in called_set:
-            failures.append(f"缺少必需的工具调用: {name}")
+            failures.append(f"Missing required tool call: {name}")
     for name in case.forbidden_tools:
         if name in called_set:
-            failures.append(f"调用了不该调用的工具: {name}")
+            failures.append(f"Called a tool that shouldn't be called: {name}")
 
-    # 3) 工具参数
+    # 3) Tool arguments
     for tool_name, expects in (case.param_checks or {}).items():
         calls = [args for name, args in result.tool_calls if name == tool_name]
         if not calls:
-            continue  # 缺调用已在上面报过
+            continue  # a missing call was already reported above
         matched = any(
             all(_param_match(args.get(k), v) for k, v in expects.items())
             for args in calls
         )
         if not matched:
-            expect_desc = {k: (v if not callable(v) else "<校验函数>") for k, v in expects.items()}
-            failures.append(f"{tool_name} 参数不符合预期 {expect_desc}，实际 {calls}")
+            expect_desc = {k: (v if not callable(v) else "<check function>") for k, v in expects.items()}
+            failures.append(f"{tool_name} arguments don't match {expect_desc}; actual {calls}")
 
-    # 4) 有据性 / 内容约束
+    # 4) Grounding / content constraints
     answer = result.answer or ""
     for token in case.answer_must_contain:
         if token not in answer:
-            failures.append(f"答案缺少工具结果引用: {token!r}")
+            failures.append(f"Answer doesn't cite the tool result: {token!r}")
     if case.answer_must_contain_any and not any(
         token in answer for token in case.answer_must_contain_any
     ):
-        failures.append(f"答案未包含任一预期表述: {case.answer_must_contain_any}")
+        failures.append(f"Answer contains none of the expected phrases: {case.answer_must_contain_any}")
     for token in case.answer_must_not_contain:
         if token in answer:
-            failures.append(f"答案包含不应出现的内容: {token!r}")
+            failures.append(f"Answer contains forbidden content: {token!r}")
 
     return failures

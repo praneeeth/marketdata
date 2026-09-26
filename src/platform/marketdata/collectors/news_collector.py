@@ -24,6 +24,11 @@ class NewsItem:
     url: str = ""
 
 
+# Source id for exchange corporate filings (NSE/BSE announcements); news items with this
+# source are treated as announcements. Filled once the Phase 4a news sources land.
+ANNOUNCEMENT_SOURCE = "exchange_filing"
+
+
 class NewsCollector:
     @classmethod
     def from_database(cls) -> "NewsCollector":

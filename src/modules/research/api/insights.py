@@ -25,14 +25,14 @@ import time
 
 logger = logging.getLogger(__name__)
 
-# 公告解读缓存(公告不变,长 TTL)
+# Announcement analysis cache (announcements don't change; long TTL)
 _ANN_CACHE = TTLCache(default_ttl_sec=21600)  # 6h
 
 router = APIRouter()
 
 
 class InsightItem(BaseModel):
-    symbol: str = Field(..., description="股票代码")
+    symbol: str = Field(..., description="Stock symbol")
     market: str = Field(..., description="Market: IN (NSE/BSE)")
 
 
@@ -44,16 +44,16 @@ def _parse_market(market: str) -> MarketCode:
     try:
         return MarketCode(market)
     except ValueError:
-        raise HTTPException(400, f"不支持的市场: {market}")
+        raise HTTPException(400, f"Unsupported market: {market}")
 
 
 @router.post("/batch")
 def insights_batch(payload: InsightsBatchRequest):
-    """聚合返回行情 + K线摘要 + 最新建议"""
+    """Quotes + K-line summary + latest item, in one response."""
     if not payload.items:
         return []
 
-    # 1) 批量行情（按市场）
+    # 1) Quotes in bulk (by market)
     market_items: dict[MarketCode, list[str]] = {}
     for it in payload.items:
         market_code = _parse_market(it.market)
@@ -67,7 +67,7 @@ def insights_batch(payload: InsightsBatchRequest):
             items = []
         quotes_by_market[market_code] = {item["symbol"]: item for item in items}
 
-    # 2) K线摘要（逐只，带 60s 简易缓存）
+    # 2) K-line summary (per stock, with a simple 60s cache)
     kline_by_symbol: dict[str, dict] = {}
     now = time.time()
     TTL = 60.0
@@ -93,11 +93,11 @@ def insights_batch(payload: InsightsBatchRequest):
             _KLINE_CACHE[cache_key] = (now, summary)
         kline_by_symbol[cache_key] = summary
 
-    # 3) 最新建议（建议池）
+    # 3) Latest item (suggestion pool)
     stock_keys = [(it.symbol, _parse_market(it.market).value) for it in payload.items]
     latest_sugs = get_latest_suggestions(stock_keys=stock_keys, include_expired=False)
 
-    # 4) 合并返回
+    # 4) Combine
     results = []
     for it in payload.items:
         market_code = _parse_market(it.market)
@@ -125,27 +125,28 @@ def insights_batch(payload: InsightsBatchRequest):
 class AddPositionEvalRequest(BaseModel):
     symbol: str
     market: str = "IN"
-    current_quantity: float = Field(0, ge=0, description="当前持仓股数(0=建仓)")
-    current_cost: float = Field(0, ge=0, description="当前成本(单价)")
-    add_quantity: float = Field(..., gt=0, description="加仓股数")
-    add_price: float = Field(..., gt=0, description="加仓价格")
+    current_quantity: float = Field(0, ge=0, description="Current quantity held (0 = new position)")
+    current_cost: float = Field(0, ge=0, description="Current cost (per share)")
+    add_quantity: float = Field(..., gt=0, description="Quantity to add")
+    add_price: float = Field(..., gt=0, description="Price to add at")
     model_id: int | None = None
 
 
-_VERDICTS = ("不适合", "谨慎", "适合")  # 先长后短:'不适合' 含 '适合',顺序不能反
+# Checked longest first: "not suitable" contains "suitable".
+_VERDICTS = (("not suitable", "Not suitable"), ("cautious", "Cautious"), ("suitable", "Suitable"))
 
 
 def _parse_verdict(text: str) -> str:
-    """从 AI 回复粗解析结论标签;命中不到返回'未知'。"""
-    head = (text or "")[:120]
-    for v in _VERDICTS:
-        if v in head:
-            return v
-    return "未知"
+    """Roughly parse the verdict label from the AI reply; "Unknown" when none matches."""
+    head = (text or "")[:120].lower()
+    for needle, label in _VERDICTS:
+        if needle in head:
+            return label
+    return "Unknown"
 
 
 async def _fetch_fundamental_context(symbol: str, market: str) -> str:
-    """基本面摘要:PE / 换手率 / 市值 / 今日振幅(取自实时行情,失败返回空)。"""
+    """Fundamentals summary: PE / turnover rate / market cap / today's range (from the live quote; empty on failure)."""
     try:
         mc = MarketCode.IN
         rows = await asyncio.to_thread(md_quote_rows, [symbol], mc.value)
@@ -154,24 +155,24 @@ async def _fetch_fundamental_context(symbol: str, market: str) -> str:
         q = rows[0]
         parts: list[str] = []
         if q.get("pe_ratio") not in (None, 0):
-            parts.append(f"市盈率 {q['pe_ratio']}")
+            parts.append(f"P/E {q['pe_ratio']}")
         if q.get("turnover_rate") not in (None, 0):
-            parts.append(f"换手率 {q['turnover_rate']}%")
+            parts.append(f"turnover rate {q['turnover_rate']}%")
         if q.get("circulating_market_value"):
-            parts.append(f"流通市值 {q['circulating_market_value']}亿")
+            parts.append(f"free-float market cap {q['circulating_market_value']} Cr")
         if q.get("total_market_value"):
-            parts.append(f"总市值 {q['total_market_value']}亿")
+            parts.append(f"total market cap {q['total_market_value']} Cr")
         hi, lo, pc = q.get("high_price"), q.get("low_price"), q.get("prev_close")
         if hi and lo and pc:
-            parts.append(f"今日振幅 {(hi - lo) / pc * 100:.2f}%")
-        return ("基本面:" + "，".join(parts)) if parts else ""
+            parts.append(f"today's range {(hi - lo) / pc * 100:.2f}%")
+        return ("Fundamentals: " + ", ".join(parts)) if parts else ""
     except Exception as e:
-        logger.debug(f"基本面获取失败 {symbol}: {e}")
+        logger.debug(f"Fundamentals fetch failed {symbol}: {e}")
         return ""
 
 
 async def _fetch_message_context(db: Session, symbol: str, market: str) -> str:
-    """消息面摘要:近 3 天新闻/公告标题 + 本地最近 AI 建议/分析(失败降级为空)。"""
+    """News summary: news/announcement titles from the last 3 days + recent local AI items/analyses (empty on failure)."""
     parts: list[str] = []
     try:
         from src.platform.marketdata.collectors.news_collector import NewsCollector
@@ -185,11 +186,11 @@ async def _fetch_message_context(db: Session, symbol: str, market: str) -> str:
         items = sorted(items, key=lambda x: x.publish_time, reverse=True)[:5]
         if items:
             lines = [
-                f"- {it.title}（{it.publish_time.strftime('%m-%d')}）" for it in items
+                f"- {it.title} ({it.publish_time.strftime('%m-%d')})" for it in items
             ]
-            parts.append("近期新闻/公告:\n" + "\n".join(lines))
+            parts.append("Recent news/announcements:\n" + "\n".join(lines))
     except Exception as e:
-        logger.debug(f"消息面新闻获取失败 {symbol}: {e}")
+        logger.debug(f"News context fetch failed {symbol}: {e}")
 
     try:
         ctx = build_stock_context(db, symbol, market)
@@ -206,59 +207,59 @@ async def _fetch_message_context(db: Session, symbol: str, market: str) -> str:
     dependencies=[Depends(feature_gate(Feature.POSITION_CALCULATOR))],
 )
 async def add_position_eval(req: AddPositionEvalRequest, db: Session = Depends(get_db)):
-    """加仓快速评估:按服务端口径算摊薄成本 + 让 AI 给 适合/谨慎/不适合 结论。"""
+    """Quick check before adding: server-side averaged cost + an AI verdict of Suitable / Cautious / Not suitable."""
     market = _parse_market(req.market).value
     cur_q = max(0.0, float(req.current_quantity or 0))
     cur_c = max(0.0, float(req.current_cost or 0))
     add_q = float(req.add_quantity)
     add_p = float(req.add_price)
     if add_q <= 0 or add_p <= 0:
-        raise HTTPException(400, "加仓股数与价格必须大于 0")
+        raise HTTPException(400, "Quantity and price to add must be greater than 0")
 
     new_q = cur_q + add_q
     new_cost = (cur_q * cur_c + add_q * add_p) / new_q if new_q > 0 else add_p
     is_add = cur_q > 0 and cur_c > 0
     dilute_abs = (cur_c - new_cost) if is_add else 0.0
     dilute_pct = (dilute_abs / cur_c * 100) if is_add and cur_c > 0 else 0.0
-    action = "加仓" if is_add else "建仓"
+    action = "Add" if is_add else "Open position"
 
-    # 上下文:实时行情 + 基本面 + 技术面 + 消息面(新闻/公告/本地观点)
+    # Context: live quote + fundamentals + technicals + news (news/announcements/local views)
     realtime = await fetch_realtime_context(req.symbol, market)
     fundamental = await _fetch_fundamental_context(req.symbol, market)
     technical = await fetch_technical_context(req.symbol, market)
     message = await _fetch_message_context(db, req.symbol, market)
 
     holding_line = (
-        f"当前持仓 {cur_q:.0f} 股,成本(单价) {cur_c:.3f}"
+        f"Currently holding {cur_q:.0f} shares at a cost of {cur_c:.3f} per share"
         if is_add
-        else "当前空仓(本次为建仓)"
+        else "No current position (this opens one)"
     )
-    dilute_line = f",较现成本摊薄 {dilute_abs:.3f}({dilute_pct:.2f}%)" if is_add else ""
+    dilute_line = f", {dilute_abs:.3f} ({dilute_pct:.2f}%) below the current cost" if is_add else ""
     user_content = (
-        f"标的 {market}:{req.symbol}\n"
+        f"Stock {market}:{req.symbol}\n"
         f"{holding_line}\n"
-        f"拟{action} {add_q:.0f} 股 @ {add_p:.3f}\n"
-        f"{action}后成本(单价) {new_cost:.3f}{dilute_line}\n"
+        f"Planned {action}: {add_q:.0f} shares @ {add_p:.3f}\n"
+        f"Cost per share after this: {new_cost:.3f}{dilute_line}\n"
         + (f"{realtime}\n" if realtime else "")
         + (f"{fundamental}\n" if fundamental else "")
         + (f"{technical}\n" if technical else "")
         + (f"{message}\n" if message else "")
-        + f"请综合估值/基本面与消息面,评估这次{action}是否合适。"
+        + f"Considering valuation/fundamentals and news, assess whether this ({action}) is suitable."
     )
     system_prompt = (
-        "你是谨慎务实的股票交易助手。综合用户给出的持仓、价格、基本面、技术面与消息面信息,"
-        f"评估这次{action}是否合适,不臆造数据、不做收益承诺。\n"
-        "严格按以下格式输出,简洁:\n"
-        "结论: 适合 / 谨慎 / 不适合(三选一)\n"
-        "理由:\n- (2~3 条,结合摊薄成本、估值/基本面、技术面与消息面)\n"
-        "风险: (一句话最大风险)"
+        "You are a careful, practical stock research assistant. Using the holding, price, fundamentals, technicals and news the user gives,"
+        f" assess whether this ({action}) is suitable. Don't invent data or promise returns.\n"
+        "Reply strictly in this format, briefly:\n"
+        "Verdict: Suitable / Cautious / Not suitable (pick one)\n"
+        "Reasons:\n- (2-3 points covering the averaged cost, valuation/fundamentals, technicals and news)\n"
+        "Risk: (the biggest risk in one sentence)"
     )
 
     try:
         client = get_configured_failover_client(db, req.model_id)
         content = await client.chat(system_prompt, user_content, temperature=0.3)
     except Exception as e:
-        raise HTTPException(502, f"AI 评估失败: {e}")
+        raise HTTPException(502, f"AI assessment failed: {e}")
 
     return {
         "symbol": req.symbol,
@@ -274,34 +275,26 @@ async def add_position_eval(req: AddPositionEvalRequest, db: Session = Depends(g
     }
 
 
-# ── 公告/财报 利好利空解读(Phase B)──────────────────────────────────────
-_ANN_TONES = ("利好", "利空", "中性")
-
-
-_ENGLISH_TONES = {"positive": "利好", "negative": "利空", "neutral": "中性"}
+# ── Announcement/results tone analysis (Phase B) ───────────────────────────
+_ANN_TONES = {"positive": "Positive", "negative": "Negative", "neutral": "Neutral"}
 
 
 def _parse_tone(text: str) -> str:
-    head = (text or "")[:60]
-    for t in _ANN_TONES:
-        if t in head:
-            return t
-    lowered = head.strip().lower()
-    for english, label in _ENGLISH_TONES.items():
-        if lowered.startswith(english):
-            return label
-    return "中性"
+    """The tone word that appears first in the AI's field; "Neutral" when none does."""
+    head = (text or "")[:60].lower()
+    found = [(head.find(word), label) for word, label in _ANN_TONES.items() if word in head]
+    return min(found)[1] if found else "Neutral"
 
 
 async def _fetch_recent_announcements(symbol: str, name: str, limit: int = 5) -> list[dict]:
-    """取近 7 天公告/新闻(优先东财公告),失败返回 []。"""
+    """Announcements/news from the last 7 days; [] on failure."""
     try:
-        from src.platform.marketdata.collectors.news_collector import NewsCollector
+        from src.platform.marketdata.collectors.news_collector import ANNOUNCEMENT_SOURCE, NewsCollector
 
         items = await NewsCollector.from_database().fetch_all(
             symbols=[symbol], since_hours=168, symbol_names={symbol: name}
         )
-        anns = [it for it in items if it.source == "eastmoney"] or items
+        anns = [it for it in items if it.source == ANNOUNCEMENT_SOURCE] or items
         anns = sorted(anns, key=lambda x: x.publish_time, reverse=True)[:limit]
         return [
             {
@@ -312,7 +305,7 @@ async def _fetch_recent_announcements(symbol: str, name: str, limit: int = 5) ->
             for a in anns
         ]
     except Exception as e:
-        logger.debug(f"公告获取失败 {symbol}: {e}")
+        logger.debug(f"Announcement fetch failed {symbol}: {e}")
         return []
 
 
@@ -324,7 +317,7 @@ class AnnouncementEvalRequest(BaseModel):
 
 @router.post("/announcement-eval")
 async def announcement_eval(req: AnnouncementEvalRequest, db: Session = Depends(get_db)):
-    """近期公告 → AI 逐条判利好/利空/中性 + 一句话。降级:无全文则用标题。"""
+    """Recent announcements -> AI rates each positive/negative/neutral with one sentence. Falls back to titles without full text."""
     market = _parse_market(req.market).value
     cache_key = f"{market}:{req.symbol}"
     cached = _ANN_CACHE.get(cache_key)
@@ -336,12 +329,12 @@ async def announcement_eval(req: AnnouncementEvalRequest, db: Session = Depends(
     anns = await _fetch_recent_announcements(req.symbol, name)
     if not anns:
         result = {"symbol": req.symbol, "market": market, "items": []}
-        _ANN_CACHE.set(cache_key, result, ttl_sec=600)  # 无数据短缓存
+        _ANN_CACHE.set(cache_key, result, ttl_sec=600)  # short cache when there's no data
         return result
 
     top = anns[:3]
     listing = "\n".join(
-        f"{i + 1}. {a['title']}（{a['time']}）" + (f" — {a['content']}" if a["content"] else "")
+        f"{i + 1}. {a['title']} ({a['time']})" + (f" — {a['content']}" if a["content"] else "")
         for i, a in enumerate(top)
     )
     system_prompt = (
@@ -352,24 +345,24 @@ async def announcement_eval(req: AnnouncementEvalRequest, db: Session = Depends(
         "Write in English. Output exactly one line per announcement in the format: "
         "number|positive or negative or neutral|one sentence"
     )
-    user_content = f"标的 {name}({market}:{req.symbol}) 近期公告:\n{listing}"
+    user_content = f"Recent announcements for {name} ({market}:{req.symbol}):\n{listing}"
     try:
         content = await get_configured_failover_client(db, req.model_id).chat(
             system_prompt, user_content, temperature=0.2
         )
     except Exception as e:
-        raise HTTPException(502, f"AI 公告解读失败: {e}")
+        raise HTTPException(502, f"AI announcement analysis failed: {e}")
 
     tone_map: dict[int, tuple[str, str]] = {}
     for line in (content or "").splitlines():
         parts = line.split("|")
-        idx_raw = parts[0].strip().rstrip(".、) ") if parts else ""
+        idx_raw = parts[0].strip().rstrip(".) ") if parts else ""
         if len(parts) >= 3 and idx_raw.isdigit():
             tone_map[int(idx_raw) - 1] = (_parse_tone(parts[1]), parts[2].strip())
 
     items = []
     for i, a in enumerate(top):
-        tone, note = tone_map.get(i, ("中性", ""))
+        tone, note = tone_map.get(i, ("Neutral", ""))
         items.append(
             {
                 "title": ensure_guarded(a["title"], surface="announcement_title"),

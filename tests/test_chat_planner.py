@@ -1,7 +1,7 @@
-"""Planning 试点(全面诊断持仓)测试。
+"""Tests for the planning pilot (full portfolio check).
 
-全 mock ai_client 与工具执行器,不触网。覆盖:意图识别、计划解析容错、
-正常逐步推进、步骤失败重规划、计划生成失败降级默认计划。
+The ai_client and tool executor are fully mocked; no network. Covers: intent recognition, tolerant plan parsing,
+normal step-by-step progress, re-planning on a failed step, and falling back to the default plan when plan generation fails.
 """
 
 import asyncio
@@ -16,7 +16,7 @@ from src.modules.assistant.chat_planner import (
 
 
 class FakeStream:
-    """记录 publish 事件的假 SSE 流。"""
+    """A fake SSE stream that records published events."""
 
     def __init__(self):
         self.events: list[tuple[str, dict]] = []
@@ -32,9 +32,9 @@ class FakeStream:
 
 
 class FakeAI:
-    """脚本化假 AI:chat_multi 从队列弹出(异常则抛),chat_stream 产出固定 token。"""
+    """Scripted fake AI: chat_multi pops from a queue (raising exceptions), chat_stream yields fixed tokens."""
 
-    def __init__(self, multi_queue, stream_tokens=("诊", "断", "完")):
+    def __init__(self, multi_queue, stream_tokens=("check ", "com", "plete")):
         self.multi_queue = list(multi_queue)
         self.stream_tokens = list(stream_tokens)
         self.multi_calls = 0
@@ -55,60 +55,60 @@ class FakeAI:
 def _exec_ok(db, name, args):
     async def _inner():
         return {
-            "get_portfolio": "持仓:贵州茅台(600519) 100股",
-            "get_technical_analysis": "技术面:多头",
-            "get_stock_suggestions": "建议:持有",
+            "get_portfolio": "Holdings: Infosys (INFY) 100 shares",
+            "get_technical_analysis": "Technicals: bullish",
+            "get_stock_suggestions": "Items: Hold",
         }.get(name, "")
 
     return _inner()
 
 
-# ── 意图识别 ────────────────────────────────────────────────────────────
+# ── Intent recognition ──────────────────────────────────────────────────────
 def test_should_use_planning_hits():
-    """命中触发词 → 走计划驱动"""
-    assert should_use_planning("帮我全面诊断我的持仓")
-    assert should_use_planning("持仓诊断一下")
-    assert should_use_planning("给我的组合做个全面体检")
+    """A trigger phrase -> plan-driven."""
+    assert should_use_planning("Please give my portfolio a full portfolio check")
+    assert should_use_planning("Can you check my   Portfolio?")
+    assert should_use_planning("run a portfolio health check for me")
 
 
 def test_should_use_planning_miss():
-    """普通问题不触发"""
-    assert not should_use_planning("茅台现在多少钱")
+    """Ordinary questions don't trigger it."""
+    assert not should_use_planning("What is Infosys trading at now?")
     assert not should_use_planning("")
 
 
-# ── 计划解析容错 ──────────────────────────────────────────────────────────
+# ── Tolerant plan parsing ───────────────────────────────────────────────────
 def test_parse_plan_plain_list():
-    """纯 JSON 列表"""
+    """A plain JSON list."""
     steps = parse_plan('[{"title":"A","action":"portfolio_risk"}]')
     assert steps and steps[0]["title"] == "A"
 
 
 def test_parse_plan_dict_with_steps():
-    """dict 带 steps 字段"""
+    """A dict with a steps field."""
     steps = parse_plan('{"steps":[{"title":"B","action":"analyze_stock"}]}')
     assert steps and steps[0]["action"] == "analyze_stock"
 
 
 def test_parse_plan_json_fence_with_prose():
-    """```json 围栏 + 前后解释文字"""
-    text = '好的,这是计划:\n```json\n{"steps":[{"title":"C","action":"portfolio_risk"}]}\n```\n请确认'
+    """A ```json fence + explanation before and after."""
+    text = 'OK, here is the plan:\n```json\n{"steps":[{"title":"C","action":"portfolio_risk"}]}\n```\nPlease confirm'
     steps = parse_plan(text)
     assert steps and steps[0]["title"] == "C"
 
 
 def test_parse_plan_malformed_returns_none():
-    """完全非 JSON → None"""
-    assert parse_plan("抱歉我无法生成计划") is None
+    """Not JSON at all -> None."""
+    assert parse_plan("Sorry, I can't write a plan") is None
     assert parse_plan("") is None
 
 
 def test_normalize_steps_filters_summarize_and_assigns_ids():
-    """规范化:过滤 summarize,补 id/status"""
+    """Normalisation: drops summarize, fills in id/status."""
     steps = normalize_steps(
         [
             {"title": "X", "action": "analyze_stock"},
-            {"title": "汇总", "action": "summarize"},
+            {"title": "Summary", "action": "summarize"},
             {"title": "Y", "action": "portfolio_risk"},
         ]
     )
@@ -117,30 +117,30 @@ def test_normalize_steps_filters_summarize_and_assigns_ids():
     assert all(s["action"] != "summarize" for s in steps)
 
 
-# ── 编排:正常 / 重规划 / 降级 ────────────────────────────────────────────
+# ── Orchestration: normal / re-plan / fallback ──────────────────────────────
 def test_run_diagnosis_happy_path():
-    """正常:生成计划 → 逐步执行 → 流式汇总,plan 事件推进到 done"""
-    plan = '{"steps":[{"title":"组合整体风险","action":"portfolio_risk"}]}'
-    ai = FakeAI(multi_queue=[plan, "风险评估结果"])
+    """Normal: write the plan -> run each step -> streamed summary; plan events move to done."""
+    plan = '{"steps":[{"title":"Overall portfolio risk","action":"portfolio_risk"}]}'
+    ai = FakeAI(multi_queue=[plan, "risk assessment result"])
     stream = FakeStream()
 
     summary = asyncio.run(run_portfolio_diagnosis(None, stream, ai, _exec_ok))
 
-    assert summary == "诊断完"  # 流式 token 拼接
+    assert summary == "check complete"  # streamed tokens joined
     plans = stream.plan_events()
     assert plans[0]["status"] == "planning"
     assert plans[-1]["status"] == "done"
-    # 最终步骤全部完成
+    # Every step is done at the end
     assert all(s["status"] == "done" for s in plans[-1]["steps"])
-    assert stream.tokens() == "诊断完"
+    assert stream.tokens() == "check complete"
 
 
 def test_run_diagnosis_replan_on_step_failure():
-    """步骤失败 → 重规划一次 → 用新计划继续"""
-    # 初始计划:analyze_stock(会因 get_technical_analysis 抛错而失败)
-    plan = '{"steps":[{"title":"分析茅台","action":"analyze_stock","params":{"symbol":"600519"}}]}'
-    replan = '{"steps":[{"title":"改为组合风险","action":"portfolio_risk"}]}'
-    ai = FakeAI(multi_queue=[plan, replan, "组合风险结果"])
+    """A failed step -> one re-plan -> continue with the new plan."""
+    # Initial plan: analyze_stock (fails because get_technical_analysis raises)
+    plan = '{"steps":[{"title":"Analyse Infosys","action":"analyze_stock","params":{"symbol":"INFY"}}]}'
+    replan = '{"steps":[{"title":"Switch to portfolio risk","action":"portfolio_risk"}]}'
+    ai = FakeAI(multi_queue=[plan, replan, "portfolio risk result"])
     stream = FakeStream()
 
     calls = {"tech": 0}
@@ -149,39 +149,39 @@ def test_run_diagnosis_replan_on_step_failure():
         async def _inner():
             if name == "get_technical_analysis":
                 calls["tech"] += 1
-                raise RuntimeError("数据源超时")
+                raise RuntimeError("data source timed out")
             return {
-                "get_portfolio": "持仓:茅台",
-                "get_stock_suggestions": "建议",
+                "get_portfolio": "Holdings: Infosys",
+                "get_stock_suggestions": "Items",
             }.get(name, "")
 
         return _inner()
 
     summary = asyncio.run(run_portfolio_diagnosis(None, stream, ai, _exec))
 
-    assert summary == "诊断完"
-    # 触发过重规划(plan+replan+step 共 3 次 chat_multi)
+    assert summary == "check complete"
+    # A re-plan happened (plan + replan + step = 3 chat_multi calls)
     assert ai.multi_calls == 3
-    # 最终计划里出现重规划后的步骤且已完成
+    # The re-planned step appears in the final plan and is done
     final_steps = stream.plan_events()[-1]["steps"]
-    assert any("组合风险" in s["title"] and s["status"] == "done" for s in final_steps)
+    assert any("portfolio risk" in s["title"] and s["status"] == "done" for s in final_steps)
 
 
 def test_run_diagnosis_degrades_when_plan_generation_fails():
-    """计划生成失败 → 回退默认计划,仍产出汇总"""
-    ai = FakeAI(multi_queue=[RuntimeError("LLM 挂了"), "默认风险评估"])
+    """Plan generation fails -> fall back to the default plan and still produce a summary."""
+    ai = FakeAI(multi_queue=[RuntimeError("LLM is down"), "default risk assessment"])
     stream = FakeStream()
 
     summary = asyncio.run(run_portfolio_diagnosis(None, stream, ai, _exec_ok))
 
-    assert summary == "诊断完"
+    assert summary == "check complete"
     plans = stream.plan_events()
     assert plans[-1]["status"] == "done"
-    # 默认计划只有组合风险一步
+    # The default plan has a single portfolio risk step
     assert len(plans[-1]["steps"]) == 1
 
 
 def test_build_default_plan_shape():
-    """默认计划为组合风险单步"""
-    plan = build_default_plan("持仓文本")
+    """The default plan is a single portfolio risk step."""
+    plan = build_default_plan("holdings text")
     assert plan[0]["action"] == "portfolio_risk"

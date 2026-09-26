@@ -1,4 +1,4 @@
-"""设置页头像:图片落 data/avatars 文件,DB 仅存文件名;data URL 读写,清空删文件。"""
+"""Settings page avatar: the image is a file in data/avatars, the DB stores only the file name; read/written as a data URL, clearing deletes the file."""
 
 from __future__ import annotations
 
@@ -10,11 +10,11 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
-import src.platform.persistence.models as M  # noqa: F401 (确保模型注册到 Base)
+import src.platform.persistence.models as M  # noqa: F401 (make sure the models are registered on Base)
 from src.modules.administration.api import settings as settings_api
 from src.platform.persistence.database import Base, get_db
 
-# 任意有效 base64;后端按字节落文件,GET 再读回同样的 data URL
+# Any valid base64; the backend writes the bytes to a file and GET reads the same data URL back
 _IMG = "data:image/jpeg;base64,AAAA"
 
 
@@ -42,26 +42,26 @@ def _client(tmp_path, monkeypatch) -> TestClient:
 
 
 def test_avatar_default_empty(tmp_path, monkeypatch):
-    """未设置时头像为空字符串。"""
+    """Without a setting, the avatar is an empty string."""
     c = _client(tmp_path, monkeypatch)
     assert c.get("/settings/avatar").json()["value"] == ""
 
 
 def test_avatar_saved_as_file_db_stores_filename(tmp_path, monkeypatch):
-    """上传后:图片落 data/avatars 文件,DB 仅记文件名,GET 以 data URL 读回。"""
+    """After upload: the image is a file in data/avatars, the DB stores only the file name, GET reads a data URL back."""
     c = _client(tmp_path, monkeypatch)
     r = c.put("/settings/avatar", json={"value": _IMG})
     assert r.status_code == 200, r.text
-    # 文件已落盘到 data/avatars
+    # The file is on disk in data/avatars
     assert os.listdir(os.path.join(str(tmp_path), "avatars")) == ["avatar.jpg"]
-    # DB 仅存文件名(短,非 base64)
+    # The DB stores only the file name (short, not base64)
     assert r.json()["value"] == "avatar.jpg"
-    # GET 读回 data URL
+    # GET reads the data URL back
     assert c.get("/settings/avatar").json()["value"] == _IMG
 
 
 def test_avatar_clear_deletes_file(tmp_path, monkeypatch):
-    """传空字符串清空:删除文件 + GET 返回空。"""
+    """An empty string clears it: deletes the file + GET returns empty."""
     c = _client(tmp_path, monkeypatch)
     c.put("/settings/avatar", json={"value": _IMG})
     c.put("/settings/avatar", json={"value": ""})
@@ -70,13 +70,13 @@ def test_avatar_clear_deletes_file(tmp_path, monkeypatch):
 
 
 def test_avatar_rejects_non_dataurl(tmp_path, monkeypatch):
-    """非 data URL 的头像值应被拒绝(400)。"""
+    """A non-data-URL avatar value is rejected (400)."""
     c = _client(tmp_path, monkeypatch)
     assert c.put("/settings/avatar", json={"value": "http://x/a.png"}).status_code == 400
 
 
 def test_avatar_key_not_in_generic_list(tmp_path, monkeypatch):
-    """头像键不混进通用设置列表。"""
+    """The avatar key doesn't mix into the general settings list."""
     c = _client(tmp_path, monkeypatch)
     c.put("/settings/avatar", json={"value": _IMG})
     keys = [s["key"] for s in c.get("/settings").json()]

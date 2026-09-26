@@ -1,11 +1,11 @@
-"""因子有效性评估(Phase 2):IC / IR。
+"""Factor effectiveness evaluation (Phase 2): IC / IR.
 
-回答「哪些因子在 A 股真正有 alpha」—— 把 StrategyFactorSnapshot(每个信号的因子分)
-与 StrategyOutcome(前向收益)按 signal_run_id 关联,算每个因子的:
-- IC(信息系数):因子值与未来收益的 Spearman 秩相关(全样本)
-- IR(信息比率):按快照日分组的 IC 序列的 mean/std
+Answers "which factors really carry alpha in this market": joins StrategyFactorSnapshot (each signal's factor scores)
+with StrategyOutcome (forward returns) on signal_run_id, and computes for each factor:
+- IC (information coefficient): Spearman rank correlation of factor value and future return (full sample)
+- IR (information ratio): mean/std of the IC series grouped by snapshot date
 
-纯 Python 实现相关系数(不引入 scipy/alphalens),与回测内核一致的轻量约束。
+Correlations are pure Python (no scipy/alphalens), the same lightweight constraint as the back-test core.
 """
 
 from __future__ import annotations
@@ -19,19 +19,19 @@ from src.platform.persistence.models import StrategyFactorSnapshot, StrategyOutc
 
 logger = logging.getLogger(__name__)
 
-# 参与评估的因子字段(对应 StrategyFactorSnapshot 列)
+# Factor fields evaluated (StrategyFactorSnapshot columns)
 FACTOR_FIELDS = (
     "alpha_score",
     "catalyst_score",
     "quality_score",
-    "risk_penalty",   # 惩罚项,IC 预期为负
-    "crowd_penalty",  # 惩罚项,IC 预期为负
+    "risk_penalty",   # penalty; IC expected to be negative
+    "crowd_penalty",  # penalty; IC expected to be negative
     "final_score",
 )
 
 
 def pearson(xs: list[float], ys: list[float]) -> float | None:
-    """Pearson 线性相关系数;样本 < 3 或零方差返回 None。"""
+    """Pearson linear correlation; None with fewer than 3 samples or zero variance."""
     n = len(xs)
     if n < 3 or n != len(ys):
         return None
@@ -46,7 +46,7 @@ def pearson(xs: list[float], ys: list[float]) -> float | None:
 
 
 def _rankdata(values: list[float]) -> list[float]:
-    """平均秩(1-based;并列取平均)。"""
+    """Average ranks (1-based; ties get the average)."""
     order = sorted(range(len(values)), key=lambda i: values[i])
     ranks = [0.0] * len(values)
     i = 0
@@ -62,7 +62,7 @@ def _rankdata(values: list[float]) -> list[float]:
 
 
 def spearman(xs: list[float], ys: list[float]) -> float | None:
-    """Spearman 秩相关 = 对秩做 Pearson。"""
+    """Spearman rank correlation = Pearson on the ranks."""
     if len(xs) < 3 or len(xs) != len(ys):
         return None
     return pearson(_rankdata(xs), _rankdata(ys))
@@ -72,20 +72,20 @@ def evaluate_factor_ic(
     *, days: int = 90, horizon: int = 5, min_samples: int = 20, min_period_samples: int = 5,
     market: str | None = None, db=None,
 ) -> dict:
-    """计算各因子的 IC/IR。
+    """Compute each factor's IC/IR.
 
     Args:
-        days: 回看快照天数
-        horizon: 用哪个持有期(交易日)的 outcome
-        min_samples: 全样本 IC 的最小样本量
-        min_period_samples: 单日 IC 的最小样本量(用于 IR 的时序序列)
+        days: days of snapshots to look back
+        horizon: which holding period (trading days) of outcomes to use
+        min_samples: minimum sample size for the full-sample IC
+        min_period_samples: minimum sample size for a single day's IC (for the IR time series)
     """
     own = db is None
     db = db or SessionLocal()
     try:
         cutoff = (date.today() - timedelta(days=max(7, int(days)))).strftime("%Y-%m-%d")
-        # 防泄漏(point-in-time):只纳入持有期已走完的样本
-        # (snapshot_date + horizon 日历日 <= today),杜绝偷看未实现收益。
+        # Leak guard (point-in-time): only samples whose holding period has finished
+        # (snapshot_date + horizon calendar days <= today), so unrealised returns are never peeked at.
         horizon_cutoff = (date.today() - timedelta(days=int(horizon))).strftime("%Y-%m-%d")
         query = (
             db.query(StrategyFactorSnapshot, StrategyOutcome.outcome_return_pct)
@@ -155,7 +155,7 @@ def evaluate_factor_ic(
 
         return {"horizon": int(horizon), "days": int(days), "market": market, "factors": factors}
     except Exception as e:
-        logger.warning(f"[因子评估] IC 计算失败: {e}")
+        logger.warning(f"[Factor evaluation] IC computation failed: {e}")
         return {"horizon": int(horizon), "days": int(days), "market": market,
                 "factors": {}, "error": str(e)}
     finally:

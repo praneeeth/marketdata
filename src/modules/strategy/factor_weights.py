@@ -1,10 +1,10 @@
-"""因子权重存取层(M1)。
+"""Factor weight storage (M1).
 
-把信号合成时各因子的权重从「隐式 = 1 的硬编码」变成「外置 + 可标定」:
-- `get_factor_weights(market)`:读取某市场各因子权重,缺失则 lazy seed 为 1.0;
-  供 `strategy_engine._compute_factor_breakdown` 合成 raw_score 时按因子相乘。
+Turns each factor's weight in signal combination from a hard-coded implicit 1 into an external, calibratable value:
+- `get_factor_weights(market)`: reads a market's factor weights, lazily seeding missing ones as 1.0;
+  `strategy_engine._compute_factor_breakdown` multiplies by them when combining raw_score.
 
-标定逻辑见 `factor_calibration.py`;只读/手动覆盖的 API 在 `web/api/factors.py`。
+Calibration is in `factor_calibration.py`; the read-only/manual override API is in `web/api/factors.py`.
 """
 
 from __future__ import annotations
@@ -17,8 +17,8 @@ from src.platform.persistence.models import FactorWeight, FactorWeightHistory
 
 logger = logging.getLogger(__name__)
 
-# 可标定因子(与 StrategyFactorSnapshot 列、factor_eval.FACTOR_FIELDS 对齐)。
-# source_bonus 暂不进标定集(v1 维持权重 1.0);final_score 是合成结果,非输入因子。
+# Calibratable factors (matching StrategyFactorSnapshot columns and factor_eval.FACTOR_FIELDS).
+# source_bonus isn't calibrated yet (v1 keeps weight 1.0); final_score is the combined result, not an input factor.
 CALIBRATABLE_FACTORS = (
     "alpha_score",
     "catalyst_score",
@@ -27,17 +27,17 @@ CALIBRATABLE_FACTORS = (
     "crowd_penalty",
 )
 
-# 惩罚类因子:在 raw_score 中被减,IC 预期为负。
+# Penalty factors: subtracted in raw_score; IC expected to be negative.
 PENALTY_FACTORS = frozenset({"risk_penalty", "crowd_penalty"})
 
 MARKETS = ("IN",)
 
 
 def get_factor_weights(market: str, *, db=None) -> dict[str, float]:
-    """读取某市场各可标定因子的权重;缺失因子 lazy seed 为 1.0。
+    """Read a market's calibratable factor weights; missing factors are lazily seeded as 1.0.
 
-    返回 {factor_code: weight},键恒为 CALIBRATABLE_FACTORS 全集。
-    消费方对未登记因子应用 `.get(code, 1.0)` 兜底。
+    Returns {factor_code: weight}; the keys are always the full CALIBRATABLE_FACTORS set.
+    Consumers should use `.get(code, 1.0)` for unregistered factors.
     """
     own = db is None
     db = db or SessionLocal()
@@ -75,12 +75,12 @@ def _serialize(row: FactorWeight) -> dict:
 
 
 def get_all_factor_weights(*, db=None) -> list[dict]:
-    """列出所有市场 × 因子的权重(含最近 IC/IR 观测),供只读 API/UI 展示。"""
+    """List weights for every market x factor (with the latest IC/IR observation), for the read-only API/UI."""
     own = db is None
     db = db or SessionLocal()
     try:
         for m in MARKETS:
-            get_factor_weights(m, db=db)  # 确保各市场已 seed
+            get_factor_weights(m, db=db)  # make sure every market is seeded
         rows = (
             db.query(FactorWeight)
             .order_by(FactorWeight.market, FactorWeight.factor_code)
@@ -97,15 +97,15 @@ def set_factor_weight(
     weight: float | None = None, is_pinned: bool | None = None,
     auto_calibrate: bool | None = None, db=None,
 ) -> dict:
-    """手动覆盖某因子权重 / pin / 开关自动标定;权重变化写 manual 审计。"""
+    """Manually override a factor weight / pin it / toggle auto-calibration; weight changes are audited as manual."""
     if factor_code not in CALIBRATABLE_FACTORS:
-        raise ValueError(f"未知因子: {factor_code}")
+        raise ValueError(f"Unknown factor: {factor_code}")
     if market not in MARKETS:
-        raise ValueError(f"未知市场: {market}")
+        raise ValueError(f"Unknown market: {market}")
     own = db is None
     db = db or SessionLocal()
     try:
-        get_factor_weights(market, db=db)  # 确保行存在
+        get_factor_weights(market, db=db)  # make sure the row exists
         row = (
             db.query(FactorWeight)
             .filter(FactorWeight.factor_code == factor_code, FactorWeight.market == market)
@@ -113,7 +113,7 @@ def set_factor_weight(
         )
         if weight is not None:
             old = float(row.weight)
-            new = round(max(0.1, min(3.0, float(weight))), 4)  # 手动也有界,防误填
+            new = round(max(0.1, min(3.0, float(weight))), 4)  # manual values are bounded too, against typos
             if abs(new - old) >= 1e-9:
                 row.weight = new
                 row.reason = "manual"

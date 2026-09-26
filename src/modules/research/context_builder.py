@@ -65,11 +65,11 @@ def _estimate_quality_score(coverage: dict) -> int:
 
 
 class ContextBuilder:
-    """统一构建 Agent 上下文（新闻分层 + 历史K线 + 账户约束 + 质量评分）"""
+    """Build the agent context (layered news + historical K-lines + account constraints + quality score)."""
 
     def __init__(self):
         self._kline_cache: dict[tuple[str, str, int], dict] = {}
-        # 每次构建内,各市场大盘指数只取一次(避免逐股重复请求)。
+        # Within one build, each market's index is fetched only once (not per stock).
         self._index_cache: dict[str, dict | None] = {}
 
     @staticmethod
@@ -96,7 +96,7 @@ class ContextBuilder:
                 if not isinstance(items, list):
                     items = []
                 if not items:
-                    # 新版本盘前/盘后将新闻放在 context_payload.<symbol>.news.*
+                    # Newer pre-market/close reports keep news in context_payload.<symbol>.news.*
                     ctx_payload = raw.get("context_payload") or {}
                     if isinstance(ctx_payload, dict):
                         sym_payload = ctx_payload.get(symbol) or {}
@@ -136,7 +136,7 @@ class ContextBuilder:
                     )
             return dedupe_news_items(out)
         except Exception as e:
-            logger.warning(f"读取历史新闻失败: {symbol} - {e}")
+            logger.warning(f"Failed to read historical news: {symbol} - {e}")
             return []
         finally:
             db.close()
@@ -209,7 +209,7 @@ class ContextBuilder:
         self._kline_cache[key] = ctx
         return ctx
 
-    # ----- ② 相对大盘强度 ------------------------------------------------- #
+    # ----- (2) Strength relative to the index --------------------------------- #
 
     @staticmethod
     def _index_for_market(market) -> tuple[str, str]:
@@ -217,8 +217,8 @@ class ContextBuilder:
         return _INDEX_BY_MARKET["IN"]
 
     def _fetch_index_context(self, symbol: str, market) -> dict:
-        """取指数多周期收益。指数 secid 规则与个股不同,用 get_index_klines 显式映射直取;
-        失败/不支持(如美股指数东财无K线)→ available False(fail-soft)。可被测试打桩。"""
+        """Index returns over several periods. Index ids differ from stocks, so get_index_klines maps them explicitly;
+        failure/unsupported -> available False (fail-soft). Tests can stub this."""
         try:
             from src.platform.marketdata.collectors.kline_collector import get_index_klines
             from src.modules.market.kline_context import _pct
@@ -234,11 +234,11 @@ class ContextBuilder:
                 "ret_20d": _pct(cur, closes[-21] if len(closes) >= 21 else None),
             }
         except Exception as e:
-            logger.debug(f"指数K线获取失败 {symbol}: {e}")
+            logger.debug(f"Index K-line fetch failed {symbol}: {e}")
             return {"available": False}
 
     def _get_index_context(self, market) -> dict | None:
-        """取某市场大盘指数上下文,每次构建内按市场缓存一次。"""
+        """A market's index context, cached once per market within one build."""
         mkt = market.value if isinstance(market, MarketCode) else str(market or "")
         if mkt in self._index_cache:
             return self._index_cache[mkt]
@@ -255,7 +255,7 @@ class ContextBuilder:
         kline_history: dict,
         index_ctx: dict | None,
     ) -> dict | None:
-        """个股 vs 大盘的 5日/20日超额收益。任一侧数据缺失 → None(fail-soft)。"""
+        """A stock's 5-day/20-day excess return over the index. Missing data on either side -> None (fail-soft)."""
         try:
             if not kline_history or not kline_history.get("available"):
                 return None
@@ -288,10 +288,10 @@ class ContextBuilder:
                 "excess_20d": excess_20d,
             }
         except Exception as e:
-            logger.debug(f"相对强度计算失败: {e}")
+            logger.debug(f"Relative strength computation failed: {e}")
             return None
 
-    # ----- ① 公告全文 + 头部新闻正文保留 --------------------------------- #
+    # ----- (1) Full announcement text + keep body text of top news ----------- #
 
     @staticmethod
     def _enrich_events_fulltext(events: list[dict], **_kwargs: object) -> list[dict]:
@@ -306,9 +306,9 @@ class ContextBuilder:
         top_k: int = 2,
         max_chars: int = 800,
     ) -> list[dict]:
-        """头部 top_k 条新闻保留更多已有正文(放宽到 max_chars),其余维持原样。
+        """Keep more of the existing body text (up to max_chars) for the top_k news items; the rest stay as they are.
 
-        不抓网络,只是放宽采集层 300 字截断 —— 没有正文的条目自然保持原样。
+        No network fetch; it only relaxes the collection layer's 300-character truncation; items without body text stay as they are.
         """
         if not news:
             return news
@@ -442,29 +442,29 @@ class ContextBuilder:
                 "history_news_count": len(hist_ranked),
             }
 
-            # ① 头部实时新闻保留更多正文(放宽采集层 300 字截断)
+            # (1) Keep more body text for the top live news (relaxes the 300-character truncation)
             realtime_for_payload = self._retain_news_content(
                 [dict(it) for it in realtime_ranked[:8]], top_k=2, max_chars=800
             )
-            # ① 重要公告(importance>=2)的前 2-3 条附加东财全文(纯文本,~1000 字)
+            # (1) Attach full text (plain text, ~1000 characters) to the first 2-3 important announcements (importance>=2)
             events_for_payload = self._enrich_events_fulltext(
                 [dict(ev) for ev in ((pack.events.items if (pack and pack.events) else [])[:8])],
                 top_k=3,
                 importance_min=2,
             )
 
-            # ② 个股相对大盘强度(指数按市场缓存一次)
+            # (2) Stock strength relative to the index (index cached once per market)
             relative_strength = self._compute_relative_strength(
                 market=market,
                 kline_history=kline_history,
                 index_ctx=self._get_index_context(market),
             )
 
-            # ④ 最近一次 TradingAgents 深度结论(高权重先验,仅紧凑版本)
+            # (4) Latest TradingAgents deep research conclusion (strong prior, compact version only)
             try:
                 ta_verdict = get_latest_ta_verdict(symbol, within_days=14)
             except Exception as e:
-                logger.debug(f"注入 TA 深度结论失败 {symbol}: {e}")
+                logger.debug(f"Failed to inject the TA deep research conclusion {symbol}: {e}")
                 ta_verdict = None
 
             payload = {

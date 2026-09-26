@@ -1,9 +1,9 @@
-"""trigger API 幂等性 + 状态机兜底测试。
+"""Trigger API idempotency + state machine fallback tests.
 
-3 条原则:
-1. 任务重启后(stale),允许重新分析触发
-2. 每次触发先检查"是否有真正在跑的任务",有则返回现有 trace_id 不启新任务
-3. force_refresh=true 时无条件启新任务(允许"忽略缓存重新分析")
+Three principles:
+1. after a task restarts (stale), a new analysis may be triggered
+2. each trigger first checks for a task really running and, if there is one, returns its trace_id without starting a new one
+3. force_refresh=true always starts a new task (allowing "ignore the cache and re-analyse")
 """
 
 from __future__ import annotations
@@ -33,7 +33,7 @@ def _fake_run(status: str):
 
 
 def _setup_db(latest_log, run=None):
-    """构造 running AgentRun → 最新日志 → trace 最终记录的 mock。"""
+    """Build mocks for a running AgentRun -> latest log -> the trace's final record."""
     db = MagicMock()
     active_query = MagicMock()
     active_query.filter.return_value.order_by.return_value.first.return_value = None
@@ -46,13 +46,13 @@ def _setup_db(latest_log, run=None):
 
 
 def test_no_running_task_returns_none():
-    """没日志 = 没在跑 → 允许新触发"""
+    """No logs = not running -> a new trigger is allowed."""
     db = _setup_db(latest_log=None)
     assert find_active_tradingagents_trace(db, "601127") is None
 
 
 def test_recent_log_no_run_returns_trace():
-    """最近 1 分钟有日志且无 AgentRun → 在跑,返回 trace_id"""
+    """Logs within the last minute and no AgentRun -> running; returns trace_id."""
     now = datetime.now(timezone.utc)
     log = _fake_log(now - timedelta(seconds=30))
     db = _setup_db(latest_log=log, run=None)
@@ -60,7 +60,7 @@ def test_recent_log_no_run_returns_trace():
 
 
 def test_stale_log_returns_none():
-    """5 分钟无新进度 → stale → 允许新触发(返回 None)"""
+    """No new progress for 5 minutes -> stale -> a new trigger is allowed (returns None)."""
     now = datetime.now(timezone.utc)
     log = _fake_log(now - timedelta(minutes=10))
     db = _setup_db(latest_log=log, run=None)
@@ -68,7 +68,7 @@ def test_stale_log_returns_none():
 
 
 def test_completed_success_returns_none():
-    """AgentRun.status=success → 不在跑(允许新触发,例如重新分析)"""
+    """AgentRun.status=success -> not running (a new trigger is allowed, e.g. re-analysis)."""
     now = datetime.now(timezone.utc)
     log = _fake_log(now - timedelta(seconds=30))
     run = _fake_run("success")
@@ -77,7 +77,7 @@ def test_completed_success_returns_none():
 
 
 def test_completed_failed_returns_none():
-    """AgentRun.status=failed → 不在跑(允许重新分析)"""
+    """AgentRun.status=failed -> not running (re-analysis allowed)."""
     now = datetime.now(timezone.utc)
     log = _fake_log(now - timedelta(seconds=30))
     run = _fake_run("failed")
@@ -86,7 +86,7 @@ def test_completed_failed_returns_none():
 
 
 def test_running_status_returns_trace():
-    """AgentRun.status=running 且日志新 → 在跑"""
+    """AgentRun.status=running with fresh logs -> running."""
     now = datetime.now(timezone.utc)
     log = _fake_log(now - timedelta(seconds=30))
     run = _fake_run("running")
@@ -95,11 +95,11 @@ def test_running_status_returns_trace():
 
 
 def test_running_status_but_stale_returns_none():
-    """AgentRun.status=running 但日志已过 5 分钟 → 视为 stale 不在跑"""
+    """AgentRun.status=running but logs older than 5 minutes -> stale, not running."""
     now = datetime.now(timezone.utc)
     log = _fake_log(now - timedelta(minutes=10))
     run = _fake_run("running")
     db = _setup_db(latest_log=log, run=run)
-    # 注意:当前实现 run.status in ('success','failed') 才提前 return,
-    # 'running' 但 stale 应该按 stale 处理 → None
+    # Note: the current implementation returns early only for run.status in ('success','failed');
+    # 'running' but stale should be treated as stale -> None
     assert find_active_tradingagents_trace(db, "601127") is None

@@ -88,7 +88,7 @@ def create_service(body: ServiceCreate, db: Session = Depends(get_db)):
 def update_service(service_id: int, body: ServiceUpdate, db: Session = Depends(get_db)):
     service = db.query(AIService).filter(AIService.id == service_id).first()
     if not service:
-        raise HTTPException(404, "AI 服务商不存在")
+        raise HTTPException(404, "AI provider not found")
 
     for key, value in body.model_dump(exclude_unset=True).items():
         if key == "api_key":
@@ -104,7 +104,7 @@ def update_service(service_id: int, body: ServiceUpdate, db: Session = Depends(g
 def delete_service(service_id: int, db: Session = Depends(get_db)):
     service = db.query(AIService).filter(AIService.id == service_id).first()
     if not service:
-        raise HTTPException(404, "AI 服务商不存在")
+        raise HTTPException(404, "AI provider not found")
     db.delete(service)
     db.commit()
     return {"ok": True}
@@ -146,7 +146,7 @@ def list_models(db: Session = Depends(get_db)):
 def create_model(body: ModelCreate, db: Session = Depends(get_db)):
     service = db.query(AIService).filter(AIService.id == body.service_id).first()
     if not service:
-        raise HTTPException(400, "AI 服务商不存在")
+        raise HTTPException(400, "AI provider not found")
 
     if body.is_default:
         db.query(AIModel).update({"is_default": False})
@@ -165,7 +165,7 @@ def create_model(body: ModelCreate, db: Session = Depends(get_db)):
 def update_model(model_id: int, body: ModelUpdate, db: Session = Depends(get_db)):
     model = db.query(AIModel).filter(AIModel.id == model_id).first()
     if not model:
-        raise HTTPException(404, "AI 模型不存在")
+        raise HTTPException(404, "AI model not found")
 
     data = body.model_dump(exclude_unset=True)
     if data.get("is_default"):
@@ -183,7 +183,7 @@ def update_model(model_id: int, body: ModelUpdate, db: Session = Depends(get_db)
 def delete_model(model_id: int, db: Session = Depends(get_db)):
     model = db.query(AIModel).filter(AIModel.id == model_id).first()
     if not model:
-        raise HTTPException(404, "AI 模型不存在")
+        raise HTTPException(404, "AI model not found")
     db.delete(model)
     db.commit()
     return {"ok": True}
@@ -193,11 +193,11 @@ def delete_model(model_id: int, db: Session = Depends(get_db)):
 async def test_model(model_id: int, db: Session = Depends(get_db)):
     model = db.query(AIModel).filter(AIModel.id == model_id).first()
     if not model:
-        raise HTTPException(404, "AI 模型不存在")
+        raise HTTPException(404, "AI model not found")
 
     service = db.query(AIService).filter(AIService.id == model.service_id).first()
     if not service:
-        raise HTTPException(400, "关联的服务商不存在")
+        raise HTTPException(400, "The linked provider doesn't exist")
 
     try:
         client = AIClient(
@@ -205,8 +205,8 @@ async def test_model(model_id: int, db: Session = Depends(get_db)):
             api_key=service.api_key,
             model=model.model,
         )
-        # 测试连通性时不下发 temperature:部分模型(如 o1/claude-opus 等)不接受该参数,
-        # 省略后对所有模型都安全,避免因 temperature 报错而误判模型不可用。
+        # The connectivity test sends no temperature: some models (e.g. o1/claude-opus) reject it,
+        # and omitting it is safe for every model, so a temperature error can't make a working model look broken.
         reply = await client.chat(
             system_prompt="You are a helpful assistant.",
             user_content="Say 'OK' in one word.",
@@ -214,26 +214,26 @@ async def test_model(model_id: int, db: Session = Depends(get_db)):
         )
         return {"ok": True, "reply": reply.strip()}
     except Exception as e:
-        raise HTTPException(400, f"测试失败: {e}")
+        raise HTTPException(400, f"Test failed: {e}")
 
 
 @router.post("/services/{service_id}/discover-models")
 async def discover_models(service_id: int, db: Session = Depends(get_db)):
     service = db.query(AIService).filter(AIService.id == service_id).first()
     if not service:
-        raise HTTPException(404, "AI 服务商不存在")
+        raise HTTPException(404, "AI provider not found")
     try:
         client = AIClient(base_url=service.base_url, api_key=service.api_key)
         models = await client.list_models()
         return {"models": models}
     except Exception as e:
-        raise HTTPException(400, f"嗅探失败: {e}")
+        raise HTTPException(400, f"Model discovery failed: {e}")
 
 
 def _batch_add_models_once(service_id: int, body: BatchModelCreate, db: Session):
     service = db.query(AIService).filter(AIService.id == service_id).first()
     if not service:
-        raise HTTPException(404, "AI 服务商不存在")
+        raise HTTPException(404, "AI provider not found")
 
     existing = {m.model for m in service.models}
     added = 0
@@ -260,7 +260,7 @@ def _batch_add_models_once(service_id: int, body: BatchModelCreate, db: Session)
 def batch_add_models(
     service_id: int, body: BatchModelCreate, db: Session = Depends(get_db)
 ):
-    """批量写入模型；本地 SQLite 短暂争用时重试并快速返回可读错误。"""
+    """Write models in bulk; retry briefly on local SQLite contention and return a readable error quickly."""
     for attempt in range(3):
         try:
             return _batch_add_models_once(service_id, body, db)
@@ -272,6 +272,6 @@ def batch_add_models(
             )
             if not locked or attempt == 2:
                 if locked:
-                    raise HTTPException(409, "数据库正忙，请稍后重试。") from exc
+                    raise HTTPException(409, "The database is busy; please try again shortly.") from exc
                 raise
             time.sleep(0.05 * (attempt + 1))

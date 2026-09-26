@@ -1,4 +1,4 @@
-"""因子自校准闭环(M4):calibrate_all_markets 端到端接通评分。"""
+"""Factor self-calibration loop (M4): calibrate_all_markets connected end to end to scoring."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ from datetime import date, timedelta
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-import src.platform.persistence.models  # noqa: F401  注册 ORM 模型
+import src.platform.persistence.models  # noqa: F401  registers the ORM models
 from src.platform.persistence.database import Base
 
 
@@ -33,7 +33,7 @@ def _seed_pair(db, sid, *, market, snapshot_date, alpha, ret, horizon=5):
 
 
 def test_calibrate_all_markets_closes_loop_into_scoring():
-    """端到端:快照+outcome → calibrate_all_markets → IN alpha 权重上调 → 评分 raw_score 提升。"""
+    """End to end: snapshots + outcomes -> calibrate_all_markets -> IN alpha weight up -> scoring raw_score up."""
     from src.modules.strategy.factor_calibration import calibrate_all_markets
     from src.modules.strategy.factor_weights import get_factor_weights
     from src.modules.strategy.strategy_engine import _compute_factor_breakdown
@@ -50,7 +50,7 @@ def test_calibrate_all_markets_closes_loop_into_scoring():
         assert set(res) == {"IN"}
 
         w = get_factor_weights("IN", db=db)
-        assert w["alpha_score"] > 1.0  # IC 闭环把权重抬高
+        assert w["alpha_score"] > 1.0  # the IC loop raised the weight
 
         row = EntryCandidate(
             score=80.0, action="watch", status="active", plan_quality=80,

@@ -1,4 +1,4 @@
-"""系统自检 API。"""
+"""System self-check API."""
 
 from fastapi import APIRouter, Query
 
@@ -9,15 +9,15 @@ router = APIRouter()
 
 @router.get("/selfcheck")
 async def selfcheck(
-    notify_send: bool = Query(False, description="是否真实发送通知测试(默认只校验配置不发送)"),
-    list_only: bool = Query(False, alias="list", description="只列出待检项不探测(前端先渲染列表)"),
-    keys: str | None = Query(None, description="逗号分隔,只探测这些 key(前端逐项更新进度)"),
+    notify_send: bool = Query(False, description="Really send a test notification (by default only the config is validated)"),
+    list_only: bool = Query(False, alias="list", description="Only list the items to check, without probing (the frontend renders the list first)"),
+    keys: str | None = Query(None, description="Comma-separated; only probe these keys (the frontend updates progress item by item)"),
 ):
-    """一键体检 数据源 / AI / 通知。
+    """Check data sources / AI / notifications in one go.
 
-    - `?list=1`:只返回待检项身份 `{items:[{category,key,name}]}`,不探测。
-    - `?keys=ds:1,ai:2`:只探测这些项(逐项进度)。
-    - 无参:探测全部。
+    - `?list=1`: return only the identities of the items to check `{items:[{category,key,name}]}`, without probing.
+    - `?keys=ds:1,ai:2`: probe only these items (progress item by item).
+    - no parameters: probe everything.
     """
     if list_only:
         return {"items": list_selfcheck_items()}

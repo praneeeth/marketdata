@@ -21,10 +21,10 @@ def test_failover_model_adapter_forwards_each_model_stream_chunk_and_maps_tool_c
             assert messages[0]["role"] == "user"
             assert tools[0]["function"]["name"] == "get_portfolio"
             assert temperature == 0.5
-            yield ("token", "已")
-            yield ("token", "查询")
+            yield ("token", "Looked ")
+            yield ("token", "up")
             yield ("message", {
-                "content": "已查询",
+                "content": "Looked up",
                 "tool_calls": [{"id": "call-1", "name": "get_portfolio", "arguments": "{}"}],
                 "usage": {
                     "input_tokens": 120,
@@ -43,17 +43,17 @@ def test_failover_model_adapter_forwards_each_model_stream_chunk_and_maps_tool_c
         emitted.append(token)
 
     turn = asyncio.run(FailoverModelAdapter(FakeClient()).run_turn(
-        [ModelMessage(role="user", content="我的持仓")],
-        [ToolSpec(name="get_portfolio", title="持仓", description="查询持仓", risk=ToolRisk.READ,
+        [ModelMessage(role="user", content="my holdings")],
+        [ToolSpec(name="get_portfolio", title="Holdings", description="Get holdings", risk=ToolRisk.READ,
                   input_schema={"type": "object", "properties": {}})],
         emit,
     ))
 
-    assert turn.content == "已查询"
+    assert turn.content == "Looked up"
     assert turn.tool_calls[0].name == "get_portfolio"
     assert turn.usage.input_tokens == 120
     assert turn.usage.cached_input_tokens == 80
-    assert emitted == ["已", "查询"]
+    assert emitted == ["Looked ", "up"]
 
 
 def test_failover_model_adapter_encodes_tool_call_history_for_model():
@@ -64,7 +64,7 @@ def test_failover_model_adapter_encodes_tool_call_history_for_model():
     class FakeClient:
         async def chat_stream(self, messages, tools, temperature):
             captured_messages.extend(messages)
-            yield ("message", {"content": "已基于持仓回答", "tool_calls": []})
+            yield ("message", {"content": "Answered from the holdings", "tool_calls": []})
 
     async def ignore_token(_token: str) -> None:
         return None
@@ -79,14 +79,14 @@ def test_failover_model_adapter_encodes_tool_call_history_for_model():
                 role="tool",
                 name="get_portfolio",
                 tool_call_id="call-1",
-                content="实盘持仓：广汽集团",
+                content="Real holdings: Tata Motors",
             ),
         ],
         [],
         ignore_token,
     ))
 
-    assert turn.content == "已基于持仓回答"
+    assert turn.content == "Answered from the holdings"
     assert captured_messages == [
         {
             "role": "assistant",
@@ -99,7 +99,7 @@ def test_failover_model_adapter_encodes_tool_call_history_for_model():
         },
         {
             "role": "tool",
-            "content": "实盘持仓：广汽集团",
+            "content": "Real holdings: Tata Motors",
             "tool_call_id": "call-1",
             "name": "get_portfolio",
         },
@@ -114,11 +114,11 @@ def test_failover_model_adapter_requires_a_tool_without_streaming_action_preambl
             self, messages, tools, temperature, tool_choice=None
         ):
             assert tool_choice == "required"
-            yield ("token", "我已经更新")
+            yield ("token", "I've updated it")
             yield (
                 "message",
                 {
-                    "content": "我已经更新",
+                    "content": "I've updated it",
                     "tool_calls": [
                         {"id": "call-1", "name": "update_price_alert", "arguments": "{}"}
                     ],
@@ -132,12 +132,12 @@ def test_failover_model_adapter_requires_a_tool_without_streaming_action_preambl
 
     turn = asyncio.run(
         FailoverModelAdapter(FakeClient()).run_turn(
-            [ModelMessage(role="user", content="修改提醒")],
+            [ModelMessage(role="user", content="change the alert")],
             [
                 ToolSpec(
                     name="update_price_alert",
-                    title="修改提醒",
-                    description="修改价格提醒",
+                    title="Update alert",
+                    description="Update a price alert",
                     risk=ToolRisk.WRITE,
                     input_schema={"type": "object", "properties": {}},
                 )

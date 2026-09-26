@@ -34,7 +34,7 @@ class _FakeService:
 
     def get_conversation(self, _conversation_id):
         return SimpleNamespace(
-            messages=[SimpleNamespace(role="user", content="测试问题")]
+            messages=[SimpleNamespace(role="user", content="test question")]
         )
 
     async def prepare_context(self, _conversation_id):
@@ -60,7 +60,7 @@ class _CompletedRuntime:
     async def run(self, request, sink):
         self.request = request
         await sink.publish(RuntimeEvent(type=EventType.RUN_CREATED, run_id="12"))
-        return RunResult(run_id="12", status=RunStatus.COMPLETED, answer="已完成")
+        return RunResult(run_id="12", status=RunStatus.COMPLETED, answer="Done")
 
 
 class _TracedRuntime:
@@ -97,11 +97,11 @@ class _TracedRuntime:
                     "call_id": "call-1",
                     "tool": "get_price_alerts",
                     "ok": True,
-                    "summary": "找到 1 条提醒",
+                    "summary": "Found 1 alert",
                 },
             )
         )
-        return RunResult(run_id="12", status=RunStatus.COMPLETED, answer="已查询")
+        return RunResult(run_id="12", status=RunStatus.COMPLETED, answer="Looked up")
 
 
 class _TimedOutRuntime:
@@ -122,7 +122,7 @@ class _HallucinatedMutationRuntime:
         return RunResult(
             run_id="12",
             status=RunStatus.COMPLETED,
-            answer="两条提醒的名称已成功更新。",
+            answer="Both alerts were renamed.",
         )
 
 
@@ -147,12 +147,12 @@ class _SuccessfulMutationRuntime:
                     "call_id": "call-1",
                     "tool": "update_price_alert",
                     "ok": True,
-                    "summary": "提醒已更新",
+                    "summary": "Alert updated",
                 },
             )
         )
         return RunResult(
-            run_id="12", status=RunStatus.COMPLETED, answer="提醒已成功更新。"
+            run_id="12", status=RunStatus.COMPLETED, answer="The alert was updated."
         )
 
 
@@ -167,12 +167,12 @@ class _FailedMutationRuntime:
                     "call_id": "call-1",
                     "tool": "update_price_alert",
                     "ok": False,
-                    "summary": "未找到提醒",
+                    "summary": "Alert not found",
                 },
             )
         )
         return RunResult(
-            run_id="12", status=RunStatus.COMPLETED, answer="提醒更新没有成功。"
+            run_id="12", status=RunStatus.COMPLETED, answer="The alert update didn't succeed."
         )
 
 
@@ -230,7 +230,7 @@ def test_assistant_stream_announces_a_durable_run_without_fake_status():
 
     async def run():
         response = await assistant_api.stream_assistant_message(
-            1, assistant_api.SendAssistantMessageCommand(content="测试问题"), service
+            1, assistant_api.SendAssistantMessageCommand(content="test question"), service
         )
         return response.headers, await _read_events(response)
 
@@ -241,7 +241,7 @@ def test_assistant_stream_announces_a_durable_run_without_fake_status():
     assert events[0] == ("run_started", {"task_id": 12})
     assert all(event != "status" for event, _data in events)
     assert events[-1][0] == "done"
-    assert events[-1][1]["content"] == "已完成"
+    assert events[-1][1]["content"] == "Done"
     assert service.runtime.request.limits.run_timeout_seconds == 180
     assert service.runtime.request.limits.max_steps == 12
     assert service.runtime.request.limits.max_tool_calls == 24
@@ -261,7 +261,7 @@ def test_assistant_stream_exposes_context_usage_before_runtime_steps():
         hard_limit_tokens=10200,
     )
     context = ContextBuildResult(
-        messages=[ModelMessage(role="user", content="已压缩的问题")],
+        messages=[ModelMessage(role="user", content="compressed question")],
         usage_before=usage_before,
         usage_after=usage_after,
         compressed=True,
@@ -272,7 +272,7 @@ def test_assistant_stream_exposes_context_usage_before_runtime_steps():
 
     async def run():
         response = await assistant_api.stream_assistant_message(
-            1, assistant_api.SendAssistantMessageCommand(content="测试问题"), service
+            1, assistant_api.SendAssistantMessageCommand(content="test question"), service
         )
         return await _read_events(response)
 
@@ -301,7 +301,7 @@ def test_assistant_stream_preserves_runtime_step_and_tool_trace_events():
     async def run():
         response = await assistant_api.stream_assistant_message(
             1,
-            assistant_api.SendAssistantMessageCommand(content="查询提醒"),
+            assistant_api.SendAssistantMessageCommand(content="look up alerts"),
             service,
         )
         return await _read_events(response)
@@ -313,7 +313,7 @@ def test_assistant_stream_preserves_runtime_step_and_tool_trace_events():
     }] == [
         ("step_updated", {"step": 1, "status": "running"}),
         ("tool_call_start", {"name": "get_price_alerts", "arguments": {"limit": 20}}),
-        ("tool_result", {"name": "get_price_alerts", "ok": True, "preview": "找到 1 条提醒"}),
+        ("tool_result", {"name": "get_price_alerts", "ok": True, "preview": "Found 1 alert"}),
     ]
 
 
@@ -323,7 +323,7 @@ def test_assistant_message_leaves_tool_choice_optional_for_normal_chat():
     async def run():
         response = await assistant_api.stream_assistant_message(
             1,
-            assistant_api.SendAssistantMessageCommand(content="你好，介绍一下自己"),
+            assistant_api.SendAssistantMessageCommand(content="Hi, introduce yourself"),
             service,
         )
         return await _read_events(response)
@@ -336,7 +336,7 @@ def test_assistant_message_leaves_tool_choice_optional_for_normal_chat():
 def test_assistant_messages_prepend_tool_first_instruction():
     prompt = importlib.import_module("src.modules.assistant.prompt")
     messages = prompt.build_assistant_messages(
-        [assistant_api.ModelMessage(role="user", content="分析 600519")]
+        [assistant_api.ModelMessage(role="user", content="analyse INFY")]
     )
 
     assert messages[0].role == "system"
@@ -346,7 +346,7 @@ def test_assistant_messages_prepend_tool_first_instruction():
     assert "Never claim that an alert was created, changed or deleted" in messages[0].content
     assert "Earlier assistant messages may contain plans or mistaken claims" in messages[0].content
     assert "Never give ratings" in messages[0].content
-    assert messages[1].content == "分析 600519"
+    assert messages[1].content == "analyse INFY"
 
 
 def test_assistant_messages_add_turn_notice_for_advice_requests():
@@ -364,7 +364,7 @@ def test_assistant_stream_surfaces_runtime_timeout_instead_of_saving_empty_reply
 
     async def run():
         response = await assistant_api.stream_assistant_message(
-            1, assistant_api.SendAssistantMessageCommand(content="测试问题"), service
+            1, assistant_api.SendAssistantMessageCommand(content="test question"), service
         )
         return await _read_events(response)
 
@@ -372,7 +372,7 @@ def test_assistant_stream_surfaces_runtime_timeout_instead_of_saving_empty_reply
 
     assert events[-1] == (
         "error",
-        {"message": "助手响应超时，请稍后重试。", "code": "run_timeout"},
+        {"message": "The assistant timed out. Please try again shortly.", "code": "run_timeout"},
     )
     assert service.recorded_assistant_messages == []
     assert service.finished == [("failed", "run_timeout")]
@@ -384,7 +384,7 @@ def test_assistant_stream_rejects_an_empty_completed_reply():
 
     async def run():
         response = await assistant_api.stream_assistant_message(
-            1, assistant_api.SendAssistantMessageCommand(content="测试问题"), service
+            1, assistant_api.SendAssistantMessageCommand(content="test question"), service
         )
         return await _read_events(response)
 
@@ -392,7 +392,7 @@ def test_assistant_stream_rejects_an_empty_completed_reply():
 
     assert events[-1] == (
         "error",
-        {"message": "助手暂时不可用，请稍后重试。", "code": "empty_answer"},
+        {"message": "The assistant is unavailable right now. Please try again shortly.", "code": "empty_answer"},
     )
     assert service.recorded_assistant_messages == []
     assert service.finished == [("failed", "empty_answer")]
@@ -405,7 +405,7 @@ def test_assistant_write_failure_does_not_emit_a_retry_card():
     async def run():
         response = await assistant_api.stream_assistant_message(
             1,
-            assistant_api.SendAssistantMessageCommand(content="请修改价格提醒"),
+            assistant_api.SendAssistantMessageCommand(content="please change the price alert"),
             service,
         )
         return await _read_events(response)
@@ -425,7 +425,7 @@ def test_assistant_stream_preserves_the_model_answer_without_a_host_fallback():
     async def run():
         response = await assistant_api.stream_assistant_message(
             1,
-            assistant_api.SendAssistantMessageCommand(content="修改两条提醒名称"),
+            assistant_api.SendAssistantMessageCommand(content="rename two alerts"),
             service,
         )
         return await _read_events(response)
@@ -433,8 +433,8 @@ def test_assistant_stream_preserves_the_model_answer_without_a_host_fallback():
     events = asyncio.run(run())
 
     assert events[-1][0] == "done"
-    assert events[-1][1]["content"] == "两条提醒的名称已成功更新。"
-    assert service.recorded_assistant_messages == ["两条提醒的名称已成功更新。"]
+    assert events[-1][1]["content"] == "Both alerts were renamed."
+    assert service.recorded_assistant_messages == ["Both alerts were renamed."]
     assert service.finished == [("completed", None)]
 
 
@@ -445,7 +445,7 @@ def test_assistant_stream_keeps_an_ambiguous_confirmation_answer_intact():
     async def run():
         response = await assistant_api.stream_assistant_message(
             1,
-            assistant_api.SendAssistantMessageCommand(content="复审确认，包括价格和名字"),
+            assistant_api.SendAssistantMessageCommand(content="review and confirm, including the prices and names"),
             service,
         )
         return await _read_events(response)
@@ -453,7 +453,7 @@ def test_assistant_stream_keeps_an_ambiguous_confirmation_answer_intact():
     events = asyncio.run(run())
 
     assert events[-1][0] == "done"
-    assert events[-1][1]["content"] == "两条提醒的名称已成功更新。"
+    assert events[-1][1]["content"] == "Both alerts were renamed."
     assert all(event != "action_status" for event, _data in events)
 
 
@@ -464,7 +464,7 @@ def test_assistant_stream_allows_mutation_claim_with_successful_write_tool():
     async def run():
         response = await assistant_api.stream_assistant_message(
             1,
-            assistant_api.SendAssistantMessageCommand(content="修改提醒名称"),
+            assistant_api.SendAssistantMessageCommand(content="rename the alert"),
             service,
         )
         return await _read_events(response)
@@ -472,8 +472,8 @@ def test_assistant_stream_allows_mutation_claim_with_successful_write_tool():
     events = asyncio.run(run())
 
     assert events[-1][0] == "done"
-    assert events[-1][1]["content"] == "提醒已成功更新。"
-    assert service.recorded_assistant_messages == ["提醒已成功更新。"]
+    assert events[-1][1]["content"] == "The alert was updated."
+    assert service.recorded_assistant_messages == ["The alert was updated."]
     assert service.finished == [("completed", None)]
 
 
@@ -484,7 +484,7 @@ def test_assistant_stream_allows_explicit_failed_mutation_result():
     async def run():
         response = await assistant_api.stream_assistant_message(
             1,
-            assistant_api.SendAssistantMessageCommand(content="修改提醒名称"),
+            assistant_api.SendAssistantMessageCommand(content="rename the alert"),
             service,
         )
         return await _read_events(response)
@@ -492,8 +492,8 @@ def test_assistant_stream_allows_explicit_failed_mutation_result():
     events = asyncio.run(run())
 
     assert events[-1][0] == "done"
-    assert events[-1][1]["content"] == "提醒更新没有成功。"
-    assert service.recorded_assistant_messages == ["提醒更新没有成功。"]
+    assert events[-1][1]["content"] == "The alert update didn't succeed."
+    assert service.recorded_assistant_messages == ["The alert update didn't succeed."]
     assert service.finished == [("completed", None)]
 
 
@@ -503,7 +503,7 @@ def test_assistant_stream_starts_work_even_if_the_client_never_reads_the_body():
 
     async def run():
         await assistant_api.stream_assistant_message(
-            1, assistant_api.SendAssistantMessageCommand(content="测试问题"), service
+            1, assistant_api.SendAssistantMessageCommand(content="test question"), service
         )
         async with asyncio.timeout(0.1):
             while not service.finished:
@@ -511,7 +511,7 @@ def test_assistant_stream_starts_work_even_if_the_client_never_reads_the_body():
 
     asyncio.run(run())
 
-    assert service.recorded_assistant_messages == ["已完成"]
+    assert service.recorded_assistant_messages == ["Done"]
     assert service.finished == [("completed", None)]
 
 
@@ -523,7 +523,7 @@ def test_assistant_stream_enforces_the_transport_timeout(monkeypatch):
     async def run():
         started = time.monotonic()
         response = await assistant_api.stream_assistant_message(
-            1, assistant_api.SendAssistantMessageCommand(content="测试问题"), service
+            1, assistant_api.SendAssistantMessageCommand(content="test question"), service
         )
         events = await _read_events(response)
         return time.monotonic() - started, events
@@ -533,7 +533,7 @@ def test_assistant_stream_enforces_the_transport_timeout(monkeypatch):
     assert elapsed < 1.5
     assert events[-1] == (
         "error",
-        {"message": "助手响应超时，请稍后重试。", "code": "transport_timeout"},
+        {"message": "The assistant timed out. Please try again shortly.", "code": "transport_timeout"},
     )
     assert service.finished == [("failed", "transport_timeout")]
 
@@ -546,7 +546,7 @@ def test_assistant_stream_does_not_wait_for_a_slow_to_cancel_adapter(monkeypatch
     async def run():
         started = time.monotonic()
         response = await assistant_api.stream_assistant_message(
-            1, assistant_api.SendAssistantMessageCommand(content="测试问题"), service
+            1, assistant_api.SendAssistantMessageCommand(content="test question"), service
         )
         events = await _read_events(response)
         return time.monotonic() - started, events
@@ -565,7 +565,7 @@ def test_assistant_stream_closes_a_task_when_client_disconnects_after_run_start(
 
     async def run():
         response = await assistant_api.stream_assistant_message(
-            1, assistant_api.SendAssistantMessageCommand(content="测试问题"), service
+            1, assistant_api.SendAssistantMessageCommand(content="test question"), service
         )
         iterator = response.body_iterator
         first = await anext(iterator)
@@ -588,7 +588,7 @@ def test_assistant_stream_closes_the_task_when_runtime_setup_fails():
 
     async def run():
         response = await assistant_api.stream_assistant_message(
-            1, assistant_api.SendAssistantMessageCommand(content="测试问题"), service
+            1, assistant_api.SendAssistantMessageCommand(content="test question"), service
         )
         return await _read_events(response)
 
@@ -598,7 +598,7 @@ def test_assistant_stream_closes_the_task_when_runtime_setup_fails():
         (
             "error",
             {
-                "message": "助手任务执行失败，请稍后重试。",
+                "message": "The assistant task failed. Please try again shortly.",
                 "code": "transport_setup_failed",
             },
         )

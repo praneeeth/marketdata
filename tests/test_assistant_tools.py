@@ -30,7 +30,7 @@ def _session():
 
 def _request() -> RunRequest:
     return RunRequest(
-        run_id="tools-test", messages=[ModelMessage(role="user", content="测试工具")]
+        run_id="tools-test", messages=[ModelMessage(role="user", content="test tools")]
     )
 
 
@@ -59,7 +59,7 @@ def test_panwatch_registry_keeps_core_tools_direct_and_defers_specialized_tools(
 def test_portfolio_tool_is_read_only_and_includes_provenance():
     engine, session = _session()
     stock = Stock(symbol="INFY", name="Infosys", market="IN")
-    account = Account(name="默认账户")
+    account = Account(name="Default account")
     session.add_all([stock, account])
     session.commit()
     session.add(
@@ -72,7 +72,7 @@ def test_portfolio_tool_is_read_only_and_includes_provenance():
 
     assert result.ok is True
     assert "Infosys" in result.summary
-    assert result.sources[0].name == "PanWatch 持仓"
+    assert result.sources[0].name == "PanWatch positions"
     session.close()
     engine.dispose()
 
@@ -151,18 +151,18 @@ def test_research_candidates_tool_reuses_strategy_signals_and_returns_compact_ca
                     "stock_name": "Infosys",
                     "rank_score": 88.5,
                     "action": "buy",
-                    "action_label": "建仓",
+                    "action_label": "Open position",
                     "risk_level": "medium",
-                    "risk_level_label": "中风险",
+                    "risk_level_label": "Medium risk",
                     "source_pool": "market_scan",
-                    "source_pool_label": "市场池",
-                    "signal": "趋势改善",
-                    "reason": "均线与量价结构同步改善",
+                    "source_pool_label": "Market pool",
+                    "signal": "Trend improving",
+                    "reason": "MAs and price-volume structure improving together",
                     "entry_low": 1780,
                     "entry_high": 1820,
                     "target_price": 1950,
                     "stop_loss": 1710,
-                    "invalidation": "跌破 1710",
+                    "invalidation": "below 1710",
                     "payload": {
                         "source_meta": {
                             "quote": {
@@ -205,15 +205,15 @@ def test_research_candidates_tool_reuses_strategy_signals_and_returns_compact_ca
                 "market": "IN",
                 "name": "Infosys",
                 "score": 88.5,
-                "action": "建仓",
-                "risk": "中风险",
-                "source": "市场池",
-                "signal": "趋势改善",
-                "reason": "均线与量价结构同步改善",
+                "action": "Open position",
+                "risk": "Medium risk",
+                "source": "Market pool",
+                "signal": "Trend improving",
+                "reason": "MAs and price-volume structure improving together",
                 "entry_range": "1780 ~ 1820",
                 "target_price": 1950,
                 "stop_loss": 1710,
-                "invalidation": "跌破 1710",
+                "invalidation": "below 1710",
                 "current_price": 1800,
                 "change_pct": 1.2,
             }
@@ -273,14 +273,14 @@ def test_news_tool_limits_compact_items(monkeypatch):
         "md_news",
         lambda *_args, **_kwargs: [
             SimpleNamespace(
-                title="Infosys发布公告",
+                title="Infosys announcement",
                 source="eastmoney",
                 publish_time="2026-09-12T08:00:00Z",
                 url="https://example.test/1",
                 importance=2,
             ),
             SimpleNamespace(
-                title="行业动态",
+                title="Industry update",
                 source="xueqiu",
                 publish_time="2026-09-12T07:00:00Z",
                 url="https://example.test/2",
@@ -301,7 +301,7 @@ def test_news_tool_limits_compact_items(monkeypatch):
     assert result.ok is True
     assert result.data["items"] == [
         {
-            "title": "Infosys发布公告",
+            "title": "Infosys announcement",
             "source": "eastmoney",
             "published_at": "2026-09-12T08:00:00Z",
             "url": "https://example.test/1",
@@ -336,7 +336,7 @@ def test_create_price_alert_validates_and_persists_rule():
         "op": "and",
         "items": [{"type": "price", "op": ">=", "value": 1800.0}],
     }
-    assert "价格 ≥ 1800" in result.summary
+    assert "price is ≥ 1800" in result.summary
     session.close()
     engine.dispose()
 
@@ -409,14 +409,14 @@ def test_get_price_alerts_returns_compact_rules_and_supports_symbol_filter():
         [
             PriceAlertRule(
                 stock_id=stock.id,
-                name="茅台突破",
+                name="Infosys breakout",
                 enabled=True,
                 condition_group={"op": "and", "items": [{"type": "price", "op": ">=", "value": 1800}]},
                 cooldown_minutes=30,
             ),
             PriceAlertRule(
                 stock_id=other.id,
-                name="广汽回落",
+                name="Tata Motors pullback",
                 enabled=False,
                 condition_group={"op": "and", "items": [{"type": "price", "op": "<=", "value": 10}]},
             ),
@@ -437,7 +437,7 @@ def test_get_price_alerts_returns_compact_rules_and_supports_symbol_filter():
     assert result.data["items"] == [
         {
             "rule_id": 1,
-            "name": "茅台突破",
+            "name": "Infosys breakout",
             "symbol": "INFY",
             "stock_name": "Infosys",
             "market": "IN",
@@ -460,7 +460,7 @@ def test_update_price_alert_changes_rule_and_resets_trigger_state():
     session.flush()
     rule = PriceAlertRule(
         stock_id=stock.id,
-        name="旧提醒",
+        name="Old alert",
         enabled=True,
         condition_group={"op": "and", "items": [{"type": "price", "op": ">=", "value": 1800}]},
         trigger_count_today=2,
@@ -475,7 +475,7 @@ def test_update_price_alert_changes_rule_and_resets_trigger_state():
             _request(),
             {
                 "rule_id": rule.id,
-                "name": "茅台回落提醒",
+                "name": "Infosys pullback alert",
                 "enabled": False,
                 "direction": "below",
                 "target_price": 1700,
@@ -486,7 +486,7 @@ def test_update_price_alert_changes_rule_and_resets_trigger_state():
 
     session.refresh(rule)
     assert result.ok is True
-    assert rule.name == "茅台回落提醒"
+    assert rule.name == "Infosys pullback alert"
     assert rule.enabled is False
     assert rule.condition_group == {
         "op": "and",
@@ -519,7 +519,7 @@ def test_delete_price_alert_removes_rule_and_its_hits():
     stock = Stock(symbol="INFY", name="Infosys", market="IN")
     session.add(stock)
     session.flush()
-    rule = PriceAlertRule(stock_id=stock.id, name="删除我")
+    rule = PriceAlertRule(stock_id=stock.id, name="Delete me")
     session.add(rule)
     session.flush()
     session.add(

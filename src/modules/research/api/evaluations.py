@@ -1,4 +1,4 @@
-"""验证中心 API：面向产品展示的 Agent 建议复盘。"""
+"""Evaluation centre API: reviews agent items for display in the product."""
 
 from __future__ import annotations
 
@@ -33,7 +33,7 @@ def query_prediction_rows(
     horizon_unit: str | None = "trading_days",
     days: int = 90,
 ) -> list[AgentPredictionOutcome]:
-    """加载一组原始 horizon 记录，聚合与分页交给调用方完成。"""
+    """Load a set of raw horizon rows; aggregation and pagination are left to the caller."""
     cutoff = (date.today() - timedelta(days=max(1, int(days)))).strftime("%Y-%m-%d")
     query = db.query(AgentPredictionOutcome).filter(
         AgentPredictionOutcome.prediction_date >= cutoff
@@ -59,7 +59,7 @@ def query_prediction_rows(
 def filter_prediction_groups_by_status(
     groups: list[dict], status: str | None
 ) -> list[dict]:
-    """按建议组筛选状态，始终保留其全部 horizon 结果。"""
+    """Filter by item group status, always keeping all of a group's horizon results."""
     if not status:
         return groups
     return [
@@ -96,7 +96,7 @@ def list_agent_predictions(
     offset: int = Query(default=0, ge=0, le=3000),
     db: Session = Depends(get_db),
 ):
-    """按建议组返回复盘行；默认只展示交易日口径。"""
+    """Review rows per item group; only the trading-day basis is shown by default."""
     rows = query_prediction_rows(
         db=db,
         agent_name=agent_name,
@@ -131,7 +131,7 @@ def get_agent_prediction_summary(
     days: int = Query(default=90, ge=1, le=720),
     db: Session = Depends(get_db),
 ):
-    """返回与列表筛选一致的命中、覆盖与样本量汇总。"""
+    """Hit, coverage and sample-size totals consistent with the list filters."""
     rows = query_prediction_rows(
         db=db,
         agent_name=agent_name,
@@ -154,7 +154,7 @@ def evaluate_agent_predictions(
     max_horizon_days: int = Query(default=5, ge=1, le=5),
     limit: int = Query(default=300, ge=1, le=300),
 ):
-    """手动检查已到期建议；未到期记录保持 pending。"""
+    """Check due items manually; records not yet due stay pending."""
     return evaluate_pending_prediction_outcomes(
         max_horizon_days=max_horizon_days,
         limit=limit,

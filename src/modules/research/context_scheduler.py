@@ -1,4 +1,4 @@
-"""上下文维护调度器：后验评估 + 过期数据清理 + 机会自动刷新。"""
+"""Context maintenance scheduler: outcome evaluation + stale data cleanup + automatic opportunity refresh."""
 
 from __future__ import annotations
 
@@ -40,7 +40,7 @@ class ContextMaintenanceScheduler:
 
     async def _evaluate_job(self):
         if self._evaluating:
-            logger.debug("[上下文维护] 上一轮后验评估仍在执行，跳过本轮")
+            logger.debug("[Context maintenance] previous outcome evaluation still running; skipping this round")
             return
         self._evaluating = True
         try:
@@ -48,7 +48,7 @@ class ContextMaintenanceScheduler:
             level = logging.INFO if stats.get("evaluated", 0) else logging.DEBUG
             logger.log(
                 level,
-                "[上下文维护] 后验评估完成: pending=%s eligible=%s evaluated=%s skipped_not_due=%s skipped_no_price=%s",
+                "[Context maintenance] outcome evaluation done: pending=%s eligible=%s evaluated=%s skipped_not_due=%s skipped_no_price=%s",
                 stats.get("total_pending", 0),
                 stats.get("eligible", 0),
                 stats.get("evaluated", 0),
@@ -65,7 +65,7 @@ class ContextMaintenanceScheduler:
             level = logging.INFO if cand_stats.get("evaluated", 0) else logging.DEBUG
             logger.log(
                 level,
-                "[上下文维护] 候选后验评估完成: total=%s eligible=%s evaluated=%s skipped_not_due=%s skipped_no_price=%s",
+                "[Context maintenance] candidate outcome evaluation done: total=%s eligible=%s evaluated=%s skipped_not_due=%s skipped_no_price=%s",
                 cand_stats.get("total_candidates", 0),
                 cand_stats.get("eligible", 0),
                 cand_stats.get("evaluated", 0),
@@ -82,7 +82,7 @@ class ContextMaintenanceScheduler:
             level = logging.INFO if strategy_stats.get("evaluated", 0) else logging.DEBUG
             logger.log(
                 level,
-                "[上下文维护] 策略后验评估完成: total=%s eligible=%s evaluated=%s skipped_not_due=%s skipped_no_price=%s",
+                "[Context maintenance] strategy outcome evaluation done: total=%s eligible=%s evaluated=%s skipped_not_due=%s skipped_no_price=%s",
                 strategy_stats.get("total_signals", 0),
                 strategy_stats.get("eligible", 0),
                 strategy_stats.get("evaluated", 0),
@@ -99,14 +99,14 @@ class ContextMaintenanceScheduler:
             level = logging.INFO if rebalance.get("changed", 0) else logging.DEBUG
             logger.log(
                 level,
-                "[上下文维护] 策略调权完成: changed=%s checked=%s skipped_low_sample=%s",
+                "[Context maintenance] strategy re-weighting done: changed=%s checked=%s skipped_low_sample=%s",
                 rebalance.get("changed", 0),
                 rebalance.get("checked", 0),
                 rebalance.get("skipped_low_sample", 0),
             )
 
-            # Phase 4 → 因子自校准闭环:把 IC/IR 接进每因子权重的轻量标定
-            # (calibrate_all_markets 内部按市场算 IC 并据此调权,不再只是记录)。
+            # Phase 4 -> factor self-calibration loop: feeds IC/IR into a light calibration of per-factor weights
+            # (calibrate_all_markets computes IC per market and re-weights from it, instead of only recording it).
             try:
                 from src.modules.strategy.factor_calibration import calibrate_all_markets
 
@@ -114,20 +114,20 @@ class ContextMaintenanceScheduler:
                 changed = sum(r.get("changed", 0) for r in fcal.values())
                 logger.log(
                     logging.INFO if changed else logging.DEBUG,
-                    "[上下文维护] 因子自校准完成: changed=%s detail=%s",
+                    "[Context maintenance] factor self-calibration done: changed=%s detail=%s",
                     changed,
                     {m: r.get("changed", 0) for m, r in fcal.items()},
                 )
             except Exception as fc_err:
-                logger.debug("[上下文维护] 因子自校准跳过: %s", fc_err)
+                logger.debug("[Context maintenance] factor self-calibration skipped: %s", fc_err)
         except Exception as e:
-            logger.exception(f"[上下文维护] 后验评估异常: {e}")
+            logger.exception(f"[Context maintenance] outcome evaluation error: {e}")
         finally:
             self._evaluating = False
 
     async def _cleanup_job(self):
         if self._cleaning:
-            logger.debug("[上下文维护] 上一轮清理仍在执行，跳过本轮")
+            logger.debug("[Context maintenance] previous cleanup still running; skipping this round")
             return
         self._cleaning = True
         try:
@@ -138,19 +138,19 @@ class ContextMaintenanceScheduler:
                 context_run_days=self.snapshot_retention_days,
                 outcome_days=self.outcome_retention_days,
             )
-            # deleted 是 dict,任一字段 >0 就是有清理动作
+            # deleted is a dict; any field > 0 means something was cleaned up
             try:
                 from src.platform.compliance.audit import purge_old_events
 
                 if isinstance(deleted, dict):
                     deleted["compliance_events"] = await asyncio.to_thread(purge_old_events)
             except Exception:
-                logger.exception("[上下文维护] compliance_events 清理失败")
+                logger.exception("[Context maintenance] compliance_events cleanup failed")
             has_work = bool(deleted and any(deleted.values()) if isinstance(deleted, dict) else deleted)
             level = logging.INFO if has_work else logging.DEBUG
-            logger.log(level, "[上下文维护] 清理完成: %s", deleted)
+            logger.log(level, "[Context maintenance] cleanup done: %s", deleted)
         except Exception as e:
-            logger.exception(f"[上下文维护] 清理异常: {e}")
+            logger.exception(f"[Context maintenance] cleanup error: {e}")
         finally:
             self._cleaning = False
 
@@ -181,7 +181,7 @@ class ContextMaintenanceScheduler:
             strategy_eval_task,
             strategy_rebalance_task,
         )
-        # 因子自校准:须在 outcome 评估之后(IC 才新鲜),不能并进上面的 gather。
+        # Factor self-calibration must run after outcome evaluation (so IC is fresh); it can't join the gather above.
         from src.modules.strategy.factor_calibration import calibrate_all_markets
 
         factor_calibration_stats = await asyncio.to_thread(calibrate_all_markets)
@@ -194,14 +194,14 @@ class ContextMaintenanceScheduler:
         }
 
     async def _refresh_opportunities_job(self):
-        """定时刷新机会池（候选 + 策略信号）。全市场休市日跳过。"""
+        """Refresh the opportunity pool on a schedule (candidates + strategy signals). Skipped on market holidays."""
         from src.platform.scheduling.trading_calendar import any_market_trading_day
 
         if not any_market_trading_day():
-            logger.debug("[上下文维护] 非交易日，跳过机会刷新")
+            logger.debug("[Context maintenance] not a trading day; skipping the opportunity refresh")
             return
         if self._refreshing:
-            logger.debug("[上下文维护] 上一轮机会刷新仍在执行，跳过本轮")
+            logger.debug("[Context maintenance] previous opportunity refresh still running; skipping this round")
             return
         self._refreshing = True
         try:
@@ -217,17 +217,17 @@ class ContextMaintenanceScheduler:
             level = logging.INFO if result.get("count", 0) else logging.DEBUG
             logger.log(
                 level,
-                "[上下文维护] 机会自动刷新完成: snapshot_date=%s count=%s",
+                "[Context maintenance] automatic opportunity refresh done: snapshot_date=%s count=%s",
                 result.get("snapshot_date", ""),
                 result.get("count", 0),
             )
         except Exception as e:
-            logger.exception(f"[上下文维护] 机会自动刷新异常: {e}")
+            logger.exception(f"[Context maintenance] automatic opportunity refresh error: {e}")
         finally:
             self._refreshing = False
 
     async def refresh_opportunities_once(self) -> dict:
-        """手动触发一次机会刷新。"""
+        """Trigger one opportunity refresh manually."""
         with kline_source("refresh_opportunities"):
             return await asyncio.to_thread(
                 refresh_strategy_signals,
@@ -248,24 +248,24 @@ class ContextMaintenanceScheduler:
         )
 
     async def _refresh_trading_calendar_job(self):
-        """每日刷新 A 股交易日历。
+        """Refresh the NSE/BSE trading calendar daily.
 
-        日历只覆盖到当年年底,长跑实例跨年后会超出覆盖范围而降级为"只判周末",
-        因此每天凌晨拉一次。安排在各类盘前通知之前,保证当天判断用的是新日历。
+        A loaded calendar only covers the current year, so a long-running instance would fall back to "weekends only"
+        after the new year; it is refreshed early every morning, before any pre-market notification, so each day uses a fresh calendar.
         """
         from src.platform.scheduling.trading_calendar import refresh
 
         try:
             await refresh()
-        except Exception as e:  # refresh 内部已兜异常,这里只防意外
-            logger.exception(f"[上下文维护] 交易日历刷新异常: {e}")
+        except Exception as e:  # refresh already catches its own errors; this only guards against surprises
+            logger.exception(f"[Context maintenance] trading calendar refresh error: {e}")
 
     def start(self):
         self.scheduler.add_job(
             self._evaluate_job,
             "interval",
             hours=self.eval_interval_hours,
-            jitter=120,  # 错峰,避免与 price_alert/paper_trading(60s)同刻写 SQLite
+            jitter=120,  # staggered so it doesn't write SQLite at the same moment as price_alert/paper_trading (60s)
             id="context_maintenance_evaluate",
             replace_existing=True,
             coalesce=True,
@@ -282,7 +282,7 @@ class ContextMaintenanceScheduler:
             coalesce=True,
             max_instances=1,
         )
-        # 交易日历每日刷新 —— 03:00,早于所有盘前通知
+        # Daily trading calendar refresh at 03:00, before every pre-market notification
         self.scheduler.add_job(
             self._refresh_trading_calendar_job,
             "cron",
@@ -294,8 +294,8 @@ class ContextMaintenanceScheduler:
             coalesce=True,
             max_instances=1,
         )
-        # 机会自动刷新 —— 09:15 盘前 / 13:30 午盘 / 22:00 晚间。
-        # 时间点按调度器时区(app_timezone, default Asia/Kolkata)解释,与 Agent cron 语义一致。
+        # Automatic opportunity refresh: 09:15 pre-open / 13:30 midday / 22:00 evening.
+        # Times use the scheduler time zone (app_timezone, default Asia/Kolkata), the same as agent cron.
         # Research-only: the opportunity (entry-candidate) engine does not run (ADR-004).
         refresh_times = (
             ((9, 15), (13, 30), (22, 0)) if is_feature_enabled(Feature.ENTRY_CANDIDATES) else ()
@@ -306,7 +306,7 @@ class ContextMaintenanceScheduler:
                 "cron",
                 hour=job_hour,
                 minute=job_minute,
-                jitter=120,  # 错峰,避免与其它调度同刻写 SQLite
+                jitter=120,  # staggered so it doesn't write SQLite at the same moment as other schedules
                 id=f"context_maintenance_refresh_opportunities_{job_hour:02d}{job_minute:02d}",
                 replace_existing=True,
                 coalesce=True,
@@ -326,7 +326,7 @@ class ContextMaintenanceScheduler:
         from src.platform.scheduling.scheduler_registry import register
         register("context", self.scheduler)
         logger.info(
-            "上下文维护调度器已启动（后验评估间隔 %sh，启动补跑 +15s，快照保留 %s 天，后验保留 %s 天，机会自动刷新 09:15/13:30/22:00，交易日历刷新 03:00）",
+            "Context maintenance scheduler started (outcome evaluation every %sh, catch-up run at +15s, snapshots kept %s days, outcomes kept %s days, opportunity refresh 09:15/13:30/22:00, trading calendar refresh 03:00)",
             self.eval_interval_hours,
             self.snapshot_retention_days,
             self.outcome_retention_days,
@@ -337,4 +337,4 @@ class ContextMaintenanceScheduler:
             self.scheduler.shutdown(wait=False)
         except Exception:
             pass
-        logger.info("上下文维护调度器已关闭")
+        logger.info("Context maintenance scheduler stopped")

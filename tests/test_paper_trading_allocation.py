@@ -51,31 +51,31 @@ class TestAllocationsFromExcluded(unittest.TestCase):
 
 class TestComputeMarketCash(unittest.TestCase):
     def test_basic(self):
-        """子池现金 — 初始×比例 + 已实现 − 持仓成本"""
-        # 100万×50% + 5000 − 300000 = 205000
+        """Sub-pool cash: initial x ratio + realised - position cost."""
+        # 1,000,000 x 50% + 5000 - 300000 = 205000
         self.assertAlmostEqual(
             compute_market_cash(1_000_000, 0.5, 5000, 300000), 205000.0
         )
 
     def test_zero_ratio(self):
-        """子池现金 — 比例 0 时初始资金为 0"""
+        """Sub-pool cash: a ratio of 0 gives initial capital 0."""
         self.assertEqual(compute_market_cash(1_000_000, 0.0, 0, 0), 0.0)
 
     def test_over_allocated_negative(self):
-        """子池现金 — 持仓超出额度时返回负（无新仓空间）"""
-        # 100万×10% − 20万持仓 = -10万
+        """Sub-pool cash: negative when positions exceed the allocation (no room for new positions)."""
+        # 1,000,000 x 10% - 200,000 in positions = -100,000
         self.assertLess(compute_market_cash(1_000_000, 0.1, 0, 200000), 0)
 
 
 class TestMarketAllocationsOrDefault(unittest.TestCase):
     def test_empty_falls_back_default(self):
-        """账户比例 — 未配置时回落默认配置"""
+        """Account ratios: fall back to the default allocation when unset."""
         acc = SimpleNamespace(market_allocations=None, initial_capital=1_000_000)
         out = market_allocations_or_default(acc)
         self.assertEqual(out, dict(DEFAULT_ALLOCATIONS))
 
     def test_configured_is_normalized(self):
-        """账户比例 — 已配置则归一化返回"""
+        """Account ratios: normalised when configured."""
         acc = SimpleNamespace(
             market_allocations={"IN": 0.8}, initial_capital=1_000_000
         )
@@ -83,7 +83,7 @@ class TestMarketAllocationsOrDefault(unittest.TestCase):
         self.assertEqual(out, {"IN": 0.8})
 
     def test_sum_le_one_invariant(self):
-        """账户比例 — 合理配置合计不超过 1"""
+        """Account ratios: a sensible allocation adds up to no more than 1."""
         acc = SimpleNamespace(
             market_allocations={"IN": 1.0}, initial_capital=1_000_000
         )

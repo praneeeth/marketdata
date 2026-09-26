@@ -1,4 +1,4 @@
-"""首页聚合 API（轻量版：不包含机会消息中心）。"""
+"""Home page aggregate API (light version: no opportunity message centre)."""
 
 from __future__ import annotations
 
@@ -113,9 +113,9 @@ def _summarize_topics(raw_topics) -> list[dict]:
 def _load_latest_insights(db: Session) -> list[dict]:
     out = []
     agents = (
-        ("premarket_outlook", "盘前分析"),
-        ("daily_report", "收盘复盘"),
-        ("news_digest", "新闻速递"),
+        ("premarket_outlook", "Pre-market outlook"),
+        ("daily_report", "Daily close report"),
+        ("news_digest", "News digest"),
     )
     for agent_name, label in agents:
         row = (
@@ -208,13 +208,13 @@ def get_dashboard_overview(
     for row in grouped_held:
         flags: list[str] = []
         if bool(row.get("constrained")):
-            flags.append("组合约束")
+            flags.append("Portfolio limit")
         if str(row.get("risk_level") or "").lower() == "high":
-            flags.append("高风险")
+            flags.append("High risk")
         if str(row.get("status") or "").lower() != "active":
-            flags.append("非活跃状态")
+            flags.append("Inactive")
         if float(row.get("rank_score") or 0.0) < 68:
-            flags.append("信号转弱")
+            flags.append("Signal weakening")
         if not flags:
             continue
         risk_items.append({**row, "risk_flags": flags})
@@ -226,7 +226,7 @@ def get_dashboard_overview(
     )
     risk_items = risk_items[: int(risk_limit)]
 
-    # Portfolio quick stats (DB-only, no实时行情请求).
+    # Portfolio quick stats (DB-only, no live quote requests).
     positions = (
         db.query(Position, Stock)
         .join(Stock, Position.stock_id == Stock.id)
@@ -254,7 +254,7 @@ def get_dashboard_overview(
         or 0.0
     )
 
-    # Market pulse from latest market scan snapshot (stable even without外网).
+    # Market pulse from latest market scan snapshot (stable even without internet access).
     pulse_query = db.query(MarketScanSnapshot)
     if snapshot_date:
         pulse_query = pulse_query.filter(MarketScanSnapshot.snapshot_date == snapshot_date)
@@ -393,7 +393,7 @@ def get_dashboard_overview(
 logger = logging.getLogger(__name__)
 
 
-# ── 今日必读 AI 策展(Phase C)────────────────────────────────────────────
+# ── Today's must-reads, curated by AI (Phase C) ─────────────────────────────
 class CurateCandidate(BaseModel):
     type: str
     symbol: str = ""
@@ -410,7 +410,7 @@ class CurateRequest(BaseModel):
 
 @router.post("/curate")
 async def curate_today(req: CurateRequest, db: Session = Depends(get_db)):
-    """把首页候选事件交 AI 排序+精炼,返回 [{index, importance, why}];AI 失败按原序兜底。"""
+    """Have the AI rank and refine the home-page candidate events; returns [{index, importance, why}]; falls back to the original order if the AI fails."""
     cands = req.candidates[:20]
     if not cands:
         return {"items": []}
@@ -429,7 +429,7 @@ async def curate_today(req: CurateRequest, db: Session = Depends(get_db)):
         "Output one line per event in the format: index|importance (integer 0-100)|one "
         "sentence. No other text."
     )
-    user_content = f"今日候选(均来自该用户的持仓/自选/提醒/机会):\n{listing}"
+    user_content = f"Today's candidates (all from this user's holdings/watchlist/alerts/opportunities):\n{listing}"
 
     items: list[dict] = []
     try:
@@ -438,7 +438,7 @@ async def curate_today(req: CurateRequest, db: Session = Depends(get_db)):
         )
         for line in (content or "").splitlines():
             parts = line.split("|")
-            idx_raw = parts[0].strip().rstrip(".、) ")
+            idx_raw = parts[0].strip().rstrip(".) ")
             if len(parts) >= 3 and idx_raw.isdigit():
                 i = int(idx_raw)
                 if 0 <= i < len(cands):
@@ -449,9 +449,9 @@ async def curate_today(req: CurateRequest, db: Session = Depends(get_db)):
                     why = ensure_guarded(parts[2].strip(), surface="dashboard_curate")
                     items.append({"index": i, "importance": imp, "why": why})
     except Exception as e:
-        logger.debug(f"curate AI 失败,按原序兜底: {e}")
+        logger.debug(f"curate AI failed; keeping the original order: {e}")
 
-    if not items:  # 兜底:原序 + 递减重要度
+    if not items:  # fallback: original order + decreasing importance
         items = [
             {"index": i, "importance": max(0, 100 - i * 5), "why": c.signal or ""}
             for i, c in enumerate(cands)
@@ -462,9 +462,9 @@ async def curate_today(req: CurateRequest, db: Session = Depends(get_db)):
 
 @router.get("/brief")
 def get_brief(type: str = Query("eod", description="premarket | eod"), db: Session = Depends(get_db)):
-    """盘前/盘后 AI 简报(复用 premarket_outlook / daily_report agent 的最新报告)。"""
+    """Pre-market/close AI brief (reuses the latest report of the premarket_outlook / daily_report agent)."""
     agent = "premarket_outlook" if type == "premarket" else "daily_report"
-    label = "盘前分析" if type == "premarket" else "收盘复盘"
+    label = "Pre-market outlook" if type == "premarket" else "Daily close report"
     row = (
         db.query(AnalysisHistory)
         .filter(AnalysisHistory.agent_name == agent)

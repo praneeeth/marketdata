@@ -1,4 +1,11 @@
-"""Versioned database migrations for PanWatch."""
+"""Versioned database migrations for PanWatch.
+
+Some older migrations contain Chinese text (seed names, legacy labels). They are left
+unchanged because each migration's source is checksummed (``inspect.getsource``):
+editing a released migration changes its checksum and makes it run again on existing
+databases. Migration 130 translates the stored labels to English instead, so it has to
+contain the Chinese values it looks for.
+"""
 
 from __future__ import annotations
 
@@ -2052,6 +2059,89 @@ def _m129_india_only_cleanup(conn: Connection) -> None:
         conn.execute(text("DELETE FROM agent_configs WHERE name = 'chart_analyst'"))
 
 
+# Stored label -> English label, for rows written before the English-only change.
+_M130_ACTION_LABELS = {
+    "建仓": "Open position",
+    "加仓": "Add",
+    "减仓": "Reduce",
+    "清仓": "Exit",
+    "持有": "Hold",
+    "观望": "Watch",
+    "关注": "Watch",
+    "回避": "Avoid",
+    "继续持有": "Keep holding",
+    "考虑加仓": "Consider adding",
+    "考虑减仓": "Consider reducing",
+    "考虑止损": "Consider exiting",
+    "明日关注": "Watch tomorrow",
+    "暂时回避": "Avoid for now",
+    "设置预警": "Set alert",
+    "准备建仓": "Plan to open",
+    "准备减仓": "Plan to reduce",
+    "买入": "Buy",
+    "卖出": "Sell",
+    "增持": "Overweight",
+    "减持": "Underweight",
+    "待人工复核": "Needs manual review",
+}
+_M130_AGENT_LABELS = {
+    "盘前分析": "Pre-market outlook",
+    "盘中监测": "Intraday monitor",
+    "收盘复盘": "Daily close report",
+    "盘后日报": "Daily close report",
+    "新闻速递": "News digest",
+    "TradingAgents 深度": "TradingAgents deep research",
+    "TradingAgents 深度分析": "TradingAgents deep research",
+    "市场扫描": "Market scan",
+}
+_M130_STRATEGY_NAMES = {
+    "趋势延续": "Trend continuation",
+    "MACD金叉": "MACD golden cross",
+    "放量突破": "Volume breakout",
+    "回踩确认": "Pullback confirmation",
+    "超跌反弹": "Oversold rebound",
+    "Agent建议": "Agent item",
+    "市场扫描": "Market scan",
+}
+_M130_SETTING_DESCRIPTIONS = {
+    "JWT签名密钥(自动生成)": "JWT signing key (auto-generated)",
+    "认证用户名": "Auth username",
+    "认证密码哈希": "Auth password hash",
+    "用户头像文件名": "User avatar file name",
+    "助手配置": "Assistant config",
+}
+
+
+def _m130_english_labels(conn: Connection) -> None:
+    """Translate stored Chinese labels (actions, agent names, strategy names, the default
+    account name and setting descriptions) to the English the app now writes."""
+
+    def remap(table: str, column: str, mapping: dict[str, str]) -> None:
+        if not _has_table(conn, table) or not _has_column(conn, table, column):
+            return
+        for old, new in mapping.items():
+            conn.execute(
+                text(f"UPDATE {table} SET {column} = :new WHERE {column} = :old"),
+                {"old": old, "new": new},
+            )
+
+    # The strategy tables used "准备加仓" for "Prepare to add"; the agents used it for "Plan to add".
+    for table in ("stock_suggestions", "agent_prediction_outcomes"):
+        remap(table, "action_label", {**_M130_ACTION_LABELS, "准备加仓": "Plan to add"})
+    for table in ("entry_candidates", "strategy_signal_runs"):
+        remap(table, "action_label", {**_M130_ACTION_LABELS, "准备加仓": "Prepare to add"})
+    remap("stock_suggestions", "agent_label", _M130_AGENT_LABELS)
+    remap("strategy_signal_runs", "strategy_name", _M130_STRATEGY_NAMES)
+    remap("accounts", "name", {"默认账户": "Default account"})
+    remap("app_settings", "description", _M130_SETTING_DESCRIPTIONS)
+    if _has_table(conn, "app_settings"):
+        conn.execute(text("""
+            UPDATE app_settings
+            SET description = 'Simulation notification config: ' || key
+            WHERE key LIKE 'pt_notify_%' AND description LIKE '模拟盘通知配置%'
+        """))
+
+
 MIGRATIONS: tuple[Migration, ...] = (
     Migration(101, "agent_config_kind_and_visibility", _m101_agent_config_kind),
     Migration(102, "backfill_agent_kind_data", _m102_backfill_agent_kind),
@@ -2082,6 +2172,7 @@ MIGRATIONS: tuple[Migration, ...] = (
     Migration(127, "compliance_tables", _m127_compliance_tables),
     Migration(128, "broker_connections", _m128_broker_connections),
     Migration(129, "india_only_cleanup", _m129_india_only_cleanup),
+    Migration(130, "english_labels", _m130_english_labels),
 )
 
 

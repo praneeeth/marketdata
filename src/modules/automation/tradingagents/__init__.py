@@ -1,15 +1,15 @@
-"""TradingAgents 集成模块。
+"""TradingAgents integration.
 
-把 TauricResearch/TradingAgents (多 Agent 投资决策框架,76k star) 适配进 PanWatch:
-- 桥接 PanWatch AI Service 到 TradingAgents LLM config
-- 把 PanWatch Provider 体系的数据注入 TradingAgents 的 data vendor 层(A 股专用)
-- 把 TradingAgents 的 final_state 映射成 PanWatch 的 AnalysisResult
-- 通过 LangChain callbacks 反馈进度
+Adapts TauricResearch/TradingAgents (a multi-agent research framework) into PanWatch:
+- bridges PanWatch's AI service to the TradingAgents LLM config
+- injects data from PanWatch's provider layer into TradingAgents' data vendor layer
+- maps TradingAgents' final_state to PanWatch's AnalysisResult
+- reports progress through LangChain callbacks
 
-软依赖:`tradingagents` 库不在 PyPI,需用户自行 git clone + pip install -e。
-未安装时 TradingAgentsAgent.run() 会返回明确错误,不会让服务 crash。
+Soft dependency: the `tradingagents` library isn't on PyPI; users git clone it and pip install -e.
+Without it, TradingAgentsAgent.run() returns a clear error instead of crashing the service.
 
-详细设计:`.docs/tradingagents/02-technical-design.md`
+Detailed design: `.docs/tradingagents/02-technical-design.md`
 """
 
 from src.modules.automation.tradingagents.agent import TradingAgentsAgent

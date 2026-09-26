@@ -1,8 +1,8 @@
-"""命令行系统自检:`python -m src.modules.administration.doctor` 或 `make doctor`。
+"""Command-line system self-check: `python -m src.modules.administration.doctor` or `make doctor`.
 
-终端跑一遍 系统基础项(DB/磁盘/调度)+ 数据源/AI/通知,打印结果与中文修复建议。
-CLI 进程内无运行中的调度器 → 调度项会优雅跳过(显示说明,不误报)。
-退出码:有异常项返回 1,全通返回 0(便于 CI/脚本判断)。
+Runs the system items (DB/disk/scheduler) + data sources/AI/notifications in the terminal and prints results with fix hints.
+The CLI process has no running scheduler, so the scheduler item is skipped gracefully (with a note, not a false alarm).
+Exit code: 1 if anything failed, 0 if everything passed (for CI/scripts).
 """
 
 from __future__ import annotations
@@ -13,20 +13,20 @@ import sys
 from src.modules.administration.selfcheck import run_selfcheck
 
 _ICON = {"ok": "✅", "slow": "⚠️", "fail": "❌"}
-_CAT = {"system": "系统", "datasource": "数据源", "ai": "AI模型", "notify": "通知渠道"}
+_CAT = {"system": "System", "datasource": "Data sources", "ai": "AI models", "notify": "Notification channels"}
 _ORDER = ["system", "datasource", "ai", "notify"]
 
 
 def _print_report(res: dict) -> None:
     s = res["summary"]
-    print("\n===== PanWatch 系统自检 =====")
-    print(f"共 {s['total']} · ✅通 {s['ok']} · ⚠️慢 {s['slow']} · ❌断 {s['fail']}\n")
+    print("\n===== PanWatch system self-check =====")
+    print(f"{s['total']} items · ✅ ok {s['ok']} · ⚠️ slow {s['slow']} · ❌ failed {s['fail']}\n")
     items = res.get("items", [])
     for cat in _ORDER:
         cat_items = [i for i in items if i["category"] == cat]
         if not cat_items:
             continue
-        print(f"【{_CAT.get(cat, cat)}】")
+        print(f"[{_CAT.get(cat, cat)}]")
         for i in cat_items:
             icon = _ICON.get(i["status"], "?")
             grp = f"{i['group']} / " if i.get("group") else ""
@@ -34,16 +34,16 @@ def _print_report(res: dict) -> None:
             print(f"  {icon} {grp}{i['name']}{lat}")
             if i["status"] == "fail":
                 if i.get("error"):
-                    print(f"       错误: {i['error']}")
+                    print(f"       Error: {i['error']}")
                 if i.get("hint"):
-                    print(f"       建议: {i['hint']}")
+                    print(f"       Hint: {i['hint']}")
             elif i.get("note"):
                 print(f"       {i['note']}")
         print()
     if s["fail"]:
-        print(f"⚠️  发现 {s['fail']} 项异常,见上方建议。")
+        print(f"⚠️  {s['fail']} items failed; see the hints above.")
     else:
-        print("✅ 全部正常。")
+        print("✅ Everything is fine.")
 
 
 def main() -> int:

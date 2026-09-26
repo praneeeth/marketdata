@@ -1,4 +1,4 @@
-"""TradingAgents 联动触发单测。"""
+"""Unit tests for TradingAgents linked triggering."""
 
 from __future__ import annotations
 
@@ -16,14 +16,14 @@ def _make_agent(raw_config: dict):
 
 
 def test_no_change_pct_skips():
-    """涨跌幅缺失 → 不触发"""
+    """Change % missing -> no trigger."""
     ok, reason = auto_trigger.should_auto_trigger("601238", None)
     assert ok is False
-    assert "无涨跌幅" in reason
+    assert "No change %" in reason
 
 
 def test_disabled_in_config_skips():
-    """auto_trigger.enabled=false → 不触发"""
+    """auto_trigger.enabled=false -> no trigger."""
     with patch("src.modules.automation.tradingagents.operations.SessionLocal") as session_factory:
         db = MagicMock()
         session_factory.return_value = db
@@ -32,11 +32,11 @@ def test_disabled_in_config_skips():
         )
         ok, reason = auto_trigger.should_auto_trigger("601238", 8.0)
     assert ok is False
-    assert "未启用" in reason
+    assert "is off" in reason
 
 
 def test_no_agent_config_skips():
-    """tradingagents agent 未注册 → 不触发"""
+    """tradingagents agent not registered -> no trigger."""
     with patch("src.modules.automation.tradingagents.operations.SessionLocal") as session_factory:
         db = MagicMock()
         session_factory.return_value = db
@@ -46,21 +46,21 @@ def test_no_agent_config_skips():
 
 
 def test_below_threshold_skips():
-    """涨跌幅低于阈值 → 不触发"""
+    """Change % below the threshold -> no trigger."""
     with patch("src.modules.automation.tradingagents.operations.SessionLocal") as session_factory:
         db = MagicMock()
         session_factory.return_value = db
-        # query(AgentConfig) 第一次返回 agent
+        # query(AgentConfig) returns the agent the first time
         db.query.return_value.filter.return_value.first.return_value = _make_agent(
             {"auto_trigger": {"enabled": True, "change_pct_threshold": 5.0}}
         )
         ok, reason = auto_trigger.should_auto_trigger("601238", 3.0)
     assert ok is False
-    assert "未达阈值" in reason
+    assert "below the threshold" in reason
 
 
 def test_above_threshold_within_cooldown_skips():
-    """达阈值但 24h 内已触发 → 不触发"""
+    """Threshold reached but already triggered within 24h -> no trigger."""
     with patch("src.modules.automation.tradingagents.operations.SessionLocal") as session_factory, \
          patch("src.modules.automation.tradingagents.operations._within_cooldown", return_value=True), \
          patch("src.modules.automation.tradingagents.operations._budget_allows", return_value=True):
@@ -71,11 +71,11 @@ def test_above_threshold_within_cooldown_skips():
         )
         ok, reason = auto_trigger.should_auto_trigger("601238", 8.0)
     assert ok is False
-    assert "冷却" in reason
+    assert "Cooling down" in reason
 
 
 def test_above_threshold_budget_exceeded_skips():
-    """达阈值但月度预算已用完 → 不触发"""
+    """Threshold reached but the monthly budget is used up -> no trigger."""
     with patch("src.modules.automation.tradingagents.operations.SessionLocal") as session_factory, \
          patch("src.modules.automation.tradingagents.operations._within_cooldown", return_value=False), \
          patch("src.modules.automation.tradingagents.operations._budget_allows", return_value=False):
@@ -86,11 +86,11 @@ def test_above_threshold_budget_exceeded_skips():
         )
         ok, reason = auto_trigger.should_auto_trigger("601238", 8.0)
     assert ok is False
-    assert "预算" in reason
+    assert "budget" in reason
 
 
 def test_above_threshold_all_pass_triggers():
-    """达阈值 + 不在冷却 + 预算足 → 触发"""
+    """Threshold reached + not cooling down + budget left -> trigger."""
     with patch("src.modules.automation.tradingagents.operations.SessionLocal") as session_factory, \
          patch("src.modules.automation.tradingagents.operations._within_cooldown", return_value=False), \
          patch("src.modules.automation.tradingagents.operations._budget_allows", return_value=True):
@@ -101,11 +101,11 @@ def test_above_threshold_all_pass_triggers():
         )
         ok, reason = auto_trigger.should_auto_trigger("601238", 8.0)
     assert ok is True
-    assert "达阈值" in reason
+    assert "reached the threshold" in reason
 
 
 def test_negative_change_pct_uses_abs():
-    """跌 8% 也应该触发(用 |change_pct|)"""
+    """A fall of 8% should trigger too (uses |change_pct|)."""
     with patch("src.modules.automation.tradingagents.operations.SessionLocal") as session_factory, \
          patch("src.modules.automation.tradingagents.operations._within_cooldown", return_value=False), \
          patch("src.modules.automation.tradingagents.operations._budget_allows", return_value=True):
@@ -119,7 +119,7 @@ def test_negative_change_pct_uses_abs():
 
 
 def test_try_auto_trigger_returns_none_when_disabled():
-    """try_auto_trigger 在不满足条件时返回 None"""
+    """try_auto_trigger returns None when the conditions aren't met."""
     stock = MagicMock()
     stock.symbol = "601238"
     stock.change_pct = 8.0
@@ -129,7 +129,7 @@ def test_try_auto_trigger_returns_none_when_disabled():
 
 
 def test_try_auto_trigger_fires_when_should():
-    """try_auto_trigger 在满足条件时调 fire_and_forget_trigger"""
+    """try_auto_trigger calls fire_and_forget_trigger when the conditions are met."""
     stock = MagicMock()
     stock.symbol = "601238"
     stock.change_pct = 8.0

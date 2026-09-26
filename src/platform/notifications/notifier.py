@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 
 
 def get_global_proxy() -> str:
-    """获取全局 HTTP 代理设置"""
+    """Get the global HTTP proxy setting."""
     try:
         from src.platform.persistence.database import SessionLocal
         from src.platform.persistence.models import AppSettings
@@ -30,8 +30,8 @@ def get_global_proxy() -> str:
 
 
 def sanitize_for_telegram(content: str) -> str:
-    """清理内容以适配 Telegram（移除 HTML 和 Markdown 格式）"""
-    # 移除 HTML 标签
+    """Clean content for Telegram (strip HTML and Markdown formatting)."""
+    # Strip HTML tags
     content = re.sub(r"</?table[^>]*>", "", content)
     content = re.sub(r"</?thead[^>]*>", "", content)
     content = re.sub(r"</?tbody[^>]*>", "", content)
@@ -43,25 +43,25 @@ def sanitize_for_telegram(content: str) -> str:
     content = re.sub(r"</?p[^>]*>", "\n", content)
     content = re.sub(r"<br\s*/?>", "\n", content)
 
-    # 移除 Markdown 格式
-    # markdown 链接 [label](url) → "label url":Telegram 内联链接对 localhost/IP:端口 等
-    # 非公网地址不渲染(标签退化成纯文本点不了),裸 URL 则会被自动识别为可点击,更稳。
+    # Strip Markdown formatting
+    # markdown link [label](url) -> "label url": Telegram does not render inline links to
+    # non-public addresses such as localhost/IP:port (the label becomes unclickable text); a bare URL is auto-linked.
     content = re.sub(r"\[([^\]]+)\]\((https?://[^)\s]+)\)", r"\1 \2", content)
-    content = re.sub(r"^#{1,6}\s*", "", content, flags=re.MULTILINE)  # 移除标题 #
-    content = re.sub(r"\*\*(.+?)\*\*", r"\1", content)  # 移除粗体 **
-    content = re.sub(r"\*(.+?)\*", r"\1", content)  # 移除斜体 *
-    content = re.sub(r"__(.+?)__", r"\1", content)  # 移除粗体 __
-    content = re.sub(r"_(.+?)_", r"\1", content)  # 移除斜体 _
-    content = re.sub(r"~~(.+?)~~", r"\1", content)  # 移除删除线
-    content = re.sub(r"`(.+?)`", r"\1", content)  # 移除行内代码
+    content = re.sub(r"^#{1,6}\s*", "", content, flags=re.MULTILINE)  # headings #
+    content = re.sub(r"\*\*(.+?)\*\*", r"\1", content)  # bold **
+    content = re.sub(r"\*(.+?)\*", r"\1", content)  # italic *
+    content = re.sub(r"__(.+?)__", r"\1", content)  # bold __
+    content = re.sub(r"_(.+?)_", r"\1", content)  # italic _
+    content = re.sub(r"~~(.+?)~~", r"\1", content)  # strikethrough
+    content = re.sub(r"`(.+?)`", r"\1", content)  # inline code
     content = re.sub(
         r"^\s*[-*+]\s+", "· ", content, flags=re.MULTILINE
-    )  # 列表符号改为 ·
+    )  # list bullets become ·
     content = re.sub(
         r"^\s*\d+\.\s+", "", content, flags=re.MULTILINE
-    )  # 移除有序列表数字
+    )  # strip ordered-list numbers
 
-    # 清理多余空白
+    # Collapse extra whitespace
     content = re.sub(r"\n\s*\n\s*\n", "\n\n", content)
     content = re.sub(r" +", " ", content)
     return content.strip()
@@ -85,16 +85,16 @@ CHANNEL_TYPES = {
     },
 }
 
-# 通过 Apprise 支持的渠道类型（无代理配置时）
+# Channel types sent through Apprise (when no proxy is configured)
 _APPRISE_TYPES = {"telegram", "discord", "pushover"}
 
-# 自定义实现的渠道类型（带代理或特殊需求）
+# Channel types with a custom implementation (proxy or special needs)
 _CUSTOM_IMPL_TYPES: set[str] = set()
 
-# 支持 Markdown 的渠道（不需要 sanitize）
+# Channels that support Markdown (no sanitising)
 _MARKDOWN_CHANNELS = {"discord"}
 
-# 不支持 Markdown 的渠道（需要 sanitize）
+# Channels without Markdown support (sanitised)
 _PLAIN_TEXT_CHANNELS = {"telegram", "pushover"}
 
 # Per-channel body budgets (characters, including the disclaimer). Content is truncated
@@ -110,17 +110,17 @@ DEFAULT_TEXT_BUDGET = 4000
 
 def build_apprise_url(channel_type: str, config: dict) -> str | None:
     """
-    根据渠道类型和配置构建 Apprise URL
+    Build the Apprise URL for a channel type and config.
 
     Returns:
-        Apprise URL 或 None（如果需要使用自定义方式发送，如带代理的 Telegram）
+        The Apprise URL, or None when a custom sender is needed (e.g. Telegram through a proxy)
     """
     if channel_type == "telegram":
         bot_token = config.get("bot_token", "")
         chat_id = config.get("chat_id", "")
         if not bot_token or not chat_id:
-            raise ValueError("Telegram 需要 bot_token 和 chat_id")
-        # 如果配置了代理（渠道级或全局），返回 None，使用自定义方式发送
+            raise ValueError("Telegram needs bot_token and chat_id")
+        # With a proxy configured (per channel or global), return None and use the custom sender
         proxy = config.get("proxy", "").strip() or get_global_proxy()
         if proxy:
             return None
@@ -130,22 +130,22 @@ def build_apprise_url(channel_type: str, config: dict) -> str | None:
         webhook_id = config.get("webhook_id", "")
         webhook_token = config.get("webhook_token", "")
         if not webhook_id or not webhook_token:
-            raise ValueError("Discord 需要 webhook_id 和 webhook_token")
+            raise ValueError("Discord needs webhook_id and webhook_token")
         return f"discord://{webhook_id}/{webhook_token}/"
 
     elif channel_type == "pushover":
         user_key = config.get("user_key", "")
         app_token = config.get("app_token", "")
         if not user_key or not app_token:
-            raise ValueError("Pushover 需要 user_key 和 app_token")
+            raise ValueError("Pushover needs user_key and app_token")
         return f"pover://{user_key}@{app_token}/"
 
     else:
-        raise ValueError(f"不支持的 Apprise 渠道类型: {channel_type}")
+        raise ValueError(f"Unsupported Apprise channel type: {channel_type}")
 
 
 class NotifierManager:
-    """通知管理器: Apprise 渠道 + 自定义渠道"""
+    """Notification manager: Apprise channels plus custom channels."""
 
     def __init__(self, policy=None):
         self._ap = apprise.Apprise()
@@ -155,30 +155,30 @@ class NotifierManager:
         self.policy = policy
 
     def add_channel(self, channel_type: str, config: dict):
-        """添加通知渠道"""
+        """Add a notification channel."""
         self._channel_types.add(channel_type)
         try:
             if channel_type in _APPRISE_TYPES:
                 url = build_apprise_url(channel_type, config)
                 if url is None:
-                    # 需要自定义实现（如带代理的 Telegram）
+                    # Needs the custom implementation (e.g. Telegram through a proxy)
                     self._custom_channels.append((channel_type, config))
                     self._channel_count += 1
-                    logger.info(f"注册自定义通知渠道: {channel_type} (带代理)")
+                    logger.info(f"Registered custom notification channel: {channel_type} (proxy)")
                 elif self._ap.add(url):
                     self._channel_count += 1
-                    logger.info(f"注册通知渠道: {channel_type}")
+                    logger.info(f"Registered notification channel: {channel_type}")
                 else:
-                    logger.error(f"注册通知渠道失败: {channel_type} (URL 无效)")
+                    logger.error(f"Failed to register notification channel: {channel_type} (invalid URL)")
             else:
                 self._custom_channels.append((channel_type, config))
                 self._channel_count += 1
-                logger.info(f"注册自定义通知渠道: {channel_type}")
+                logger.info(f"Registered custom notification channel: {channel_type}")
         except ValueError as e:
-            logger.error(f"注册通知渠道失败: {e}")
+            logger.error(f"Failed to register notification channel: {e}")
 
     async def notify(self, title: str, content: str, images: list[str] | None = None):
-        """向所有已注册渠道发送通知（忽略错误）"""
+        """Send to every registered channel (errors ignored)."""
         await self.notify_with_result(title, content, images)
 
     def _text_budget(self) -> int:
@@ -219,23 +219,23 @@ class NotifierManager:
     ) -> dict:
         """Transport only. Never call directly; use notify_with_result."""
         if self._channel_count == 0:
-            logger.warning("没有可用的通知渠道")
-            return {"success": False, "error": "没有可用的通知渠道"}
+            logger.warning("No notification channel available")
+            return {"success": False, "error": "No notification channel available"}
 
         # Quiet hours
         try:
             if not bypass_quiet_hours and getattr(self, "policy", None):
                 if self.policy.is_quiet_now():
-                    logger.info("当前处于通知静默时段，跳过发送")
+                    logger.info("Inside the notification quiet hours; not sending")
                     return {"success": False, "skipped": "quiet_hours"}
         except Exception:
             # do not block sends on policy errors
             pass
 
-        # 准备纯文本版本（用于不支持 Markdown 的渠道）
+        # Plain-text version (for channels without Markdown)
         plain_content = sanitize_for_telegram(content)
 
-        # 准备附件
+        # Attachments
         attachments = None
         if images:
             attachments = apprise.AppriseAttachment()
@@ -260,7 +260,7 @@ class NotifierManager:
                 return
             await asyncio.sleep(backoff * (2 ** max(0, i - 1)))
 
-        # Apprise 渠道（使用纯文本，因为 Telegram 等不支持 Markdown）
+        # Apprise channels (plain text, since Telegram and others don't support Markdown)
         if len(self._ap) > 0:
             apprise_ok = False
             last_err = ""
@@ -274,25 +274,25 @@ class NotifierManager:
                     )
                     if success:
                         apprise_ok = True
-                        logger.info(f"Apprise 通知发送成功: {title}")
+                        logger.info(f"Apprise notification sent: {title}")
                         break
-                    last_err = "Apprise 通知发送失败（可能是网络问题或配置错误）"
+                    last_err = "Apprise notification failed (network problem or bad config)"
                     logger.error(f"{last_err}: {title}")
                 except Exception as e:
-                    last_err = f"Apprise 通知异常: {e}"
+                    last_err = f"Apprise notification error: {e}"
                     logger.error(last_err)
                 if attempt < retry_attempts:
                     await _sleep_retry(attempt + 1)
             if not apprise_ok:
-                errors.append(last_err or "Apprise 通知发送失败")
+                errors.append(last_err or "Apprise notification failed")
 
-        # 自定义渠道（根据渠道类型自动选择格式）
+        # Custom channels (format chosen by channel type)
         for ch_type, config in self._custom_channels:
             ch_ok = False
             last_err = ""
             for attempt in range(0, retry_attempts + 1):
                 try:
-                    # 支持 Markdown 的渠道使用原始内容，否则使用纯文本
+                    # Markdown channels get the original content, others plain text
                     ch_content = (
                         content if ch_type in _MARKDOWN_CHANNELS else plain_content
                     )
@@ -300,57 +300,57 @@ class NotifierManager:
                     ch_ok = True
                     break
                 except Exception as e:
-                    last_err = f"{ch_type} 发送失败: {e}"
+                    last_err = f"{ch_type} send failed: {e}"
                     logger.error(last_err)
                 if attempt < retry_attempts:
                     await _sleep_retry(attempt + 1)
             if not ch_ok:
-                errors.append(last_err or f"{ch_type} 发送失败")
+                errors.append(last_err or f"{ch_type} send failed")
 
         if errors:
             return {"success": False, "error": "; ".join(errors)}
         return {"success": True}
 
     async def _send_custom(self, ch_type: str, config: dict, title: str, content: str):
-        """发送自定义渠道通知"""
+        """Send through a custom channel."""
         if ch_type == "telegram":
             await self._send_telegram(config, title, content)
         else:
-            logger.warning(f"未知的自定义渠道类型: {ch_type}")
+            logger.warning(f"Unknown custom channel type: {ch_type}")
 
     async def _send_telegram(self, config: dict, title: str, content: str):
-        """Telegram Bot API（支持代理）
+        """Telegram Bot API (proxy supported).
 
-        Telegram 老 Markdown 解析很脆弱:
-        - 不认 `**粗体**`(只认 `*粗体*`),GitHub 风格会导致 Can't find end of entity
-        - 不认 `### 标题`(把 # 当普通字符,但 ### 后面可能被截断)
-        - 单条上限 4096 字符,超过会被截断破坏实体
-        发送前做兼容性预处理 + 截断。
+        Telegram's legacy Markdown parser is fragile:
+        - it doesn't understand `**bold**` (only `*bold*`); GitHub style causes "Can't find end of entity"
+        - it doesn't understand `### heading` (# is a plain character, and text after ### may be cut)
+        - one message is limited to 4096 characters; longer text is cut and breaks entities
+        So the content is made compatible and truncated before sending.
         """
         bot_token = config.get("bot_token", "")
         chat_id = config.get("chat_id", "")
-        # 渠道级代理优先，否则使用全局代理
+        # A per-channel proxy wins; otherwise the global proxy
         proxy = config.get("proxy", "").strip() or get_global_proxy()
 
         if not bot_token or not chat_id:
-            raise ValueError("Telegram 需要 bot_token 和 chat_id")
+            raise ValueError("Telegram needs bot_token and chat_id")
 
         url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
-        # 用现成的 sanitize_for_telegram 把 markdown 完全剥成纯文本,
-        # 避免 `**粗体**` / `## 标题` / 未闭合实体导致 Telegram parse 失败。
-        # 标题外层手动加 `*...*` 让其加粗(Telegram 老 Markdown 只认单星号)。
+        # sanitize_for_telegram strips markdown to plain text so that
+        # `**bold**` / `## heading` / unclosed entities can't break Telegram parsing.
+        # The title is wrapped in `*...*` to make it bold (legacy Markdown only knows single asterisks).
         safe_title = sanitize_for_telegram(title) if title else ""
         safe_content = sanitize_for_telegram(content)
         text = f"*{safe_title}*\n\n{safe_content}" if safe_title else safe_content
-        # Telegram 单条上限 4096,留点 buffer 给末尾提示
+        # Telegram's limit is 4096; leave a buffer for the closing notice
         if len(text) > 3900:
-            # 正文末尾若带详情链接(经 sanitize 后已是裸 URL),直接截断会把它砍掉 →
-            # 用户点不到。先抽出来,截断正文后再拼回末尾。
+            # If the body ends with a details link (a bare URL after sanitising), truncation would cut it
+            # and the user couldn't open it. Pull it out, truncate the body, then append it again.
             link_m = re.search(r"(https?://[^\s)]+)\s*$", text)
             if link_m:
-                notice = f"\n\n…内容过长已截断,完整报告 👉 {link_m.group(1)}"
+                notice = f"\n\n…Message too long and was truncated. Full report 👉 {link_m.group(1)}"
             else:
-                notice = "\n\n…内容过长已截断,完整报告请在 PanWatch 查看"
+                notice = "\n\n…Message too long and was truncated. See the full report in the app"
             text = text[: 3900 - len(notice)].rstrip() + notice
         payload = {
             "chat_id": chat_id,
@@ -358,31 +358,31 @@ class NotifierManager:
             "parse_mode": "Markdown",
         }
 
-        # 配置代理
+        # Proxy
         transport = None
         if proxy:
             transport = httpx.AsyncHTTPTransport(proxy=proxy)
-            logger.debug(f"Telegram 使用代理: {proxy}")
+            logger.debug(f"Telegram using proxy: {proxy}")
 
         try:
             async with httpx.AsyncClient(transport=transport, timeout=30) as client:
                 resp = await client.post(url, json=payload)
                 data = resp.json()
                 if not data.get("ok"):
-                    raise RuntimeError(f"Telegram API 错误: {data.get('description')}")
-                logger.info(f"Telegram 通知发送成功: {title}")
+                    raise RuntimeError(f"Telegram API error: {data.get('description')}")
+                logger.info(f"Telegram notification sent: {title}")
         except httpx.ConnectError as e:
             if proxy:
-                raise RuntimeError(f"连接代理失败 ({proxy}): {e}")
+                raise RuntimeError(f"Could not connect to the proxy ({proxy}): {e}")
             else:
-                raise RuntimeError(f"无法连接 Telegram API（可能需要配置代理）: {e}")
+                raise RuntimeError(f"Could not reach the Telegram API (a proxy may be needed): {e}")
         except httpx.TimeoutException:
-            raise RuntimeError("请求超时（网络问题或代理配置错误）")
+            raise RuntimeError("Request timed out (network problem or bad proxy config)")
         except Exception as e:
             if (
                 "ConnectError" in str(type(e).__name__)
                 or "connection" in str(e).lower()
             ):
                 if not proxy:
-                    raise RuntimeError(f"网络连接失败，建议配置代理: {e}")
+                    raise RuntimeError(f"Network connection failed; consider configuring a proxy: {e}")
             raise

@@ -18,7 +18,7 @@ class _FakeStock:
 
 
 def test_metadata_context_has_company_name():
-    """meta context 必须包含公司中文名,LLM 不会瞎编"""
+    """The meta context must include the company name, so the LLM doesn't make one up."""
     ctx = build_stock_metadata_context(
         stock_symbol="TATAMOTORS",
         stock_name="Tata Motors",
@@ -30,22 +30,22 @@ def test_metadata_context_has_company_name():
     assert "India (NSE/BSE)" in ctx
     assert "Indian (NSE/BSE) ticker" in ctx
     assert "83.26" in ctx
-    assert "DO NOT guess" in ctx  # 强制约束
+    assert "DO NOT guess" in ctx  # hard constraint
 
 
 def test_metadata_context_includes_industry():
-    """如有行业,加进上下文"""
+    """An industry, if present, is added to the context."""
     ctx = build_stock_metadata_context(
         stock_symbol="TATAMOTORS",
         stock_name="Tata Motors",
         market="IN",
-        industry="汽车制造",
+        industry="Automobiles",
     )
-    assert "汽车制造" in ctx
+    assert "Automobiles" in ctx
 
 
 def test_metadata_context_empty_symbol_returns_empty():
-    """空 symbol → 空串"""
+    """Empty symbol -> empty string."""
     assert build_stock_metadata_context(stock_symbol="") == ""
 
 
@@ -55,21 +55,21 @@ def test_metadata_context_unknown_market_label_passes_through():
 
 
 def test_stock_meta_header_from_cache():
-    """工具返回前缀包含公司名(来自 panwatch_data_context 注入的数据)"""
+    """The tool result prefix includes the company name (from data injected by panwatch_data_context)."""
     stock = _FakeStock("Tata Motors", "TATAMOTORS", "IN")
-    quote = {"current_price": 83.26, "change_pct": -2.5, "industry": "汽车"}
+    quote = {"current_price": 83.26, "change_pct": -2.5, "industry": "Automobiles"}
     with panwatch_data_context({"stock": stock, "quote": quote}):
         header = _stock_meta_header("TATAMOTORS")
     assert "Tata Motors" in header
     assert "TATAMOTORS" in header
     assert "India (NSE/BSE)" in header
     assert "83.26" in header
-    assert "汽车" in header
+    assert "Automobiles" in header
     assert "DO NOT guess" in header
 
 
 def test_serve_fundamentals_includes_company_name():
-    """fundamentals 工具返回必须带公司名,避免 LLM 把 TATAMOTORS 当another company"""
+    """The fundamentals tool result must carry the company name, so the LLM can't mistake TATAMOTORS for another company."""
     stock = _FakeStock("Tata Motors", "TATAMOTORS", "IN")
     with panwatch_data_context({"stock": stock, "quote": {"current_price": 83.26}}):
         result = _serve_from_panwatch("get_fundamentals_openai", "TATAMOTORS", {})
@@ -78,16 +78,16 @@ def test_serve_fundamentals_includes_company_name():
 
 
 def test_serve_news_empty_does_not_leak_global_news():
-    """新闻为空时,工具返回明确说"没有个股新闻",阻止 LLM 拉无关全球新闻"""
-    stock = _FakeStock("广汽集团", "601238", "IN")
+    """With no news, the tool says plainly there is no stock news, stopping the LLM from pulling unrelated global news."""
+    stock = _FakeStock("Tata Motors", "TATAMOTORS", "IN")
     with panwatch_data_context({"stock": stock, "events": []}):
         result = _serve_from_panwatch("get_news", "601238", {})
-    assert "广汽集团" in result
+    assert "Tata Motors" in result
     assert "DO NOT pull unrelated global news" in result
 
 
 def test_serve_klines_empty_returns_company_aware_message():
-    """K 线为空时返回明确空提示,带公司名"""
+    """With no K-lines, a clear empty message with the company name is returned."""
     stock = _FakeStock("Tata Motors", "TATAMOTORS", "IN")
     with panwatch_data_context({"stock": stock, "klines": []}):
         result = _serve_from_panwatch("get_stockstats_indicators", "TATAMOTORS", {})
@@ -96,7 +96,7 @@ def test_serve_klines_empty_returns_company_aware_message():
 
 
 def test_serve_get_balance_sheet_hits_with_balance_keyword():
-    """get_balance_sheet 必须命中(之前没 balance 关键词,会 MISS)"""
+    """get_balance_sheet must match (there used to be no balance keyword, so it MISSED)."""
     stock = _FakeStock("Tata Motors", "TATAMOTORS", "IN")
     with panwatch_data_context({"stock": stock, "quote": {"current_price": 83.26}}):
         result = _serve_from_panwatch("get_balance_sheet", "TATAMOTORS", {})
@@ -106,37 +106,37 @@ def test_serve_get_balance_sheet_hits_with_balance_keyword():
 
 
 def test_serve_get_cashflow_distinct_from_balance_sheet():
-    """get_cashflow 返回独立内容,不和 balance sheet 复用同一段文字"""
+    """get_cashflow returns its own content instead of reusing the balance sheet text."""
     stock = _FakeStock("Tata Motors", "TATAMOTORS", "IN")
     with panwatch_data_context({"stock": stock, "quote": {"current_price": 83.26}}):
         bs = _serve_from_panwatch("get_balance_sheet", "TATAMOTORS", {})
         cf = _serve_from_panwatch("get_cashflow", "TATAMOTORS", {})
     assert "Cash flow" in cf
-    assert bs != cf  # 不能完全一样
+    assert bs != cf  # must not be identical
 
 
 def test_serve_get_stock_data_hits():
-    """get_stock_data 必须命中(之前 method 关键词缺 stock_data)"""
+    """get_stock_data must match (the method keywords used to lack stock_data)."""
     stock = _FakeStock("Tata Motors", "TATAMOTORS", "IN")
     klines = [type("K", (), {"date": "2026-05-15", "open": 80, "high": 85, "low": 79, "close": 83, "volume": 1000})()]
     with panwatch_data_context({"stock": stock, "klines": klines, "quote": {}}):
         result = _serve_from_panwatch("get_stock_data", "TATAMOTORS", {})
-    assert "2026-05-15" in result  # CSV 命中
+    assert "2026-05-15" in result  # CSV matched
 
 
 def test_serve_get_indicators_without_args_fallback_to_kline_csv():
-    """get_indicators 没传 indicator 参数时(罕见),fallback 到 K 线 CSV"""
+    """get_indicators without an indicator argument (rare) falls back to the K-line CSV."""
     stock = _FakeStock("Tata Motors", "TATAMOTORS", "IN")
     klines = [type("K", (), {"date": "2026-05-15", "open": 80, "high": 85, "low": 79, "close": 83, "volume": 1000})()]
-    # args 为空 → 不命中单指标分支,落到 stockstats/yfin 分支返回完整 CSV
+    # Empty args -> the single-indicator branch doesn't match, so the stockstats/yfin branch returns the full CSV
     with panwatch_data_context({"stock": stock, "klines": klines, "quote": {}}):
         result = _serve_from_panwatch("get_indicators", "TATAMOTORS", {}, args=())
-    # 因为没匹配到单指标,降级走 stockstats 分支 → 返回完整 K 线 CSV
+    # No single indicator matched, so it falls back to the stockstats branch -> the full K-line CSV
     assert "2026-05-15" in result
 
 
 def test_serve_fundamentals_uses_real_quote_data():
-    """get_fundamentals 用 quote 真实数据(PE/市值)填充,而不是纯空文本"""
+    """get_fundamentals fills in real quote data (PE / market cap) instead of empty text."""
     stock = _FakeStock("Tata Motors", "TATAMOTORS", "IN")
     quote = {
         "current_price": 83.26,
@@ -147,13 +147,13 @@ def test_serve_fundamentals_uses_real_quote_data():
     with panwatch_data_context({"stock": stock, "quote": quote}):
         result = _serve_from_panwatch("get_fundamentals", "TATAMOTORS", {})
     assert "25.5" in result  # PE
-    assert "125000000000" in result or "1.25e" in result.lower()  # 市值
-    assert "3.2" in result  # 换手率
+    assert "125000000000" in result or "1.25e" in result.lower()  # market cap
+    assert "3.2" in result  # turnover rate
     assert "Lightweight Fundamentals" in result
 
 
 def test_serve_klines_with_data_returns_csv():
-    """K 线有数据时返回 CSV,前缀带公司名"""
+    """With K-line data, a CSV is returned, prefixed with the company name."""
     stock = _FakeStock("Tata Motors", "TATAMOTORS", "IN")
     klines = [type("K", (), {"date": "2026-05-15", "open": 80, "high": 85, "low": 79, "close": 83.26, "volume": 1000})()]
     with panwatch_data_context({"stock": stock, "klines": klines}):
@@ -163,13 +163,13 @@ def test_serve_klines_with_data_returns_csv():
 
 
 def test_patch_route_to_vendor_handles_positional_args():
-    """根因修复:上游 route_to_vendor(method, ticker, ...) 是 positional 调用,
-    patch 必须接 *args,否则 TypeError 直接放行到 yfinance"""
+    """Root-cause fix: upstream calls route_to_vendor(method, ticker, ...) positionally,
+    so the patch must accept *args, otherwise a TypeError lets the call through to yfinance."""
     import sys
     from unittest.mock import MagicMock
     from src.modules.automation.tradingagents.toolkit_adapter import patch_route_to_vendor
 
-    # 构造一个假的 tradingagents.dataflows.interface 模块用于测试
+    # Build a fake tradingagents.dataflows.interface module for the test
     fake_ti = MagicMock()
     captured_calls = []
 
@@ -181,7 +181,7 @@ def test_patch_route_to_vendor_handles_positional_args():
     fake_module = type(sys)("tradingagents.dataflows.interface")
     fake_module.route_to_vendor = original_func
 
-    # patch sys.modules 让 toolkit_adapter import 拿到我们的假模块
+    # Patch sys.modules so toolkit_adapter's import gets our fake module
     sys.modules["tradingagents"] = type(sys)("tradingagents")
     sys.modules["tradingagents.dataflows"] = type(sys)("tradingagents.dataflows")
     sys.modules["tradingagents.dataflows"].interface = fake_module
@@ -191,13 +191,13 @@ def test_patch_route_to_vendor_handles_positional_args():
         stock = _FakeStock("Tata Motors", "TATAMOTORS", "IN")
         with panwatch_data_context({"stock": stock, "klines": [], "quote": {}}):
             with patch_route_to_vendor():
-                # 模拟上游 positional 调用:route_to_vendor("get_fundamentals", "TATAMOTORS", "2026-05-17")
+                # Simulate the upstream positional call: route_to_vendor("get_fundamentals", "TATAMOTORS", "2026-05-17")
                 result = fake_module.route_to_vendor("get_fundamentals", "TATAMOTORS", "2026-05-17")
 
-        # 我们的 patch 必须能识别 positional ticker,不能 TypeError
+        # Our patch must recognise the positional ticker without a TypeError
         assert "Tata Motors" in result
         assert "TATAMOTORS" in result
-        # 不应该放行到 original(那会触发 captured_calls 增加)
+        # It must not pass through to original (that would add to captured_calls)
         assert len(captured_calls) == 0
     finally:
         for k in ["tradingagents.dataflows.interface", "tradingagents.dataflows", "tradingagents"]:
@@ -205,8 +205,8 @@ def test_patch_route_to_vendor_handles_positional_args():
 
 
 def test_patch_route_to_vendor_intercepts_global_news_with_cache():
-    """get_global_news(curr_date, look_back_days, limit) 不带 symbol,
-    但 cache 里有 A 股标的时,必须拦截,避免拉 Yahoo 无关全球新闻"""
+    """get_global_news(curr_date, look_back_days, limit) has no symbol,
+    but when the cache holds a stock it must be intercepted, avoiding unrelated global news from Yahoo."""
     import sys
     from src.modules.automation.tradingagents.toolkit_adapter import patch_route_to_vendor
 
@@ -224,7 +224,7 @@ def test_patch_route_to_vendor_intercepts_global_news_with_cache():
         stock = _FakeStock("Tata Motors", "TATAMOTORS", "IN")
         with panwatch_data_context({"stock": stock, "events": [], "quote": {}}):
             with patch_route_to_vendor():
-                # get_global_news 第一个参数是日期,不是 ticker
+                # get_global_news's first argument is a date, not a ticker
                 result = fake_module.route_to_vendor(
                     "get_global_news", "2026-05-17", 7, 20
                 )

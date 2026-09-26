@@ -51,7 +51,7 @@ def list_channels(db: Session = Depends(get_db)):
 
 @router.get("/types")
 def list_channel_types():
-    """返回支持的渠道类型及其字段"""
+    """Supported channel types and their fields."""
     return CHANNEL_TYPES
 
 
@@ -70,7 +70,7 @@ def create_channel(body: ChannelCreate, db: Session = Depends(get_db)):
 def update_channel(channel_id: int, body: ChannelUpdate, db: Session = Depends(get_db)):
     channel = db.query(NotifyChannel).filter(NotifyChannel.id == channel_id).first()
     if not channel:
-        raise HTTPException(404, "通知渠道不存在")
+        raise HTTPException(404, "Notification channel not found")
 
     data = body.model_dump(exclude_unset=True)
     if data.get("is_default"):
@@ -90,7 +90,7 @@ def update_channel(channel_id: int, body: ChannelUpdate, db: Session = Depends(g
 def delete_channel(channel_id: int, db: Session = Depends(get_db)):
     channel = db.query(NotifyChannel).filter(NotifyChannel.id == channel_id).first()
     if not channel:
-        raise HTTPException(404, "通知渠道不存在")
+        raise HTTPException(404, "Notification channel not found")
     db.delete(channel)
     db.commit()
     return {"ok": True}
@@ -98,24 +98,24 @@ def delete_channel(channel_id: int, db: Session = Depends(get_db)):
 
 @router.post("/{channel_id}/test")
 async def test_channel(channel_id: int, db: Session = Depends(get_db)):
-    """发送测试通知"""
+    """Send a test notification."""
     channel = db.query(NotifyChannel).filter(NotifyChannel.id == channel_id).first()
     if not channel:
-        raise HTTPException(404, "通知渠道不存在")
+        raise HTTPException(404, "Notification channel not found")
 
     notifier = NotifierManager()
     try:
         notifier.add_channel(channel.type, channel.config or {})
     except Exception as e:
-        raise HTTPException(400, f"渠道配置无效: {e}")
+        raise HTTPException(400, f"Invalid channel config: {e}")
 
     result = await notifier.notify_with_result(
-        title="测试通知",
-        content="这是一条来自盯盘侠的测试通知，如果您收到此消息说明通知渠道配置正确。",
+        title="Test notification",
+        content="This is a test notification from PanWatch. If you received it, the channel is set up correctly.",
         bypass_quiet_hours=True,
     )
 
     if result.get("success"):
-        return {"ok": True, "message": "测试通知发送成功"}
+        return {"ok": True, "message": "Test notification sent"}
     else:
-        raise HTTPException(500, f"通知发送失败: {result.get('error', '未知错误')}")
+        raise HTTPException(500, f"Notification failed: {result.get('error', 'unknown error')}")

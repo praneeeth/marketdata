@@ -12,8 +12,8 @@ from pan_agent import (
 
 def test_checkpoint_envelope_round_trips_provider_neutral_state():
     checkpoint = AgentCheckpoint(
-        messages=[ModelMessage(role="user", content="继续分析")],
-        answer="已完成第一步",
+        messages=[ModelMessage(role="user", content="continue the analysis")],
+        answer="First step done",
         step_index=2,
         tool_calls_used=3,
     )

@@ -1,4 +1,4 @@
-"""因子权重 API(M5):只读列表 + 手动覆盖 + 路由挂载。"""
+"""Factor weight API (M5): read-only list + manual overrides + route mounting."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ from fastapi import HTTPException
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-import src.platform.persistence.models  # noqa: F401  注册 ORM 模型
+import src.platform.persistence.models  # noqa: F401  registers the ORM models
 from src.platform.persistence.database import Base
 
 
@@ -31,7 +31,7 @@ def test_list_weights_returns_all_market_factor_pairs():
 
 
 def test_update_weight_pins_and_sets_value():
-    """POST 手动设权重 + pin。"""
+    """POST a manual weight + pin."""
     from src.modules.strategy.api import factors
 
     db = _mem_db()
@@ -45,7 +45,7 @@ def test_update_weight_pins_and_sets_value():
 
 
 def test_update_weight_unknown_factor_returns_400():
-    """未知因子 → HTTP 400。"""
+    """Unknown factor -> HTTP 400."""
     from src.modules.strategy.api import factors
 
     db = _mem_db()
@@ -59,7 +59,7 @@ def test_update_weight_unknown_factor_returns_400():
 
 
 def test_factors_router_mounted():
-    """/api/factors/weights 已挂载到 app(走 OpenAPI schema,兼容自定义 _IncludedRouter)。"""
+    """/api/factors/weights is mounted on the app (via the OpenAPI schema, compatible with the custom _IncludedRouter)."""
     from src.bootstrap.application import app
 
     paths = set(app.openapi().get("paths", {}).keys())

@@ -17,19 +17,19 @@ def test_failover_context_summarizer_returns_structured_summary():
     from src.modules.assistant.context_summarizer import FailoverContextSummarizer
 
     client = _FakeClient(
-        '{"goal":["分析持仓"],"constraints":["不要修改数据"],'
-        '"decisions":["保留现金仓位"],"facts":["现金 50%"],'
-        '"current_state":"等待下一步","open_items":["补充风险说明"],'
-        '"tool_findings":["持仓已读取"]}'
+        '{"goal":["analyse holdings"],"constraints":["don\'t change data"],'
+        '"decisions":["keep the cash position"],"facts":["cash 50%"],'
+        '"current_state":"waiting for the next step","open_items":["add a risk note"],'
+        '"tool_findings":["holdings read"]}'
     )
     summary = asyncio.run(
         FailoverContextSummarizer(client, temperature=0.2).summarize(
-            [ModelMessage(role="user", content="分析持仓")],
+            [ModelMessage(role="user", content="analyse holdings")],
             mode=ContextCompressionMode.BALANCED,
         )
     )
 
-    assert summary.goal == ["分析持仓"]
+    assert summary.goal == ["analyse holdings"]
     assert client.calls[0][1] == 0.2
     assert "JSON" in client.calls[0][0][0]["content"]
 
@@ -37,12 +37,12 @@ def test_failover_context_summarizer_returns_structured_summary():
 def test_failover_context_summarizer_accepts_fenced_json():
     from src.modules.assistant.context_summarizer import FailoverContextSummarizer
 
-    client = _FakeClient('```json\n{"goal":["目标"]}\n```')
+    client = _FakeClient('```json\n{"goal":["goal"]}\n```')
     summary = asyncio.run(
         FailoverContextSummarizer(client).summarize(
-            [ModelMessage(role="user", content="目标")],
+            [ModelMessage(role="user", content="goal")],
             mode=ContextCompressionMode.HANDOFF,
         )
     )
 
-    assert summary.goal == ["目标"]
+    assert summary.goal == ["goal"]

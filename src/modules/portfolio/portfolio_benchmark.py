@@ -41,9 +41,9 @@ def compute_benchmark_metrics(
     *,
     annualize: int = _ANNUALIZE,
 ) -> dict | None:
-    """两条等长、按日期对齐的净值序列 → 对比指标 + 归一化曲线(归一到 100)。
+    """Two equal-length, date-aligned NAV series -> comparison metrics + normalised curves (normalised to 100).
 
-    无效(长度 <2 / 不等长 / 起点非正)返回 None。
+    Returns None when invalid (length < 2 / unequal lengths / non-positive start).
     """
     n = len(portfolio_values)
     if n < 2 or len(benchmark_values) != n or len(dates) != n:
@@ -65,7 +65,7 @@ def compute_benchmark_metrics(
     std = var**0.5
     info_ratio = (mean_excess / std * (annualize**0.5)) if std > 0 else 0.0
 
-    # 相对回撤:组合/基准 归一比值序列的最大回撤
+    # Relative drawdown: maximum drawdown of the portfolio/benchmark normalised ratio series
     ratio = [pn / bn for pn, bn in zip(pnorm, bnorm)]
     peak, max_dd = ratio[0], 0.0
     for r in ratio:
@@ -94,7 +94,7 @@ def _fetch_benchmark_series(code: str, days: int) -> tuple[list[str], list[float
 
 
 def _ffill_closes(bars: list[KlineData], dates: list[str]) -> list[float]:
-    """把持仓日K前向填充到给定(升序)交易日序列上。dates 均 >= bars 首日。"""
+    """Forward-fill a holding's daily K-lines onto the given (ascending) trading-day series. Every date is >= the first bar's date."""
     series = sorted(((b.date, b.close) for b in bars), key=lambda x: x[0])
     out: list[float] = []
     last = series[0][1]
@@ -114,9 +114,9 @@ def build_portfolio_benchmark(
     benchmark_code: str = DEFAULT_BENCHMARK,
     kline_fetch=None,
 ) -> dict | None:
-    """holdings: [{symbol, market, quantity, fx}] → 基准对比结果(含归一化曲线)。
+    """holdings: [{symbol, market, quantity, fx}] -> benchmark comparison (with normalised curves).
 
-    kline_fetch(symbol, market) -> list[KlineData];默认用 KlineCollector(带缓存)。
+    kline_fetch(symbol, market) -> list[KlineData]; KlineCollector (cached) by default.
     """
     bench_dates, bench_closes = _fetch_benchmark_series(benchmark_code, days)
     if len(bench_dates) < 2:
@@ -138,9 +138,9 @@ def build_portfolio_benchmark(
     if not holding_series:
         return None
 
-    # 所有持仓都有数据的起点,避免早期持仓缺数导致 NAV 失真;
-    # 但覆盖极差的单只持仓(坏源/新股,只有最近 1-2 根)不许一票否决整个窗口:
-    # 保底窗口 = max(10, 基准天数一半),覆盖不到保底窗口起点的持仓剔除出 NAV(记入 excluded)。
+    # Start where every holding has data, so holdings missing early data don't distort the NAV;
+    # but one holding with very poor coverage (a bad source / new listing with only the last 1-2 bars) can't veto the whole window:
+    # minimum window = max(10, half the benchmark days); holdings that don't reach its start are left out of the NAV (listed in excluded).
     min_window = max(10, len(bench_dates) // 2)
     floor_date = bench_dates[-min_window] if len(bench_dates) >= min_window else bench_dates[0]
     kept = [hs for hs in holding_series if hs[2] <= floor_date]
@@ -167,7 +167,7 @@ def build_portfolio_benchmark(
         metrics["benchmark_code"] = benchmark_code
         metrics["benchmark_label"] = benchmark_label(benchmark_code)
         if excluded:
-            # 覆盖不足被剔除的持仓(如坏源/新股),供上层展示"基于 N-x 只计算"
+            # Holdings excluded for poor coverage (bad source / new listing), so the layer above can show "based on N-x stocks"
             metrics["excluded"] = excluded
     return metrics
 
@@ -179,9 +179,9 @@ def build_attribution(
     benchmark_code: str = DEFAULT_BENCHMARK,
     kline_fetch=None,
 ) -> list[dict]:
-    """近 days 日各持仓对组合收益的贡献(weight×return),按贡献降序。
+    """Each holding's contribution to portfolio return over the last `days` days (weight x return), descending.
 
-    contribution_i ≈ 起始权重_i × 区间收益_i;和≈组合收益。用于"谁拖累/贡献"。
+    contribution_i ≈ starting weight_i x period return_i; the sum ≈ the portfolio return. Used for "what dragged / what helped".
     """
     bench_dates, _ = _fetch_benchmark_series(benchmark_code, days)
     if len(bench_dates) < 2:

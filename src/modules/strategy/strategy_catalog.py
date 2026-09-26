@@ -1,4 +1,4 @@
-"""策略目录与权重读取。"""
+"""Strategy catalogue and weight reads."""
 
 from __future__ import annotations
 
@@ -24,56 +24,56 @@ class StrategySpec:
 DEFAULT_STRATEGIES: tuple[StrategySpec, ...] = (
     StrategySpec(
         code="trend_follow",
-        name="趋势延续",
-        description="顺势跟随，优先均线多头且动量延续",
+        name="Trend continuation",
+        description="Follows the trend, preferring bullish MA alignment with continuing momentum",
         risk_level="medium",
         params={"horizon_days": 5},
         default_weight=1.15,
     ),
     StrategySpec(
         code="macd_golden",
-        name="MACD金叉",
-        description="MACD 金叉确认，偏中短线",
+        name="MACD golden cross",
+        description="Confirmed MACD golden cross; short to medium term",
         risk_level="medium",
         params={"horizon_days": 3},
         default_weight=1.10,
     ),
     StrategySpec(
         code="volume_breakout",
-        name="放量突破",
-        description="放量突破关键位，偏进攻",
+        name="Volume breakout",
+        description="Breakout through a key level on higher volume; aggressive",
         risk_level="high",
         params={"horizon_days": 3},
         default_weight=1.18,
     ),
     StrategySpec(
         code="pullback",
-        name="回踩确认",
-        description="回踩支撑后二次启动",
+        name="Pullback confirmation",
+        description="Second leg up after a pullback to support",
         risk_level="low",
         params={"horizon_days": 5},
         default_weight=1.05,
     ),
     StrategySpec(
         code="rebound",
-        name="超跌反弹",
-        description="超跌后的反弹交易",
+        name="Oversold rebound",
+        description="Rebound after an oversold move",
         risk_level="high",
         params={"horizon_days": 3},
         default_weight=0.95,
     ),
     StrategySpec(
         code="watchlist_agent",
-        name="Agent建议",
-        description="来自既有 Agent 的综合建议映射",
+        name="Agent item",
+        description="Mapped from the combined items of existing agents",
         risk_level="medium",
         params={"horizon_days": 3},
         default_weight=1.00,
     ),
     StrategySpec(
         code="market_scan",
-        name="市场扫描",
-        description="市场池扫描策略（热门与活跃）",
+        name="Market scan",
+        description="Market pool scan strategy (popular and active stocks)",
         risk_level="medium",
         params={"horizon_days": 3},
         default_weight=1.08,

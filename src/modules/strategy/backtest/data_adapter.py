@@ -1,8 +1,8 @@
-"""回测数据适配:KlineCollector → PriceBar,交易日历对齐。
+"""Back-test data adapter: KlineCollector -> PriceBar, aligned to the trading calendar.
 
-- PriceBar 定义在本模块顶层,且 **不在顶层 import KlineCollector**(延迟导入),
-  使回测内核与单测不被 httpx/网络库耦合,可离线运行。
-- KlineCollector 返回的已是前复权(qfq)日线,停牌日天然无 bar,交易日历 = 实际 bar 序列。
+- PriceBar is defined at the top of this module, and KlineCollector is **not imported at the top** (lazy import),
+  so the back-test core and unit tests aren't coupled to httpx/network libraries and can run offline.
+- KlineCollector already returns adjusted daily bars; suspended days naturally have no bar, so the trading calendar = the actual bar series.
 """
 
 from __future__ import annotations
@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 
 @dataclass(frozen=True)
 class PriceBar:
-    """单根日 K(前复权)。"""
+    """One daily bar (adjusted)."""
 
     date: str  # YYYY-MM-DD
     open: float
@@ -26,7 +26,7 @@ class PriceBar:
 
 
 def from_klines(klines) -> list[PriceBar]:
-    """KlineData 列表 → 按日期升序的 PriceBar 列表。"""
+    """KlineData list -> PriceBar list in ascending date order."""
     out: list[PriceBar] = []
     for k in klines or []:
         try:
@@ -47,7 +47,7 @@ def from_klines(klines) -> list[PriceBar]:
 
 
 def load_price_history(symbol: str, market, days: int = 250) -> list[PriceBar]:
-    """走 KlineCollector 拉历史(延迟导入,避免顶层耦合网络库)。"""
+    """Fetch history through KlineCollector (lazy import, so the network library isn't coupled at the top)."""
     from src.platform.marketdata.collectors.kline_collector import KlineCollector
     from src.platform.marketdata.models import MarketCode
 
@@ -58,13 +58,13 @@ def load_price_history(symbol: str, market, days: int = 250) -> list[PriceBar]:
     try:
         klines = KlineCollector(mc).get_klines(symbol, days=days)
     except Exception as e:
-        logger.warning(f"[回测] 拉取 {symbol} K线失败: {e}")
+        logger.warning(f"[Back-test] K-line fetch for {symbol} failed: {e}")
         return []
     return from_klines(klines)
 
 
 def first_index_after(bars: list[PriceBar], date: str) -> int | None:
-    """返回第一个 date 严格大于给定日期的 bar 下标(下一交易日,防 look-ahead)。"""
+    """Index of the first bar whose date is strictly after the given date (the next trading day, against look-ahead)."""
     for i, b in enumerate(bars):
         if b.date > date:
             return i

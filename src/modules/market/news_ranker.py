@@ -6,34 +6,47 @@ from datetime import datetime
 
 
 POSITIVE_HINTS = (
-    "签约",
-    "中标",
-    "增长",
-    "上调",
-    "创新高",
-    "利好",
-    "增持",
-    "回购",
-    "扭亏",
-    "超预期",
+    "order win",
+    "bags order",
+    "growth",
+    "upgrade",
+    "record high",
+    "positive",
+    "stake increase",
+    "buyback",
+    "turnaround",
+    "beats estimates",
 )
 
 NEGATIVE_HINTS = (
-    "下调",
-    "减持",
-    "亏损",
-    "暴跌",
-    "诉讼",
-    "风险",
-    "违规",
-    "处罚",
-    "利空",
-    "退市",
+    "downgrade",
+    "stake sale",
+    "loss",
+    "plunge",
+    "lawsuit",
+    "risk",
+    "violation",
+    "penalty",
+    "negative",
+    "delisting",
+)
+
+# Headline words that signal a material corporate event.
+_EVENT_WORDS = (
+    "results", "earnings", "stake", "buyback", "dividend", "bonus", "split",
+    "acquisition", "merger", "trading halt", "suspension", "lock-in",
+)
+
+# Common headline words that are never a topic.
+_STOPWORDS = frozenset(
+    """the and for with from that this into over after amid says said will its are was were has have
+    ltd limited company announcement today news shares share stock stocks india indian report reports
+    update updates year quarter crore""".split()
 )
 
 
 def _to_naive_local(dt: datetime) -> datetime:
-    """统一转为本地时区的 naive datetime，便于与 datetime.now() 比较。"""
+    """Convert to a naive datetime in local time, for comparison with datetime.now()."""
     if dt.tzinfo is None:
         return dt
     return dt.astimezone().replace(tzinfo=None)
@@ -69,7 +82,7 @@ def parse_news_time(value: str | datetime | int | float | None) -> datetime | No
         except Exception:
             continue
 
-    # 常见月日格式（无年份），按当前年份补齐。
+    # Common month-day formats (no year) get the current year.
     for fmt in ("%m-%d %H:%M:%S", "%m-%d %H:%M", "%m/%d %H:%M:%S", "%m/%d %H:%M"):
         try:
             partial = datetime.strptime(normalized, fmt)
@@ -100,8 +113,9 @@ def dedupe_news_items(items: list[dict]) -> list[dict]:
 
 
 def _sentiment_from_text(text: str) -> str:
-    pos = sum(1 for k in POSITIVE_HINTS if k in text)
-    neg = sum(1 for k in NEGATIVE_HINTS if k in text)
+    lowered = text.lower()
+    pos = sum(1 for k in POSITIVE_HINTS if k in lowered)
+    neg = sum(1 for k in NEGATIVE_HINTS if k in lowered)
     if pos > neg:
         return "positive"
     if neg > pos:
@@ -119,9 +133,10 @@ def rank_news_items(items: list[dict], symbol: str = "") -> list[dict]:
 
         if symbol and symbol in str(it.get("symbols") or []):
             s += 2.0
-        if any(k in title for k in ("重大", "业绩", "增持", "减持", "停牌", "解禁", "回购", "分红", "快报")):
+        lowered = title.lower()
+        if any(k in lowered for k in _EVENT_WORDS):
             s += 2.0
-        if "公告" in title:
+        if "announcement" in lowered:
             s += 1.0
 
         ts = parse_news_time(str(it.get("time") or "")) or datetime.min
@@ -134,7 +149,7 @@ def rank_news_items(items: list[dict], symbol: str = "") -> list[dict]:
 def summarize_news_topics(items: list[dict], max_topics: int = 6) -> dict:
     if not items:
         return {
-            "summary": "近期无显著新闻主题",
+            "summary": "No notable news themes recently",
             "topics": [],
             "sentiment": "neutral",
             "counts": {"positive": 0, "negative": 0, "neutral": 0},
@@ -150,9 +165,9 @@ def summarize_news_topics(items: list[dict], max_topics: int = 6) -> dict:
         sentiment = _sentiment_from_text(text)
         senti_counter[sentiment] += 1
 
-        words = re.findall(r"[\u4e00-\u9fa5A-Za-z0-9]{2,}", title)
+        words = re.findall(r"[A-Za-z][A-Za-z0-9&]{2,}", title)
         for w in words:
-            if w in ("公司", "公告", "今日", "消息", "显示", "发布", "表示", "相关"):
+            if w.lower() in _STOPWORDS:
                 continue
             word_counter[w] += 1
 
@@ -164,10 +179,11 @@ def summarize_news_topics(items: list[dict], max_topics: int = 6) -> dict:
     else:
         senti = "neutral"
 
+    mood = {"positive": "leaning positive", "negative": "leaning negative"}.get(senti, "neutral")
     if topics:
-        summary = f"主题集中在：{'、'.join(topics[: max_topics])}；整体情绪{('偏多' if senti == 'positive' else '偏空' if senti == 'negative' else '中性')}"
+        summary = f"Themes: {', '.join(topics[: max_topics])}; overall sentiment {mood}"
     else:
-        summary = f"可用新闻较少，整体情绪{('偏多' if senti == 'positive' else '偏空' if senti == 'negative' else '中性')}"
+        summary = f"Little news available; overall sentiment {mood}"
 
     return {
         "summary": summary,

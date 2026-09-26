@@ -1,19 +1,19 @@
 # PanAgent Tool Research
 
-`pan-agent-tool-research` 是 `pan-agent-runtime` 的可选插件，用于在工具数量增长
-时提供渐进式工具发现能力。它不属于 runtime 核心，M0 不连接数据库、Redis、向量服务
-或模型供应商。
+`pan-agent-tool-research` is an optional plugin for `pan-agent-runtime` that adds
+progressive tool discovery as the number of tools grows. It isn't part of the runtime core; M0 connects to no database, Redis, vector service
+or model provider.
 
-## 能力
+## Capabilities
 
-- `ToolDescriptor`：工具用途、关键词、别名、能力域、风险和数据新鲜度；
-- `ToolCatalog`：进程内、版本化的描述元数据目录；
-- `KeywordToolRetriever`：无模型调用的关键词和别名检索；
-- `ToolResearchService`：应用启用状态、能力域和宿主 `ToolPolicy` 后返回候选；
-- `ToolResearchPlugin`：以 shadow 或 active 模式接入 runtime；active 模式提供模型可调用
-  的 `tool_search` 虚拟工具。
+- `ToolDescriptor`: a tool's purpose, keywords, aliases, capability domain, risk and data freshness;
+- `ToolCatalog`: an in-process, versioned catalogue of descriptor metadata;
+- `KeywordToolRetriever`: keyword and alias retrieval with no model calls;
+- `ToolResearchService`: returns candidates after applying enablement, capability domains and the host `ToolPolicy`;
+- `ToolResearchPlugin`: plugs into the runtime in shadow or active mode; active mode provides a model-callable
+  `tool_search` virtual tool.
 
-## 接入
+## Integration
 
 ```python
 from pan_agent import AgentRuntime
@@ -31,44 +31,44 @@ runtime = AgentRuntime(
 )
 ```
 
-`shadow` 模式只发出 `extension_event`，不改变模型看到的工具集合；`active` 模式会：
+`shadow` mode only emits an `extension_event` and doesn't change the tool set the model sees; `active` mode:
 
-1. 保留 Registry 标记为 `direct` 的工具；
-2. 暴露一个模型可调用的 `tool_search`；
-3. 搜索结果进入下一轮消息，并将选中的 Deferred 工具按完整 schema 暴露；
-4. 每次执行仍由 Runtime Policy 和 Registry 再次校验。
+1. keeps the tools the Registry marks as `direct`;
+2. exposes a model-callable `tool_search`;
+3. puts search results into the next round of messages and exposes the chosen deferred tools with their full schemas;
+4. still has every execution checked again by the runtime policy and the Registry.
 
-Registry 中的工具可以通过 `ToolSpec.exposure` 设置为 `direct`、`deferred` 或 `hidden`：
+Tools in the Registry can be set to `direct`, `deferred` or `hidden` through `ToolSpec.exposure`:
 
 ```python
 from pan_agent import ToolExposure, ToolSpec
 
 ToolSpec(
     name="get_special_report",
-    title="专项报告",
-    description="查询专项报告。",
+    title="Special report",
+    description="Look up a special report.",
     exposure=ToolExposure.DEFERRED,
 )
 ```
 
-插件失败默认回退到当前 Direct 工具集合，不会因为目录或检索服务异常而清空模型工具空间。
-M0 的 active 检索仍然使用进程内关键词、别名和结构化元数据，不强制调用意图模型。
+If the plugin fails, it falls back to the current direct tool set by default, so a catalogue or retrieval failure never empties the model's tools.
+M0's active retrieval still uses in-process keywords, aliases and structured metadata, with no intent model required.
 
-## 事件
+## Events
 
-插件通过 runtime 的通用扩展事件发出：
+The plugin emits through the runtime's generic extension events:
 
-- `extension=tool_research, event=started`；
-- `exposure`：当前 Direct 工具和已经加载的工具；
-- `candidates_scored`；
-- `completed`；
-- `searched`：模型实际调用 `tool_search` 后的结果；
-- `fallback`。
+- `extension=tool_research, event=started`;
+- `exposure`: the current direct tools and the tools already loaded;
+- `candidates_scored`;
+- `completed`;
+- `searched`: the result after the model actually calls `tool_search`;
+- `fallback`.
 
-宿主可以把 `RuntimeEvent` 直接写入自己的任务事件表，也可以忽略插件事件。插件不会把
-用户原文写入事件，搜索事件只记录查询哈希、候选数量、工具名和版本信息。
+The host can write `RuntimeEvent`s straight into its own task event table, or ignore plugin events. The plugin never writes
+the user's original text into events; search events record only the query hash, candidate count, tool names and versions.
 
-## 开发
+## Development
 
 ```bash
 python -m pip install -e packages/pan-agent-runtime

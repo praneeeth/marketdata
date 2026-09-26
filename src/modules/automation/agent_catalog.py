@@ -57,8 +57,8 @@ class AgentSeedSpec:
 AGENT_SEED_SPECS: tuple[AgentSeedSpec, ...] = (
     AgentSeedSpec(
         name="premarket_outlook",
-        display_name="盘前分析",
-        description="开盘前综合昨日分析和隔夜信息，展望今日走势",
+        display_name="Pre-market outlook",
+        description="Before the open, combines yesterday's analysis with overnight news for a view of the day",
         enabled=False,
         schedule="0 9 * * 1-5",
         execution_mode="batch",
@@ -68,8 +68,8 @@ AGENT_SEED_SPECS: tuple[AgentSeedSpec, ...] = (
     ),
     AgentSeedSpec(
         name="intraday_monitor",
-        display_name="盘中监测",
-        description="交易时段实时监控，AI 智能判断是否有值得关注的信号",
+        display_name="Intraday monitor",
+        description="Watches during market hours; the AI flags signals worth attention",
         enabled=False,
         schedule="*/5 9-15 * * 1-5",
         execution_mode="single",
@@ -87,8 +87,8 @@ AGENT_SEED_SPECS: tuple[AgentSeedSpec, ...] = (
     ),
     AgentSeedSpec(
         name="daily_report",
-        display_name="收盘复盘",
-        description="每日收盘后生成复盘报告，包含市场回顾、个股复盘和次日关注",
+        display_name="Daily close report",
+        description="After the close each day, writes a report with a market review, per-stock review and what to watch tomorrow",
         enabled=True,
         schedule="30 15 * * 1-5",
         execution_mode="batch",
@@ -98,8 +98,8 @@ AGENT_SEED_SPECS: tuple[AgentSeedSpec, ...] = (
     ),
     AgentSeedSpec(
         name="news_digest",
-        display_name="新闻速递（能力）",
-        description="内部能力：提供新闻抓取、去重与主题聚合，不独立调度",
+        display_name="News digest (capability)",
+        description="Internal capability: fetches, deduplicates and groups news; not scheduled on its own",
         enabled=False,
         schedule="",
         execution_mode="batch",
@@ -115,9 +115,9 @@ AGENT_SEED_SPECS: tuple[AgentSeedSpec, ...] = (
     ),
     AgentSeedSpec(
         name="tradingagents",
-        display_name="TradingAgents 深度分析",
-        description="多 Agent 投资决策框架(基本面/情绪/新闻/技术 + 看多看空辩论 + 风控 + PM)。"
-        "单次 3-5 分钟、~$0.05 (deepseek-chat)。需手动触发,默认关闭。",
+        display_name="TradingAgents deep research",
+        description="Multi-agent research framework (fundamentals/sentiment/news/technicals + bull/bear debate + risk + PM). "
+        "3-5 minutes and ~$0.05 per run (deepseek-chat). Manual trigger; off by default.",
         enabled=False,
         schedule="",
         execution_mode="single",
@@ -131,16 +131,16 @@ AGENT_SEED_SPECS: tuple[AgentSeedSpec, ...] = (
             "over_budget_action": "reject",
             "cache_ttl_hours": 12,
             "output_language": "English",
-            "deep_model": "",       # 留空走默认 AI Service 的 model;可填如 "claude-sonnet-4"
-            "quick_model": "",      # 留空 = deep_model;可填便宜模型如 "deepseek-chat"
+            "deep_model": "",       # empty uses the default AI service's model; e.g. "claude-sonnet-4"
+            "quick_model": "",      # empty = deep_model; e.g. a cheap model such as "deepseek-chat"
             "timeout_minutes": 15,
-            "llm_timeout_seconds": 120,  # 单次 LLM 请求超时，防止 analyst 永久阻塞
-            "llm_max_retries": 0,         # 深度分析失败快速落终态，不在图内重复重试
-            "llm_max_tokens": 4096,       # 限制模型输出，避免网关空闲超时
-            "emit_paper_trading_signal": False,  # 是否把 BUY 决策写入 StrategySignalRun
-                                                  # 驱动模拟盘自动开仓 (默认关,需用户主动启用)
-            "enable_sec_edgar": False,  # 仅美股：优先使用有 filing-date 语义的 SEC EDGAR 财报
-            "holding_period_days": 5,   # 上游决策质量回测使用的默认持仓期限
+            "llm_timeout_seconds": 120,  # timeout per LLM request so an analyst can't block forever
+            "llm_max_retries": 0,         # deep research fails fast to a final state instead of retrying in the graph
+            "llm_max_tokens": 4096,       # cap model output to avoid gateway idle timeouts
+            "emit_paper_trading_signal": False,  # write BUY decisions to StrategySignalRun
+                                                  # to drive simulation entries (off by default; the user must opt in)
+            "enable_sec_edgar": False,  # US stocks only: prefer SEC EDGAR statements with filing-date semantics
+            "holding_period_days": 5,   # default holding period for upstream decision-quality back-tests
         },
     ),
 )

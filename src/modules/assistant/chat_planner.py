@@ -1,12 +1,12 @@
-"""Planning 试点 —— "全面诊断我的持仓"计划驱动编排。
+"""Planning pilot: plan-driven orchestration for "give my portfolio a full check".
 
-范围刻意小:只覆盖单一场景(全面诊断持仓)。识别到该意图后走计划驱动:
-LLM 生成结构化计划(逐持仓股分析 → 组合风险 → 汇总建议)→ 计划经 SSE `plan` 事件
-推给前端 → 逐步执行(每步复用现有工具/LLM)→ 步骤失败重规划(上限 1 次,超限带失败
-信息直接汇总)。
+Deliberately narrow: only one scenario (a full portfolio check). When that intent is recognised it goes plan-driven:
+the LLM writes a structured plan (analyse each holding -> portfolio risk -> summary) -> the plan goes to the frontend
+as an SSE `plan` event -> steps run one by one (reusing existing tools/LLM) -> a failed step triggers a re-plan (at most once; after that
+the failure is included in the summary).
 
-这是**试点**:验证"计划驱动"相对固定流程的价值,不做过度泛化。编排函数把工具执行器
-(execute_tool)与 SSE 流(stream)作为依赖注入,便于单测全 mock。
+This is a **pilot**: it tests the value of plan-driven flows over fixed ones, without over-generalising. The orchestrator takes the
+tool executor (execute_tool) and the SSE stream (stream) as injected dependencies, so unit tests can mock everything.
 """
 
 import json
@@ -17,24 +17,24 @@ from src.platform.compliance.prompt_rules import research_rules
 
 logger = logging.getLogger(__name__)
 
-# 触发词:显式命中即走计划驱动(简单启发式,试点足够)
+# Trigger phrases: an explicit match goes plan-driven (a simple heuristic, enough for a pilot)
 _PLANNING_TRIGGERS = (
-    "全面诊断",
-    "诊断我的持仓",
-    "诊断一下我的持仓",
-    "持仓诊断",
-    "组合诊断",
-    "全面体检",
-    "持仓体检",
-    "全面分析我的持仓",
+    "full portfolio check",
+    "check my portfolio",
+    "diagnose my portfolio",
+    "portfolio diagnosis",
+    "portfolio health check",
+    "review my holdings",
+    "analyse my holdings",
+    "analyze my holdings",
 )
 
 
 def should_use_planning(content: str) -> bool:
-    """判断用户输入是否命中"全面诊断持仓"场景。"""
+    """Whether the user's message asks for a full portfolio check."""
     if not content:
         return False
-    text = content.replace(" ", "")
+    text = " ".join(content.lower().split())
     return any(t in text for t in _PLANNING_TRIGGERS)
 
 
@@ -52,7 +52,7 @@ _PLAN_SYSTEM = (
 def _plan_messages(portfolio_text: str) -> list[dict]:
     return [
         {"role": "system", "content": _PLAN_SYSTEM},
-        {"role": "user", "content": f"我的持仓如下,请产出诊断计划:\n{portfolio_text}"},
+        {"role": "user", "content": f"Here are my holdings; please write a check plan:\n{portfolio_text}"},
     ]
 
 
@@ -64,19 +64,19 @@ def _replan_messages(
         {
             "role": "user",
             "content": (
-                f"我的持仓:\n{portfolio_text}\n\n"
-                f'上一版计划里的步骤「{failed_title}」执行失败({error}),'
-                "请重新产出一份可执行的诊断计划(跳过或替换失败步骤)。"
+                f"My holdings:\n{portfolio_text}\n\n"
+                f'The step "{failed_title}" in the previous plan failed ({error}). '
+                "Please write a new plan that can run (skip or replace the failed step)."
             ),
         },
     ]
 
 
 def parse_plan(text: str) -> list[dict] | None:
-    """从 LLM 文本里容错解析计划步骤列表。
+    """Tolerantly parse the list of plan steps from LLM text.
 
-    支持:纯 JSON、```json 围栏包裹、前后有解释文字、尾部截断等常见脏输出。
-    解析失败返回 None(交由调用方回退默认计划)。
+    Handles plain JSON, ```json fences, explanations before/after, a truncated tail and other common messy output.
+    Returns None when parsing fails (the caller falls back to the default plan).
     """
     if not text:
         return None
@@ -111,12 +111,12 @@ def parse_plan(text: str) -> list[dict] | None:
 
 
 def build_default_plan(portfolio_text: str) -> list[dict]:
-    """LLM 计划不可用时的降级默认计划(仅做组合风险,汇总由系统追加)。"""
-    return [{"title": "组合整体风险评估", "action": "portfolio_risk"}]
+    """Default plan when the LLM plan is unavailable (portfolio risk only; the system adds the summary)."""
+    return [{"title": "Overall portfolio risk", "action": "portfolio_risk"}]
 
 
 def normalize_steps(steps: list[dict], start_id: int = 1) -> list[dict]:
-    """规范化步骤:补 id/title/action/params/status。过滤 summarize(汇总系统自动做)。"""
+    """Normalise steps: fill in id/title/action/params/status. Drops summarize (the system summarises automatically)."""
     out = []
     sid = start_id
     for s in steps:
@@ -128,7 +128,7 @@ def normalize_steps(steps: list[dict], start_id: int = 1) -> list[dict]:
         out.append(
             {
                 "id": sid,
-                "title": s.get("title") or f"步骤 {sid}",
+                "title": s.get("title") or f"Step {sid}",
                 "action": action,
                 "params": s.get("params") or {},
                 "status": "pending",
@@ -164,7 +164,7 @@ _SUMMARY_SYSTEM = (
 
 
 async def _execute_step(db, ai_client, execute_tool, step: dict, portfolio_text: str) -> str:
-    """执行单个计划步骤,返回该步的分析文本。"""
+    """Run one plan step and return its analysis text."""
     action = step["action"]
     if action == "analyze_stock":
         p = step.get("params") or {}
@@ -180,42 +180,42 @@ async def _execute_step(db, ai_client, execute_tool, step: dict, portfolio_text:
         ]
         return await ai_client.chat_multi(msgs, temperature=0.4)
 
-    # portfolio_risk 及其它未知 action:统一按组合风险处理
+    # portfolio_risk and any other unknown action: treat as portfolio risk
     msgs = [
         {"role": "system", "content": _STEP_SYSTEM},
-        {"role": "user", "content": f"评估以下持仓组合的整体风险:\n{portfolio_text}"},
+        {"role": "user", "content": f"Assess the overall risk of this portfolio:\n{portfolio_text}"},
     ]
     return await ai_client.chat_multi(msgs, temperature=0.4)
 
 
 def _summary_messages(results: list[tuple[str, str]]) -> list[dict]:
-    body = "\n\n".join(f"【{title}】\n{res}" for title, res in results)
+    body = "\n\n".join(f"[{title}]\n{res}" for title, res in results)
     return [
         {"role": "system", "content": _SUMMARY_SYSTEM},
-        {"role": "user", "content": f"以下是各步骤的诊断结果,请汇总:\n\n{body}"},
+        {"role": "user", "content": f"Here are the results of each check step; please summarise:\n\n{body}"},
     ]
 
 
 async def run_portfolio_diagnosis(db, stream, ai_client, execute_tool) -> str:
-    """计划驱动的"全面诊断持仓"编排,返回最终汇总文本(已通过 SSE 流式推送)。
+    """Plan-driven "full portfolio check" orchestration; returns the final summary (already streamed over SSE).
 
     Args:
-        db: DB session。
-        stream: SSEStream(需支持 async publish(event, data))。
-        ai_client: AI 客户端(chat_multi / chat_stream)。
-        execute_tool: async (db, name, args) -> str 工具执行器。
+        db: DB session.
+        stream: SSEStream (must support async publish(event, data)).
+        ai_client: AI client (chat_multi / chat_stream).
+        execute_tool: async (db, name, args) -> str tool executor.
     """
     await stream.publish("plan", {"status": "planning", "steps": []})
 
     portfolio_text = await execute_tool(db, "get_portfolio", {})
 
-    # 1) 生成计划(失败/解析不了则回退默认计划)
+    # 1) Write the plan (fall back to the default plan on failure or unparseable output)
     steps = None
     try:
         raw = await ai_client.chat_multi(_plan_messages(portfolio_text), temperature=0.3)
         steps = parse_plan(raw)
     except Exception:
-        logger.warning("生成诊断计划失败,回退默认计划", exc_info=True)
+        logger.warning("Failed to write the check plan; using the default plan", exc_info=True)
     if not steps:
         steps = build_default_plan(portfolio_text)
     steps = normalize_steps(steps)
@@ -224,7 +224,7 @@ async def run_portfolio_diagnosis(db, stream, ai_client, execute_tool) -> str:
 
     await _publish_plan(stream, steps, status="running")
 
-    # 2) 逐步执行,失败重规划(上限 1 次)
+    # 2) Run step by step, re-planning on failure (at most once)
     results: list[tuple[str, str]] = []
     replanned = False
     i = 0
@@ -239,7 +239,7 @@ async def run_portfolio_diagnosis(db, stream, ai_client, execute_tool) -> str:
         except Exception as e:  # noqa: BLE001
             if not replanned:
                 replanned = True
-                logger.info("步骤「%s」失败,触发重规划: %s", step["title"], e)
+                logger.info("Step \"%s\" failed; re-planning: %s", step["title"], e)
                 try:
                     raw = await ai_client.chat_multi(
                         _replan_messages(portfolio_text, step["title"], str(e)),
@@ -251,14 +251,14 @@ async def run_portfolio_diagnosis(db, stream, ai_client, execute_tool) -> str:
                 if new_steps:
                     steps = steps[:i] + normalize_steps(new_steps, start_id=step["id"])
                     await _publish_plan(stream, steps, status="running")
-                    continue  # 从当前位置用新计划重试
-            # 已重规划过或重规划失败:标记失败,带失败信息继续汇总
+                    continue  # retry from the current position with the new plan
+            # Already re-planned or re-planning failed: mark it failed and carry the failure into the summary
             step["status"] = "failed"
-            results.append((step["title"], f"(该步执行失败:{e})"))
+            results.append((step["title"], f"(this step failed: {e})"))
         await _publish_plan(stream, steps, status="running")
         i += 1
 
-    # 3) 汇总(流式推 token)
+    # 3) Summarise (tokens streamed)
     summary = ""
     try:
         parts: list[str] = []
@@ -269,13 +269,13 @@ async def run_portfolio_diagnosis(db, stream, ai_client, execute_tool) -> str:
                 parts.append(payload)
                 await stream.publish("token", {"text": payload})
         summary = "".join(parts)
-    except Exception as e:  # noqa: BLE001 — 流式汇总失败降级为非流式
-        logger.warning("流式汇总失败,降级非流式: %s", e)
+    except Exception as e:  # noqa: BLE001 — a failed streaming summary falls back to non-streaming
+        logger.warning("Streaming summary failed; falling back to non-streaming: %s", e)
         try:
             summary = await ai_client.chat_multi(_summary_messages(results), temperature=0.4)
             await stream.publish("token", {"text": summary})
         except Exception:
-            summary = "抱歉,诊断汇总失败。"
+            summary = "Sorry, the check summary failed."
             await stream.publish("token", {"text": summary})
 
     await _publish_plan(stream, steps, status="done")

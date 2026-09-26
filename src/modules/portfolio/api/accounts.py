@@ -1,4 +1,4 @@
-"""账户和持仓管理 API"""
+"""Account and position management API."""
 import logging
 import time
 import httpx
@@ -53,7 +53,7 @@ class PositionCreate(BaseModel):
     cost_price: float
     quantity: int
     invested_amount: float | None = None
-    trading_style: str | None = None  # short: 短线, swing: 波段, long: 长线
+    trading_style: str | None = None  # short: short term, swing: swing, long: long term
 
 
 class PositionUpdate(BaseModel):
@@ -72,7 +72,7 @@ class PositionResponse(BaseModel):
     invested_amount: float | None
     sort_order: int
     trading_style: str | None
-    # 关联信息
+    # Related info
     account_name: str | None = None
     stock_symbol: str | None = None
     stock_name: str | None = None
@@ -94,36 +94,36 @@ class PositionReorderRequest(BaseModel):
 
 @router.get("/accounts", response_model=list[AccountResponse])
 def list_accounts(db: Session = Depends(get_db)):
-    """获取所有账户"""
+    """List all accounts."""
     return db.query(Account).order_by(Account.id).all()
 
 
 @router.get("/accounts/{account_id}", response_model=AccountResponse)
 def get_account(account_id: int, db: Session = Depends(get_db)):
-    """获取单个账户"""
+    """Get one account."""
     account = db.query(Account).filter(Account.id == account_id).first()
     if not account:
-        raise HTTPException(404, "账户不存在")
+        raise HTTPException(404, "Account not found")
     return account
 
 
 @router.post("/accounts", response_model=AccountResponse)
 def create_account(data: AccountCreate, db: Session = Depends(get_db)):
-    """创建账户"""
+    """Create an account."""
     account = Account(name=data.name, available_funds=data.available_funds)
     db.add(account)
     db.commit()
     db.refresh(account)
-    logger.info(f"创建账户: {account.name}")
+    logger.info(f"Created account: {account.name}")
     return account
 
 
 @router.put("/accounts/{account_id}", response_model=AccountResponse)
 def update_account(account_id: int, data: AccountUpdate, db: Session = Depends(get_db)):
-    """更新账户"""
+    """Update an account."""
     account = db.query(Account).filter(Account.id == account_id).first()
     if not account:
-        raise HTTPException(404, "账户不存在")
+        raise HTTPException(404, "Account not found")
 
     if data.name is not None:
         account.name = data.name
@@ -134,16 +134,16 @@ def update_account(account_id: int, data: AccountUpdate, db: Session = Depends(g
 
     db.commit()
     db.refresh(account)
-    logger.info(f"更新账户: {account.name}")
+    logger.info(f"Updated account: {account.name}")
     return account
 
 
 @router.delete("/accounts/{account_id}")
 def delete_account(account_id: int, db: Session = Depends(get_db)):
-    """删除账户（会同时删除该账户的所有持仓）"""
+    """Delete an account (also deletes all of its positions)."""
     account = db.query(Account).filter(Account.id == account_id).first()
     if not account:
-        raise HTTPException(404, "账户不存在")
+        raise HTTPException(404, "Account not found")
 
     # Read relationship-independent values before commit.  SQLAlchemy expires
     # and detaches deleted instances, so accessing ``account.name`` after the
@@ -151,7 +151,7 @@ def delete_account(account_id: int, db: Session = Depends(get_db)):
     account_name = account.name
     db.delete(account)
     db.commit()
-    logger.info("删除账户: %s", account_name)
+    logger.info("Deleted account: %s", account_name)
     return {"success": True}
 
 
@@ -163,7 +163,7 @@ def list_positions(
     stock_id: int | None = None,
     db: Session = Depends(get_db)
 ):
-    """获取持仓列表，可按账户或股票筛选"""
+    """List positions, optionally filtered by account or stock."""
     query = db.query(Position)
     if account_id:
         query = query.filter(Position.account_id == account_id)
@@ -191,23 +191,23 @@ def list_positions(
 
 @router.post("/positions", response_model=PositionResponse)
 def create_position(data: PositionCreate, db: Session = Depends(get_db)):
-    """创建持仓"""
-    # 检查账户和股票是否存在
+    """Create a position."""
+    # Check the account and stock exist
     account = db.query(Account).filter(Account.id == data.account_id).first()
     if not account:
-        raise HTTPException(400, "账户不存在")
+        raise HTTPException(400, "Account not found")
 
     stock = db.query(Stock).filter(Stock.id == data.stock_id).first()
     if not stock:
-        raise HTTPException(400, "股票不存在")
+        raise HTTPException(400, "Stock not found")
 
-    # 检查是否已存在该账户的该股票持仓
+    # Does this account already hold this stock?
     existing = db.query(Position).filter(
         Position.account_id == data.account_id,
         Position.stock_id == data.stock_id,
     ).first()
     if existing:
-        raise HTTPException(400, f"账户 {account.name} 已有 {stock.name} 的持仓，请编辑现有持仓")
+        raise HTTPException(400, f"Account {account.name} already holds {stock.name}; edit the existing position")
 
     max_order = db.query(func.max(Position.sort_order)).filter(
         Position.account_id == data.account_id
@@ -226,7 +226,7 @@ def create_position(data: PositionCreate, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(position)
 
-    logger.info(f"创建持仓: {account.name} - {stock.name}")
+    logger.info(f"Created position: {account.name} - {stock.name}")
     return {
         "id": position.id,
         "account_id": position.account_id,
@@ -244,10 +244,10 @@ def create_position(data: PositionCreate, db: Session = Depends(get_db)):
 
 @router.put("/positions/{position_id}", response_model=PositionResponse)
 def update_position(position_id: int, data: PositionUpdate, db: Session = Depends(get_db)):
-    """更新持仓"""
+    """Update a position."""
     position = db.query(Position).filter(Position.id == position_id).first()
     if not position:
-        raise HTTPException(404, "持仓不存在")
+        raise HTTPException(404, "Position not found")
 
     if data.cost_price is not None:
         position.cost_price = data.cost_price
@@ -256,13 +256,13 @@ def update_position(position_id: int, data: PositionUpdate, db: Session = Depend
     if data.invested_amount is not None:
         position.invested_amount = data.invested_amount
     if data.trading_style is not None:
-        # 空字符串表示清空，设为 None
+        # An empty string clears the value (None)
         position.trading_style = data.trading_style if data.trading_style else None
 
     db.commit()
     db.refresh(position)
 
-    logger.info(f"更新持仓: {position.account.name} - {position.stock.name}")
+    logger.info(f"Updated position: {position.account.name} - {position.stock.name}")
     return {
         "id": position.id,
         "account_id": position.account_id,
@@ -280,25 +280,25 @@ def update_position(position_id: int, data: PositionUpdate, db: Session = Depend
 
 @router.delete("/positions/{position_id}")
 def delete_position(position_id: int, db: Session = Depends(get_db)):
-    """删除持仓"""
+    """Delete a position."""
     position = db.query(Position).filter(Position.id == position_id).first()
     if not position:
-        raise HTTPException(404, "持仓不存在")
+        raise HTTPException(404, "Position not found")
 
     # Capture lazy relationships before the row is deleted/committed.  The
     # deleted Position is no longer session-bound afterwards; logging its
     # relationships at that point can raise DetachedInstanceError.
-    account_name = position.account.name if position.account else "未知账户"
-    stock_name = position.stock.name if position.stock else "未知股票"
+    account_name = position.account.name if position.account else "Unknown account"
+    stock_name = position.stock.name if position.stock else "Unknown stock"
     db.delete(position)
     db.commit()
-    logger.info("删除持仓: %s - %s", account_name, stock_name)
+    logger.info("Deleted position: %s - %s", account_name, stock_name)
     return {"success": True}
 
 
 @router.put("/positions/reorder/batch")
 def reorder_positions(data: PositionReorderRequest, db: Session = Depends(get_db)):
-    """批量更新持仓排序"""
+    """Update the position sort order in bulk."""
     if not data.items:
         return {"updated": 0}
     ids = [int(x.id) for x in data.items]
@@ -324,16 +324,16 @@ def get_portfolio_summary(
     db: Session = Depends(get_db),
 ):
     """
-    获取持仓汇总信息
+    Portfolio summary.
 
     Args:
-        account_id: 可选，指定账户ID。不指定则汇总所有账户
+        account_id: optional account id; all accounts when omitted
 
     Returns:
-        accounts: 账户列表及各账户持仓明细
-        total: 所有账户汇总
+        accounts: accounts with their positions
+        total: totals across all accounts
     """
-    # 获取账户
+    # Accounts
     if account_id:
         accounts = db.query(Account).filter(Account.id == account_id, Account.enabled == True).all()
     else:
@@ -352,7 +352,7 @@ def get_portfolio_summary(
             }
         }
 
-    # 获取所有相关股票
+    # All related stocks
     all_stock_ids = set()
     for acc in accounts:
         for pos in acc.positions:
@@ -361,10 +361,10 @@ def get_portfolio_summary(
     stocks = db.query(Stock).filter(Stock.id.in_(all_stock_ids)).all() if all_stock_ids else []
     stock_map = {s.id: s for s in stocks}
 
-    # 获取实时行情（可选）
+    # Live quotes (optional)
     quotes = _fetch_quotes_for_stocks(stocks) if include_quotes else {}
 
-    # 计算各账户持仓
+    # Positions per account
     account_summaries = []
     grand_total_market_value = 0
     grand_total_cost = 0
@@ -468,7 +468,7 @@ def get_portfolio_summary(
         grand_pnl_pct = 0
         grand_total_assets = grand_available_funds
 
-    # 构建 quotes 字典（用于前端股票列表显示）
+    # quotes dict (for the frontend stock list)
     quotes_dict = {}
     if include_quotes:
         for symbol, quote in quotes.items():
@@ -488,16 +488,16 @@ def get_portfolio_summary(
             "available_funds": round(grand_available_funds, 2),
             "total_assets": round(grand_total_assets, 2),
         },
-        "quotes": quotes_dict,  # 可选：返回行情数据
+        "quotes": quotes_dict,  # optional: quote data
     }
 
 
 def _fetch_quotes_for_stocks(stocks: list[Stock]) -> dict:
-    """获取股票列表的实时行情"""
+    """Live quotes for a list of stocks."""
     if not stocks:
         return {}
 
-    # 按市场分组
+    # Group by market
     market_stocks: dict[str, list[Stock]] = {}
     for s in stocks:
         market_stocks.setdefault(s.market, []).append(s)
@@ -515,18 +515,18 @@ def _fetch_quotes_for_stocks(stocks: list[Stock]) -> dict:
             for item in items:
                 quotes[item["symbol"]] = item
         except Exception as e:
-            logger.error(f"获取 {market} 行情失败: {e}")
+            logger.error(f"Failed to get {market} quotes: {e}")
 
     return quotes
 
 
-# 组合基准/归因结果缓存:重建全持仓 NAV 很贵(逐只拉 K 线),按持仓指纹缓存结果。
-# 持仓变动即失效(指纹变);失败/空结果不缓存,避免把瞬时故障冻住 10 分钟。
+# Portfolio benchmark/attribution cache: rebuilding the full NAV is expensive (K-lines per stock), so results are cached by a holdings fingerprint.
+# Any position change invalidates it (the fingerprint changes); failures and empty results aren't cached, so a transient fault isn't frozen for 10 minutes.
 _PORTFOLIO_RESULT_CACHE = TTLCache(default_ttl_sec=600.0)
 
 
 def _holdings_signature(db: Session) -> str:
-    """启用账户持仓的稳定指纹(stock_id + 合并后数量);仅查 DB,不拉行情/K 线。"""
+    """Stable fingerprint of enabled accounts' positions (stock_id + merged quantity); DB only, no quotes or K-lines."""
     rows = (
         db.query(Position.stock_id, Position.quantity)
         .join(Account, Account.id == Position.account_id)
@@ -540,7 +540,7 @@ def _holdings_signature(db: Session) -> str:
 
 
 def _gather_holdings(db: Session) -> list[dict]:
-    """汇总所有启用账户的真实持仓为统一列表(CNY 市值/浮盈 + fx),多账户同股合并。"""
+    """All enabled accounts' real positions as one list (INR market value / P&L + fx); the same stock across accounts is merged."""
     accounts = db.query(Account).filter(Account.enabled == True).all()  # noqa: E712
     stock_ids = {p.stock_id for acc in accounts for p in acc.positions}
     stocks = db.query(Stock).filter(Stock.id.in_(stock_ids)).all() if stock_ids else []
@@ -560,7 +560,7 @@ def _gather_holdings(db: Session) -> list[dict]:
             mv_inr = (price * pos.quantity) if price else cost_inr
             pnl_inr = (mv_inr - cost_inr) if price else 0.0
             key = (stock.market, stock.symbol)
-            if key in seen:  # 多账户同一标的合并
+            if key in seen:  # same stock across accounts: merge
                 h = seen[key]
                 h["quantity"] += pos.quantity
                 h["market_value"] += mv_inr
@@ -583,7 +583,7 @@ def _gather_holdings(db: Session) -> list[dict]:
 
 @router.get("/portfolio/diagnostics")
 def portfolio_diagnostics(db: Session = Depends(get_db)):
-    """真实持仓组合诊断:集中度(HHI)/最大单仓/市场分布/风险提示(只读)。"""
+    """Real portfolio diagnostics: concentration (HHI) / largest position / market split / risk notes (read-only)."""
     from src.modules.portfolio.portfolio_diagnostics import diagnose_positions
 
     return diagnose_positions(_gather_holdings(db))
@@ -593,7 +593,7 @@ def portfolio_diagnostics(db: Session = Depends(get_db)):
 def portfolio_benchmark(
     days: int = 60, benchmark: str = "000300", db: Session = Depends(get_db)
 ):
-    """真实持仓组合 vs 基准:超额收益/信息比率/相对回撤 + 归一化净值曲线。"""
+    """Real portfolio vs benchmark: excess return / information ratio / relative drawdown + normalised NAV curve."""
     from src.modules.portfolio.portfolio_benchmark import (
         DEFAULT_BENCHMARK,
         build_portfolio_benchmark,
@@ -614,7 +614,7 @@ def portfolio_benchmark(
         return {"empty": True, "reason": "no_holdings"}
     res = build_portfolio_benchmark(holdings, days=days, benchmark_code=bcode)
     if not res:
-        # 失败/数据不足不缓存,下轮可重试(由 K 线负缓存兜住打爆)
+        # Failures / insufficient data aren't cached, so the next round can retry (the K-line negative cache stops hammering)
         return {"empty": True, "reason": "insufficient_data"}
     _PORTFOLIO_RESULT_CACHE.set(ckey, res)
     return res
@@ -622,7 +622,7 @@ def portfolio_benchmark(
 
 @router.get("/portfolio/todos")
 def portfolio_todos(db: Session = Depends(get_db)):
-    """首页空态待办:持仓但未设提醒 / 提醒即将到期(可行动,盘后也不空)。"""
+    """Home-page empty-state to-dos: held with no alert / alert about to expire (actionable, even after hours)."""
     todos: list[dict] = []
     accounts = db.query(Account).filter(Account.enabled == True).all()  # noqa: E712
     held_ids = {p.stock_id for acc in accounts for p in acc.positions}
@@ -641,7 +641,7 @@ def portfolio_todos(db: Session = Depends(get_db)):
                         "type": "no_alert",
                         "symbol": stock.symbol,
                         "market": stock.market,
-                        "message": f"{stock.name} 持仓中,未设价格提醒",
+                        "message": f"{stock.name} is held with no price alert",
                     }
                 )
 
@@ -664,7 +664,7 @@ def portfolio_todos(db: Session = Depends(get_db)):
                 "type": "alert_expiring",
                 "symbol": stock.symbol if stock else "",
                 "market": stock.market if stock else "IN",
-                "message": f"{(r.name or '提醒')} 即将到期",
+                "message": f"{(r.name or 'Alert')} expires soon",
             }
         )
 
@@ -673,7 +673,7 @@ def portfolio_todos(db: Session = Depends(get_db)):
 
 @router.get("/portfolio/attribution")
 def portfolio_attribution(days: int = 60, benchmark: str = "000300", db: Session = Depends(get_db)):
-    """近 days 日各持仓对组合收益的贡献(谁拖累/贡献),降序。"""
+    """Each position's contribution to portfolio return over the last `days` days (drags and contributors), descending."""
     from src.modules.portfolio.portfolio_benchmark import DEFAULT_BENCHMARK, build_attribution
 
     days = max(20, min(int(days), 250))
@@ -691,13 +691,13 @@ def portfolio_attribution(days: int = 60, benchmark: str = "000300", db: Session
         return {"items": []}
     items = build_attribution(holdings, days=days, benchmark_code=bcode)
     result = {"items": items}
-    if items:  # 空结果不缓存,下轮可重试
+    if items:  # empty results aren't cached, so the next round can retry
         _PORTFOLIO_RESULT_CACHE.set(ckey, result)
     return result
 
 
 def _gather_account_totals(db: Session, *, market_value: float) -> dict:
-    """Use the same enabled-account scope as holdings; cash is stored in CNY.
+    """Use the same enabled-account scope as holdings; cash is stored in INR.
 
     Reuse the already-valued holdings instead of fetching quotes a second time.
     Non-positive equity has no meaningful exposure ratio (not zero exposure).
@@ -734,26 +734,26 @@ async def portfolio_ai_review(model_id: int | None = None, db: Session = Depends
     worst = list(reversed(attr[-3:])) if len(attr) > 3 else []
 
     lines = [
-        f"持仓 {diag['position_count']} 只,总市值 {diag['total_market_value']:.0f},浮盈 {diag['total_unrealized_pnl']:.0f}",
-        f"持仓内部集中度 HHI {diag['hhi']},最大单仓占已投资金额 {diag['max_weight'] * 100:.0f}%",
-        f"启用账户总资产 {totals['total_assets']:.0f} CNY（现金/可用资金 {totals['available_funds']:.0f} CNY）",
-        (f"总资产敞口：权益类仓位占总资产 {totals['equity_ratio'] * 100:.1f}%"
-         if totals['equity_ratio'] is not None else "总资产敞口：总资产非正，比例不可计算"),
+        f"{diag['position_count']} positions, total market value {diag['total_market_value']:.0f}, unrealised P&L {diag['total_unrealized_pnl']:.0f}",
+        f"Concentration HHI {diag['hhi']}, largest position {diag['max_weight'] * 100:.0f}% of invested amount",
+        f"Enabled accounts' total assets {totals['total_assets']:.0f} INR (cash/available funds {totals['available_funds']:.0f} INR)",
+        (f"Exposure: equity positions are {totals['equity_ratio'] * 100:.1f}% of total assets"
+         if totals['equity_ratio'] is not None else "Exposure: total assets are not positive; ratio not computable"),
     ]
     if bench.get("excess_return") is not None:
         lines.append(
-            f"近60日 vs {bench.get('benchmark_label', '基准')}:超额 {bench['excess_return']}%"
-            f"(组合 {bench.get('portfolio_return')}% / 基准 {bench.get('benchmark_return')}%),"
-            f"相对回撤 {bench.get('relative_drawdown')}%"
+            f"Last 60 days vs {bench.get('benchmark_label', 'benchmark')}: excess {bench['excess_return']}%"
+            f" (portfolio {bench.get('portfolio_return')}% / benchmark {bench.get('benchmark_return')}%),"
+            f" relative drawdown {bench.get('relative_drawdown')}%"
         )
     if diag.get("by_market"):
-        lines.append("持仓内部市场分布（市值 CNY）:" + ", ".join(f"{k} {v:.0f}" for k, v in diag["by_market"].items()))
+        lines.append("Market split within holdings (market value, INR): " + ", ".join(f"{k} {v:.0f}" for k, v in diag["by_market"].items()))
     if diag.get("alerts"):
-        lines.append("风险提示:" + "; ".join(diag["alerts"]))
+        lines.append("Risk notes: " + "; ".join(diag["alerts"]))
     if top:
-        lines.append("贡献最大:" + ", ".join(f"{r['name']}({r['contribution_pct']:+.2f}%)" for r in top))
+        lines.append("Top contributors: " + ", ".join(f"{r['name']} ({r['contribution_pct']:+.2f}%)" for r in top))
     if worst:
-        lines.append("拖累最大:" + ", ".join(f"{r['name']}({r['contribution_pct']:+.2f}%)" for r in worst))
+        lines.append("Biggest drags: " + ", ".join(f"{r['name']} ({r['contribution_pct']:+.2f}%)" for r in worst))
 
     system_prompt = (
         "You write an educational portfolio check-up. Describe the portfolio using only the "
@@ -770,11 +770,11 @@ async def portfolio_ai_review(model_id: int | None = None, db: Session = Depends
         "and 'Equity exposure relative to total assets'\n"
         "Main risk: one sentence"
     )
-    user_content = "组合概况:\n" + "\n".join(lines)
+    user_content = "Portfolio overview:\n" + "\n".join(lines)
     try:
         content = await get_configured_failover_client(db, model_id).chat(system_prompt, user_content, temperature=0.3)
     except Exception as e:
-        raise HTTPException(502, f"AI 体检失败: {e}")
+        raise HTTPException(502, f"AI health check failed: {e}")
 
     content = ensure_guarded(content, surface="portfolio_review")
     return {"content": content, "top": top, "worst": worst, "diagnostics": diag, "benchmark": bench, "account_totals": totals}

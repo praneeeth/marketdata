@@ -1,4 +1,4 @@
-"""模拟盘调度器：60 秒间隔扫描建仓/平仓。"""
+"""Simulation scheduler: scans for entries/exits every 60 seconds."""
 
 from __future__ import annotations
 
@@ -26,10 +26,10 @@ class PaperTradingScheduler:
 
     async def _scan_job(self):
         if self._running:
-            logger.debug("[模拟盘] 上轮扫描仍在执行，跳过本轮")
+            logger.debug("[Simulation] previous scan still running; skipping this round")
             return
         if not _any_market_trading():
-            logger.debug("[模拟盘] 全市场休市,跳过本轮扫描")
+            logger.debug("[Simulation] market closed; skipping this scan")
             return
         self._running = True
         try:
@@ -37,54 +37,54 @@ class PaperTradingScheduler:
             opened = result.get("opened", 0)
             closed = result.get("closed", 0)
             status = result.get("status", "?")
-            # 有实际开/平仓才是业务事件,否则只是心跳。
+            # Only real entries/exits are business events; otherwise it's just a heartbeat.
             level = logging.INFO if (opened or closed) else logging.DEBUG
             logger.log(
                 level,
-                "[模拟盘] 扫描完成: opened=%s closed=%s status=%s",
+                "[Simulation] scan done: opened=%s closed=%s status=%s",
                 opened,
                 closed,
                 status,
             )
         except Exception as e:
-            logger.exception(f"[模拟盘] 扫描异常: {e}")
+            logger.exception(f"[Simulation] scan error: {e}")
         finally:
             self._running = False
 
     async def _premarket_job(self):
-        """盘前计划通知。非交易日(周末/节假日)跳过。"""
+        """Pre-market plan notification. Skipped on non-trading days (weekends/holidays)."""
         if not any_market_trading_day():
-            logger.debug("[模拟盘] 非交易日,跳过盘前计划通知")
+            logger.debug("[Simulation] not a trading day; skipping the pre-market plan notification")
             return
         try:
             from src.modules.paper_trading.paper_trading_notifier import send_premarket_plan
             await send_premarket_plan()
         except Exception as e:
-            logger.exception(f"[模拟盘] 盘前计划通知异常: {e}")
+            logger.exception(f"[Simulation] pre-market plan notification error: {e}")
 
     async def _summary_job(self):
-        """日终摘要通知。非交易日(周末/节假日)跳过。"""
+        """End-of-day summary notification. Skipped on non-trading days (weekends/holidays)."""
         if not any_market_trading_day():
-            logger.debug("[模拟盘] 非交易日,跳过日终摘要通知")
+            logger.debug("[Simulation] not a trading day; skipping the end-of-day summary notification")
             return
         try:
             from src.modules.paper_trading.paper_trading_notifier import send_daily_summary
             await send_daily_summary()
         except Exception as e:
-            logger.exception(f"[模拟盘] 日终摘要通知异常: {e}")
+            logger.exception(f"[Simulation] end-of-day summary notification error: {e}")
 
     def start(self):
         self.scheduler.add_job(
             self._scan_job,
             "interval",
             seconds=self.interval_seconds,
-            jitter=20,  # 抖动错峰,避免与价格提醒扫描每 60s 同刻并发写 SQLite
+            jitter=20,  # jitter so it doesn't write SQLite at the same moment as the 60s price alert scan
             id="paper_trading_scan",
             replace_existing=True,
             coalesce=True,
             max_instances=1,
         )
-        # 盘前计划 - 每天 09:00
+        # Pre-market plan: 09:00 every day
         self.scheduler.add_job(
             self._premarket_job,
             "cron",
@@ -95,7 +95,7 @@ class PaperTradingScheduler:
             coalesce=True,
             max_instances=1,
         )
-        # 日终摘要 - 每天 15:30
+        # End-of-day summary: 15:30 every day
         self.scheduler.add_job(
             self._summary_job,
             "cron",
@@ -109,11 +109,11 @@ class PaperTradingScheduler:
         self.scheduler.start()
         from src.platform.scheduling.scheduler_registry import register
         register("paper_trading", self.scheduler)
-        logger.info(f"模拟盘调度器已启动，扫描间隔 {self.interval_seconds}s")
+        logger.info(f"Simulation scheduler started; scan interval {self.interval_seconds}s")
 
     def shutdown(self):
         try:
             self.scheduler.shutdown(wait=False)
         except Exception:
             pass
-        logger.info("模拟盘调度器已关闭")
+        logger.info("Simulation scheduler stopped")

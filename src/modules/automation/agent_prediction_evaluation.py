@@ -1,6 +1,6 @@
-"""Agent 建议后验复盘的纯计算逻辑。
+"""Pure computation for reviewing agent items after the fact.
 
-这里集中维护“什么算命中”与 horizon 记录聚合，API 与前端都不自行复制规则。
+The rules for "what counts as a hit" and horizon aggregation live here only; the API and frontend don't copy them.
 """
 
 from __future__ import annotations
@@ -15,13 +15,13 @@ EVALUATION_POLICY = {
     "horizon_unit": "trading_days",
     "flat_threshold_pct": FLAT_THRESHOLD_PCT,
     "actions": {
-        "buy": "后续收益大于 0 记为命中",
-        "add": "后续收益大于 0 记为命中",
-        "sell": "后续收益小于 0 记为命中",
-        "reduce": "后续收益小于 0 记为命中",
-        "avoid": "后续收益小于 0 记为命中",
-        "hold": "后续绝对收益小于 2% 记为命中",
-        "watch": "后续绝对收益小于 2% 记为命中",
+        "buy": "A hit when the later return is above 0",
+        "add": "A hit when the later return is above 0",
+        "sell": "A hit when the later return is below 0",
+        "reduce": "A hit when the later return is below 0",
+        "avoid": "A hit when the later return is below 0",
+        "hold": "A hit when the later absolute return is under 2%",
+        "watch": "A hit when the later absolute return is under 2%",
     },
 }
 
@@ -31,7 +31,7 @@ _FLAT_ACTIONS = {"hold", "watch"}
 
 
 def classify_prediction_hit(action: str, return_pct: float | None) -> bool | None:
-    """按公开政策判断建议方向是否命中；无可判定结果时返回 None。"""
+    """Whether an item's direction was a hit under the public policy; None when it can't be judged."""
     if return_pct is None:
         return None
     try:
@@ -62,10 +62,10 @@ def _legacy_group_base_key(row: Any) -> str:
 
 
 def _legacy_group_ids(rows: Sequence[Any]) -> dict[int, str]:
-    """为无持久化分组 ID 的历史行按旧写入顺序配对 horizon。
+    """Pair horizons for old rows without a persisted group ID, by their original write order.
 
-    旧实现按 1/5 日逐条提交，创建时间既可能相同也可能跨秒，不能作为身份。
-    以数据库自增 ID 的写入顺序将同一建议的不同 horizon 归入同一个临时组。
+    The old implementation committed the 1/5-day rows one by one; their creation times may be equal or a second apart, so they can't identify a group.
+    The database's auto-increment ID order puts the horizons of one item into the same temporary group.
     """
     result: dict[int, str] = {}
 
@@ -101,8 +101,8 @@ def _legacy_group_ids(rows: Sequence[Any]) -> dict[int, str]:
                 "key": f"legacy:{base_key}:{record_id or index}",
                 "horizons": set(),
                 "last_id": record_id,
-                # 同一键未凑齐至少两个 horizon 又出现新记录时，无法知道
-                # 后续结果属于哪次建议；宁可不配对，也不能交叉污染结果。
+                # If a new row appears before one key has at least two horizons, there's no way to know
+                # which item the later results belong to; better not to pair than to mix results.
                 "ambiguous": bool(
                     same_base_as_previous
                     and (previous["ambiguous"] or len(previous["horizons"]) < 2)
@@ -139,7 +139,7 @@ def _outcome_payload(row: Any) -> dict[str, Any]:
 
 
 def group_prediction_outcomes(rows: Sequence[Any]) -> list[dict[str, Any]]:
-    """把一条建议的多个 horizon 记录 pivot 成单行复盘数据。"""
+    """Pivot an item's horizon rows into a single review row."""
     grouped: dict[str, dict[str, Any]] = {}
     legacy_group_ids = _legacy_group_ids(rows)
 
@@ -179,7 +179,7 @@ def group_prediction_outcomes(rows: Sequence[Any]) -> list[dict[str, Any]]:
 
 
 def summarize_prediction_groups(groups: Sequence[dict[str, Any]]) -> dict[str, Any]:
-    """统计默认交易日口径的覆盖、命中和收益，样本不足时明确标记。"""
+    """Coverage, hit rate and return on the default trading-day basis, flagging too few samples explicitly."""
     horizon_stats: dict[str, dict[str, Any]] = {}
     pending_count = 0
 

@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 
 
 class AIClient:
-    """OpenAI 协议兼容的 AI 客户端"""
+    """AI client compatible with the OpenAI protocol."""
 
     def __init__(self, base_url: str, api_key: str, model: str = "", proxy: str = ""):
         kwargs = {
@@ -19,10 +19,10 @@ class AIClient:
             "api_key": api_key,
         }
         if proxy:
-            kwargs["http_client"] = None  # TODO: 如需代理，用 httpx 配置
+            kwargs["http_client"] = None  # TODO: configure httpx if a proxy is needed
         self.client = AsyncOpenAI(**kwargs)
-        # 保留原始配置作为实例属性,供需要桥接到第三方 LLM 框架的 agent 使用
-        # (e.g. TradingAgents 需要 base_url+api_key 重新构造 langchain 的 LLM)
+        # Keep the original config as instance attributes for agents that bridge to third-party LLM frameworks
+        # (e.g. TradingAgents rebuilds langchain's LLM from base_url+api_key)
         self.base_url = base_url
         self.api_key = api_key
         self.model = model
@@ -37,19 +37,19 @@ class AIClient:
         temperature: float | None = 0.4,
     ) -> str:
         """
-        调用 LLM 获取文本回复。
+        Call the LLM for a text reply.
 
         Args:
-            system_prompt: 系统提示词
-            user_content: 用户输入内容
-            images: 图片路径列表（用于多模态，可选）
-            temperature: 生成温度
+            system_prompt: system prompt
+            user_content: user input
+            images: image paths (for multimodal; optional)
+            temperature: sampling temperature
         """
         messages = [
             {"role": "system", "content": system_prompt},
         ]
 
-        # 构建 user message
+        # Build the user message
         if images:
             content_parts = [{"type": "text", "text": user_content}]
             for img_path in images:
@@ -67,10 +67,10 @@ class AIClient:
             create_kwargs = {"model": self.model, "messages": messages}
             if temperature is not None:
                 create_kwargs["temperature"] = temperature
-            # OTel gen_ai span(默认关闭时为 no-op);token 用量在拿到 usage 后回填。
+            # OTel gen_ai span (no-op when disabled); token usage is filled in once usage arrives.
             with otel.llm_span(self.model, operation="chat") as _span:
                 response = await self.client.chat.completions.create(**create_kwargs)
-                # 记录 token 用量
+                # Record token usage
                 if response.usage:
                     self.last_usage = normalize_provider_usage(response.usage, model=self.model)
                     self.total_tokens_used += response.usage.total_tokens
@@ -87,7 +87,7 @@ class AIClient:
             return response.choices[0].message.content or ""
 
         except Exception as e:
-            logger.error(f"AI 调用失败: {e}")
+            logger.error(f"AI call failed: {e}")
             raise
 
     async def chat_multi(
@@ -97,12 +97,12 @@ class AIClient:
         max_tokens: int | None = None,
     ) -> str:
         """
-        多轮对话：传入完整 messages 列表。
+        Multi-turn chat: pass the full messages list.
 
         Args:
             messages: [{"role": "system"/"user"/"assistant", "content": "..."}]
-            temperature: 生成温度；传 None 时不下发该参数
-                （用于 failover 对"参数不兼容"错误的摘参重试）
+            temperature: sampling temperature; None omits the parameter
+                (used by failover to retry without it on "incompatible parameter" errors)
         """
         try:
             create_kwargs: dict = {"model": self.model, "messages": messages}
@@ -126,7 +126,7 @@ class AIClient:
                     )
             return response.choices[0].message.content or ""
         except Exception as e:
-            logger.error(f"AI 多轮对话调用失败: {e}")
+            logger.error(f"AI multi-turn call failed: {e}")
             raise
 
     async def chat_with_tools(
@@ -135,9 +135,9 @@ class AIClient:
         tools: list[dict],
         temperature: float | None = 0.4,
     ):
-        """带 tool use 的对话调用，返回原始 message 对象。
+        """Chat call with tool use; returns the raw message object.
 
-        temperature 传 None 时不下发该参数（供 failover 摘参重试）。
+        temperature=None omits the parameter (for failover's retry without it).
         """
         try:
             create_kwargs: dict = {
@@ -159,7 +159,7 @@ class AIClient:
                     )
             return response.choices[0].message
         except Exception as e:
-            logger.error(f"AI tool use 调用失败: {e}")
+            logger.error(f"AI tool-use call failed: {e}")
             raise
 
     async def chat_stream(
@@ -169,15 +169,15 @@ class AIClient:
         temperature: float | None = 0.4,
         tool_choice: str | None = None,
     ):
-        """流式对话通道（stream=True），支持可选 tool use。
+        """Streaming chat channel (stream=True), with optional tool use.
 
-        异步生成器，产出二元组事件：
-        - ("token", str)：增量文本片段，边生成边产出；
-        - ("message", dict)：流结束后产出一次完整消息，
-          形如 {"content": 全量文本, "tool_calls": [{"id", "name", "arguments"}, ...]}，
-          无工具调用时 tool_calls 为空列表。
+        An async generator yielding two kinds of event:
+        - ("token", str): an incremental text fragment, yielded as it is generated;
+        - ("message", dict): the complete message once, after the stream ends,
+          shaped {"content": full text, "tool_calls": [{"id", "name", "arguments"}, ...]};
+          tool_calls is an empty list when there are no tool calls.
 
-        调用方（如 chat SSE 端点）根据 tool_calls 是否为空决定继续工具循环还是结束。
+        The caller (e.g. the chat SSE endpoint) continues the tool loop or stops depending on whether tool_calls is empty.
         """
         create_kwargs: dict = {
             "model": self.model,
@@ -208,19 +208,19 @@ class AIClient:
                 try:
                     stream = await self.client.chat.completions.create(**create_kwargs)
                 except Exception:
-                    logger.error(f"AI 流式调用失败: {e}")
+                    logger.error(f"AI streaming call failed: {e}")
                     raise
             else:
-                logger.error(f"AI 流式调用失败: {e}")
+                logger.error(f"AI streaming call failed: {e}")
                 raise
 
         content_parts: list[str] = []
-        # OpenAI 流式协议下 tool_calls 按 index 分片下发（arguments 逐段拼接）
+        # In the OpenAI streaming protocol, tool_calls arrive in pieces by index (arguments are concatenated)
         tool_calls_acc: dict[int, dict] = {}
         provider_usage = None
 
         async for chunk in stream:
-            # 部分兼容服务会在末尾单发一个只含 usage 的 chunk
+            # Some compatible services send a final chunk with only usage
             usage = getattr(chunk, "usage", None)
             if usage:
                 self.total_tokens_used += usage.total_tokens
@@ -256,15 +256,15 @@ class AIClient:
         )
 
     async def list_models(self) -> list[str]:
-        """通过 OpenAI 兼容的 /v1/models 拉取可用模型 id 列表。"""
+        """List available model ids through the OpenAI-compatible /v1/models."""
         resp = await self.client.models.list()
         return sorted(m.id for m in resp.data)
 
     def _encode_image(self, image_path: str) -> str | None:
-        """将图片文件编码为 base64"""
+        """Encode an image file as base64."""
         path = Path(image_path)
         if not path.exists():
-            logger.warning(f"图片不存在: {image_path}")
+            logger.warning(f"Image not found: {image_path}")
             return None
         with open(path, "rb") as f:
             return base64.b64encode(f.read()).decode("utf-8")

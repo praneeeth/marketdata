@@ -1,7 +1,7 @@
-"""个人访问令牌(PAT)管理 API —— 供作者创建/查看/吊销 MCP 端点用的 PAT。
+"""Personal access token (PAT) management API: lets the owner create/list/revoke PATs for the MCP endpoint.
 
-挂在需登录(JWT)的保护路由下:PAT 本身不能用来管理 PAT(防泄露后自我续期/升权),
-只有登录用户可操作。明文令牌仅在创建时返回一次。
+Mounted under the login-protected (JWT) routes: a PAT can't manage PATs (so a leaked one can't renew or escalate itself);
+only a logged-in user can. The plaintext token is returned only once, at creation.
 """
 
 import json
@@ -24,8 +24,8 @@ _ALLOWED_SCOPES = {SCOPE_MCP_READ}
 
 class CreatePatBody(BaseModel):
     name: str = Field("", max_length=100)
-    scopes: list[str] | None = None  # 默认 ["mcp:read"]
-    expires_in_days: int | None = Field(90, ge=1, le=3650)  # None = 永不过期
+    scopes: list[str] | None = None  # default ["mcp:read"]
+    expires_in_days: int | None = Field(90, ge=1, le=3650)  # None = never expires
 
 
 def _iso(dt: datetime | None) -> str | None:
@@ -55,11 +55,11 @@ def _serialize(row: PersonalAccessToken) -> dict:
 
 @router.post("")
 def create_pat(body: CreatePatBody, db: Session = Depends(get_db)):
-    """创建 PAT，返回明文令牌(仅此一次)。"""
+    """Create a PAT and return the plaintext token (this one time only)."""
     scopes = body.scopes or [SCOPE_MCP_READ]
     invalid = [s for s in scopes if s not in _ALLOWED_SCOPES]
     if invalid:
-        raise HTTPException(400, f"不支持的 scope: {invalid}")
+        raise HTTPException(400, f"Unsupported scope: {invalid}")
 
     plaintext, token_hash, prefix = generate_pat()
     expires_at = None
@@ -80,13 +80,13 @@ def create_pat(body: CreatePatBody, db: Session = Depends(get_db)):
     db.refresh(row)
 
     result = _serialize(row)
-    result["token"] = plaintext  # 明文仅创建时返回一次
+    result["token"] = plaintext  # plaintext is returned only at creation
     return result
 
 
 @router.get("")
 def list_pats(db: Session = Depends(get_db)):
-    """列出所有 PAT(不含明文)。"""
+    """List all PATs (without plaintext)."""
     rows = (
         db.query(PersonalAccessToken)
         .order_by(PersonalAccessToken.created_at.desc())
@@ -97,10 +97,10 @@ def list_pats(db: Session = Depends(get_db)):
 
 @router.delete("/{pat_id}")
 def revoke_pat(pat_id: int, db: Session = Depends(get_db)):
-    """吊销 PAT(软删除:置 revoked_at，MCP 端点随即拒绝该令牌)。"""
+    """Revoke a PAT (soft delete: sets revoked_at; the MCP endpoint rejects the token at once)."""
     row = db.query(PersonalAccessToken).filter(PersonalAccessToken.id == pat_id).first()
     if not row:
-        raise HTTPException(404, "PAT 不存在")
+        raise HTTPException(404, "PAT not found")
     if row.revoked_at is None:
         row.revoked_at = datetime.now(timezone.utc).replace(tzinfo=None)
         db.commit()

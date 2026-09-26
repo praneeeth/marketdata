@@ -1,4 +1,4 @@
-"""分析历史记录管理"""
+"""Analysis history storage."""
 import logging
 import re
 from datetime import date, datetime, timedelta
@@ -17,7 +17,7 @@ from src.platform.persistence.json_safe import to_jsonable
 
 logger = logging.getLogger(__name__)
 
-# TradingAgents 深度分析在 AnalysisHistory 里的 agent_name(见 agent.py: name = "tradingagents")
+# agent_name of TradingAgents deep research rows in AnalysisHistory (see agent.py: name = "tradingagents")
 TA_AGENT_NAME = "tradingagents"
 
 
@@ -30,21 +30,21 @@ def save_analysis(
     analysis_date: date | None = None,
 ) -> bool:
     """
-    保存分析结果
+    Save an analysis result.
 
-    - 同一天可以覆盖
-    - 历史记录不可覆盖（通过数据库约束保证）
+    - the same day can be overwritten
+    - past days can't be overwritten (enforced by a DB constraint)
 
     Args:
-        agent_name: Agent 名称，如 "daily_report"
-        stock_symbol: 股票代码，"*" 表示全局分析
-        content: AI 分析内容
-        title: 分析标题
-        raw_data: 原始数据快照
-        analysis_date: 分析日期，默认今天
+        agent_name: agent name, e.g. "daily_report"
+        stock_symbol: stock symbol; "*" means a market-wide analysis
+        content: AI analysis text
+        title: title
+        raw_data: raw data snapshot
+        analysis_date: analysis date, today by default
 
     Returns:
-        是否保存成功
+        Whether it was saved
     """
     if analysis_date is None:
         analysis_date = date.today()
@@ -63,7 +63,7 @@ def save_analysis(
         )
         agent_kind = infer_agent_kind(agent_name)
 
-        # 查找是否已存在
+        # Does it exist already?
         existing = db.query(AnalysisHistory).filter(
             AnalysisHistory.agent_name == agent_name,
             AnalysisHistory.stock_symbol == stock_symbol,
@@ -71,14 +71,14 @@ def save_analysis(
         ).first()
 
         if existing:
-            # 更新（同一天可覆盖）
+            # Update (the same day can be overwritten)
             existing.title = title
             existing.content = content
             existing.raw_data = payload
             existing.agent_kind_snapshot = agent_kind
-            logger.info(f"更新分析记录: {agent_name}/{stock_symbol}/{date_str}")
+            logger.info(f"Updated analysis record: {agent_name}/{stock_symbol}/{date_str}")
         else:
-            # 新增
+            # New
             record = AnalysisHistory(
                 agent_name=agent_name,
                 stock_symbol=stock_symbol,
@@ -89,13 +89,13 @@ def save_analysis(
                 agent_kind_snapshot=agent_kind,
             )
             db.add(record)
-            logger.info(f"新增分析记录: {agent_name}/{stock_symbol}/{date_str}")
+            logger.info(f"Added analysis record: {agent_name}/{stock_symbol}/{date_str}")
 
         db.commit()
         return True
 
     except Exception as e:
-        logger.error(f"保存分析记录失败: {e}")
+        logger.error(f"Failed to save analysis record: {e}")
         db.rollback()
         return False
     finally:
@@ -108,15 +108,15 @@ def get_analysis(
     analysis_date: date | None = None,
 ) -> AnalysisHistory | None:
     """
-    获取分析结果
+    Get an analysis result.
 
     Args:
-        agent_name: Agent 名称
-        stock_symbol: 股票代码
-        analysis_date: 分析日期，默认今天
+        agent_name: agent name
+        stock_symbol: stock symbol
+        analysis_date: analysis date, today by default
 
     Returns:
-        分析记录，或 None
+        The record, or None
     """
     if analysis_date is None:
         analysis_date = date.today()
@@ -140,15 +140,15 @@ def get_latest_analysis(
     before_date: date | None = None,
 ) -> AnalysisHistory | None:
     """
-    获取最近的分析结果（用于获取昨日/历史分析）
+    Get the most recent analysis (for yesterday's or earlier analyses).
 
     Args:
-        agent_name: Agent 名称
-        stock_symbol: 股票代码
-        before_date: 在此日期之前的最近记录，默认今天
+        agent_name: agent name
+        stock_symbol: stock symbol
+        before_date: most recent record before this date, today by default
 
     Returns:
-        分析记录，或 None
+        The record, or None
     """
     if before_date is None:
         before_date = date.today()
@@ -172,15 +172,15 @@ def get_analysis_history(
     limit: int = 30,
 ) -> list[AnalysisHistory]:
     """
-    获取分析历史列表
+    List analysis history.
 
     Args:
-        agent_name: Agent 名称
-        stock_symbol: 股票代码，None 表示所有
-        limit: 返回数量限制
+        agent_name: agent name
+        stock_symbol: stock symbol; None means all
+        limit: maximum number of rows
 
     Returns:
-        分析记录列表，按日期倒序
+        Records, newest date first
     """
     db = SessionLocal()
     try:
@@ -201,44 +201,44 @@ def get_latest_ta_verdict_row(
     within_days: int = 14,
     today: date | None = None,
 ) -> AnalysisHistory | None:
-    """获取某标的最近一次 TradingAgents 深度分析记录(含当日)。
+    """The most recent TradingAgents deep research row for a symbol (including today).
 
-    get_latest_analysis 用 ``analysis_date < before_date`` 语义会排除当天,
-    这里传 ``before_date = today + 1 天`` 把当天也纳入。
+    get_latest_analysis uses ``analysis_date < before_date``, which excludes today,
+    so ``before_date = today + 1 day`` is passed to include it.
 
     Args:
-        symbol: 股票代码
-        within_days: 仅在此天数内有效(超出视为过期,由调用方判定)
-        today: 测试可注入,默认 date.today()
+        symbol: stock symbol
+        within_days: only valid within this many days (older counts as stale; the caller decides)
+        today: injectable for tests; date.today() by default
 
     Returns:
-        最近的 AnalysisHistory 行,或 None。
+        The most recent AnalysisHistory row, or None.
     """
     if today is None:
         today = date.today()
-    # +1 天以包含今天(get_latest_analysis 是严格小于)
+    # +1 day to include today (get_latest_analysis is strictly less-than)
     return get_latest_analysis(
         TA_AGENT_NAME, symbol, before_date=today + timedelta(days=1)
     )
 
 
 def _clean_one_liner(text: str, max_chars: int = 120) -> str:
-    """从结论正文里清洗出一句话摘要并截断到 ~max_chars。
+    """Clean a one-sentence summary out of the conclusion text and truncate it to ~max_chars.
 
-    - 去掉 Markdown 标记 / 多余空白 / 控制字符
-    - 取首段(到第一个句号/换行)
-    - 超长截断并补省略号
+    - strip Markdown markers / extra whitespace / control characters
+    - take the first sentence (up to the first full stop or newline)
+    - truncate long text with an ellipsis
     """
     if not text:
         return ""
     s = str(text)
-    # 去 markdown 强调符、标题井号、链接残留
+    # Strip markdown emphasis, heading hashes and link leftovers
     s = re.sub(r"[#*`>\-]+", " ", s)
     s = re.sub(r"\s+", " ", s).strip()
     if not s:
         return ""
-    # 取首句(中英文句号 / 换行)
-    m = re.split(r"[。\.!！\n]", s, maxsplit=1)
+    # First sentence (full stop, including the CJK full stop, or newline)
+    m = re.split(r"[\u3002.!\uff01\n]", s, maxsplit=1)
     head = (m[0] or s).strip()
     candidate = head if len(head) >= 8 else s
     if len(candidate) > max_chars:
@@ -251,15 +251,15 @@ def get_latest_ta_verdict(
     within_days: int = 14,
     today: date | None = None,
 ) -> dict | None:
-    """抽取某标的最近一次 TA 深度结论的紧凑版本(供盘前/盘后做高权重先验)。
+    """A compact version of a symbol's latest TA deep research conclusion (a strong prior for pre-market/close reports).
 
-    只返回 ``{rating, action_label, one_liner, date, age_days}`` —— 绝不返回全文,
-    控制 token 预算。任何缺数据 / 解析异常 → None(fail-soft,不抛)。
+    Returns only ``{rating, action_label, one_liner, date, age_days}``, never the full text,
+    to keep the token budget. Any missing data / parse error -> None (fail-soft, never raises).
 
     Args:
-        symbol: 股票代码
-        within_days: 仅采纳此天数内(含当天)的记录,过期返回 None
-        today: 测试注入用,默认今天
+        symbol: stock symbol
+        within_days: only rows within this many days (including today) are used; older returns None
+        today: injectable for tests; today by default
     """
     if today is None:
         today = date.today()
@@ -305,6 +305,6 @@ def get_latest_ta_verdict(
             "date": date_str,
             "age_days": int(age_days),
         }
-    except Exception as e:  # 任何意外都 fail-soft
-        logger.debug(f"提取 TA 深度结论失败: {symbol} - {e}")
+    except Exception as e:  # anything unexpected fails soft
+        logger.debug(f"Failed to extract the TA deep research conclusion: {symbol} - {e}")
         return None

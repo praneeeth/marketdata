@@ -1,4 +1,4 @@
-"""服务启动时的调度任务注册契约。"""
+"""Contract for the scheduled jobs registered at server startup."""
 
 from types import SimpleNamespace
 from unittest.mock import Mock

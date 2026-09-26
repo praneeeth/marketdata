@@ -1,11 +1,11 @@
-"""PanWatch 回测模块(Phase 0 地基)。
+"""PanWatch back-test module (Phase 0 foundation).
 
-轻量、纯 Python、零第三方依赖的事件式回测内核,服务于:
-- 历史验证现有 StrategySignalRun 信号的真实表现
-- 为 Phase 2 的因子 IC/IR 与回测驱动调权提供真值
-- 与模拟盘(Phase 1)共用 A 股交易成本模型
+A lightweight, pure-Python, dependency-free event-driven back-test core, serving to:
+- validate how existing StrategySignalRun signals really performed
+- give Phase 2's factor IC/IR and back-test-driven re-weighting a ground truth
+- share the trading cost model with the simulation (Phase 1)
 
-vectorbt 作为未来可选的向量化升级路径(见 .docs/quant-framework-comparison.md)。
+vectorbt is a possible future vectorised upgrade path (see .docs/quant-framework-comparison.md).
 """
 
 from src.modules.strategy.backtest.cost_model import CostConfig, CostModel, DEFAULT_COST_MODEL, Fill

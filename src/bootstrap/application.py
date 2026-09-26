@@ -1,8 +1,8 @@
-"""PanWatch 的 ASGI 应用装配根。
+"""ASGI application composition root.
 
-这里是进程启动时唯一创建 :class:`fastapi.FastAPI` 实例的位置。它只连接
-HTTP 中间件、认证依赖和各模块 router；具体业务规则仍由 ``modules`` 与
-``platform`` 承担，避免把应用入口演变成新的通用业务层。
+This is the only place that creates the :class:`fastapi.FastAPI` instance at startup. It only wires
+HTTP middleware, auth dependencies and each module's router; business rules stay in ``modules`` and
+``platform``, so the app entry point doesn't turn into a new general business layer.
 """
 
 from fastapi import Depends, FastAPI, Request
@@ -57,7 +57,7 @@ register_broker_manager(get_broker_manager)
 app = FastAPI(
     title="PanWatch API",
     version="0.1.0",
-    redirect_slashes=False,  # 避免重定向丢失 Authorization header
+    redirect_slashes=False,  # avoid redirects that drop the Authorization header
 )
 
 app.add_middleware(ResponseWrapperMiddleware)
@@ -69,7 +69,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# 认证路由（无需登录）
+# Auth routes (no login needed)
 app.include_router(auth.router, prefix="/api/auth", tags=["auth"])
 # Global cues (world indices, crude, gold, USD/INR): public context data, no user data.
 app.include_router(global_markets.router, prefix="/api/market", tags=["market"])
@@ -78,7 +78,7 @@ app.include_router(compliance.router, prefix="/api/compliance", tags=["complianc
 # Broker login callbacks: the broker redirects the browser here, protected by the login state.
 app.include_router(brokers.callback_router, prefix="/api/brokers", tags=["brokers"])
 
-# 需要登录的路由
+# Routes that need login
 protected = [Depends(get_current_user)]
 # Indian indices come from the user's own broker connection, so they need login.
 app.include_router(market.router, prefix="/api/market", tags=["market"], dependencies=protected)
@@ -206,21 +206,21 @@ app.router.on_startup.append(assistant_task_runner.recover_pending)
 MCP_ENABLED = is_feature_enabled(Feature.MCP_SERVER)
 
 if MCP_ENABLED:
-    # PAT 管理(需登录):创建/列出/吊销 MCP 用的个人访问令牌
+    # PAT management (login needed): create/list/revoke personal access tokens for MCP
     app.include_router(
         pats.router, prefix="/api/pats", tags=["pats"], dependencies=protected
     )
-    # MCP Server:挂在顶层 /mcp(不在 /api/ 下,绕开响应包装中间件保证 JSON-RPC 原样),
-    # 自带 PAT 鉴权,不走登录 JWT。Disabled by default in the India fork (MCP_ENABLED).
+    # MCP server: mounted at top-level /mcp (not under /api/, bypassing the response wrapper so JSON-RPC is unchanged),
+    # with its own PAT auth instead of the login JWT. Disabled by default in the India fork (MCP_ENABLED).
     app.include_router(mcp.router, prefix="/mcp", tags=["mcp"])
 
 
 def oauth_protected_resource_metadata(request: Request, _resource_path: str = ""):
-    """RFC 9728 元数据:MCP 客户端握手前会探测此端点决定鉴权方式。
+    """RFC 9728 metadata: MCP clients probe this endpoint before the handshake to choose an auth method.
 
-    PanWatch 用静态 PAT(无 OAuth server),返回 authorization_servers=[] +
-    bearer_methods_supported=["header"],告诉客户端直接用 Authorization Bearer。
-    即便不用 OAuth 此端点也必须存在,否则客户端拿到 404 会因 schema 不匹配报错。
+    The app uses static PATs (no OAuth server), so it returns authorization_servers=[] +
+    bearer_methods_supported=["header"], telling clients to use Authorization Bearer directly.
+    The endpoint must exist even without OAuth, or clients get a 404 and fail on the schema mismatch.
     """
     base = str(request.base_url).rstrip("/")
     return {
@@ -247,5 +247,5 @@ async def health():
 
 @app.get("/api/version")
 async def version():
-    """获取应用版本号（公开接口）"""
+    """Get the app version (public endpoint)."""
     return {"version": get_app_version()}

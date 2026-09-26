@@ -1,4 +1,4 @@
-"""应用升级检测模块（基于 Docker Hub tag）。"""
+"""App update check (based on Docker Hub tags)."""
 
 from __future__ import annotations
 
@@ -137,7 +137,7 @@ def _fetch_latest_docker_tag(repo: str, proxy: str | None = None) -> tuple[str |
     latest, release_url, err = _fetch_latest_from_hub(repo, proxy=proxy)
     if latest:
         return latest, release_url, None
-    # Hub 网络失败时，回退到 registry 链路（通常和 docker pull 一致，更稳定）
+    # When the Hub network call fails, fall back to the registry path (usually the same as docker pull, and steadier)
     if err in {"hub_timeout", "hub_unreachable", "hub_request_failed"} or str(err).startswith("hub_http_"):
         r_latest, r_url, r_err = _fetch_latest_from_registry(repo, proxy=proxy)
         if r_latest:
@@ -151,27 +151,27 @@ def _human_error(err: str | None) -> str | None:
     if not code:
         return None
     mapping = {
-        "disabled": "已禁用升级检测",
-        "invalid_repo": "升级检测配置无效",
-        "no_semver_tag": "未找到可用版本标签",
-        "hub_timeout": "连接 Docker Hub 超时",
-        "hub_unreachable": "网络不可达，无法连接 Docker Hub",
-        "hub_request_failed": "Docker Hub 请求失败",
-        "registry_timeout": "连接 Docker Registry 超时",
-        "registry_unreachable": "网络不可达，无法连接 Docker Registry",
-        "registry_request_failed": "Docker Registry 请求失败",
-        "registry_auth_no_token": "Docker Registry 鉴权失败（无 token）",
-        "registry_invalid_tags": "Docker Registry 返回数据格式异常",
+        "disabled": "Update check disabled",
+        "invalid_repo": "Invalid update check config",
+        "no_semver_tag": "No usable version tag found",
+        "hub_timeout": "Timed out connecting to Docker Hub",
+        "hub_unreachable": "Network unreachable; can't connect to Docker Hub",
+        "hub_request_failed": "Docker Hub request failed",
+        "registry_timeout": "Timed out connecting to Docker Registry",
+        "registry_unreachable": "Network unreachable; can't connect to Docker Registry",
+        "registry_request_failed": "Docker Registry request failed",
+        "registry_auth_no_token": "Docker Registry auth failed (no token)",
+        "registry_invalid_tags": "Docker Registry returned malformed data",
     }
     if code.startswith("hub_http_"):
-        return f"Docker Hub 返回异常（HTTP {code.replace('hub_http_', '')}）"
+        return f"Docker Hub returned an error (HTTP {code.replace('hub_http_', '')})"
     if code.startswith("registry_auth_http_"):
-        return f"Docker Registry 鉴权异常（HTTP {code.replace('registry_auth_http_', '')}）"
+        return f"Docker Registry auth error (HTTP {code.replace('registry_auth_http_', '')})"
     if code.startswith("registry_http_"):
-        return f"Docker Registry 返回异常（HTTP {code.replace('registry_http_', '')}）"
+        return f"Docker Registry returned an error (HTTP {code.replace('registry_http_', '')})"
     if code.startswith("http_"):
-        return f"Docker Hub 返回异常（{code.replace('http_', 'HTTP ')}）"
-    return mapping.get(code, "升级检测失败")
+        return f"Docker Hub returned an error ({code.replace('http_', 'HTTP ')})"
+    return mapping.get(code, "Update check failed")
 
 
 def check_update(current_version: str, proxy: str | None = None) -> dict[str, object]:

@@ -186,8 +186,8 @@ export default function AgentsPage() {
     try {
       const d = new Date(iso)
       if (isNaN(d.getTime())) return iso
-      return d.toLocaleString('zh-CN', {
-        timeZone: tz || undefined,
+      return d.toLocaleString('en-IN', {
+        timeZone: tz || 'Asia/Kolkata',
         month: '2-digit',
         day: '2-digit',
         hour: '2-digit',
@@ -514,7 +514,7 @@ export default function AgentsPage() {
             <span className="opacity-50">|</span>
             <span>Triggers in the next 24h: <span className="font-mono text-foreground/90">{health.summary.next_24h_count}</span></span>
             <span className="opacity-50">|</span>
-            <span>Recent failures: <span className={`font-mono ${health.summary.recent_failed_count > 0 ? 'text-rose-600' : 'text-foreground/90'}`}>{health.summary.recent_failed_count}</span></span>
+            <span>Recent failures: <span className={`font-mono ${health.summary.recent_failed_count > 0 ? 'text-down' : 'text-foreground/90'}`}>{health.summary.recent_failed_count}</span></span>
           </div>
         ) : (
           <div className="mt-2 text-[12px] text-muted-foreground">—</div>
@@ -543,7 +543,7 @@ export default function AgentsPage() {
                 <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4 sm:gap-6">
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-3">
-                      <div className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${agent.enabled ? 'bg-emerald-500' : 'bg-border'}`} />
+                      <div className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${agent.enabled ? 'bg-success' : 'bg-border'}`} />
                       <h3 className="text-[15px] font-semibold text-foreground">{agent.display_name}</h3>
                       <Badge variant="secondary" className="text-[10px]">{modeLabel}</Badge>
                       <button
@@ -720,12 +720,12 @@ export default function AgentsPage() {
                             <div key={r.id} className="flex items-start justify-between gap-3">
                               <div className="min-w-0">
                                 <div className="text-[11px] text-muted-foreground">
-                                  <span className={`inline-block w-1.5 h-1.5 rounded-full mr-2 ${r.status === 'failed' ? 'bg-rose-500' : 'bg-emerald-500'}`} />
+                                  <span className={`inline-block w-1.5 h-1.5 rounded-full mr-2 ${r.status === 'failed' ? 'bg-destructive' : 'bg-success'}`} />
                                   <span className="font-mono">{r.created_at}</span>
                                   <span className="ml-2 font-mono opacity-70">{Math.round((r.duration_ms || 0) / 1000)}s</span>
                                 </div>
                                 {r.error ? (
-                                  <div className="mt-0.5 text-[11px] text-rose-600 break-words">{r.error}</div>
+                                  <div className="mt-0.5 text-[11px] text-destructive break-words">{r.error}</div>
                                 ) : null}
                               </div>
                               <div className="text-[10px] text-muted-foreground/70 font-mono">{r.status}</div>

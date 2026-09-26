@@ -38,10 +38,26 @@ export default {
           DEFAULT: 'hsl(var(--card))',
           foreground: 'hsl(var(--card-foreground))',
         },
-        stock: {
-          up: '#E53935',
-          down: '#43A047',
+        success: {
+          DEFAULT: 'hsl(var(--success))',
+          foreground: 'hsl(var(--success-foreground))',
         },
+        up: 'hsl(var(--up) / <alpha-value>)',
+        down: 'hsl(var(--down) / <alpha-value>)',
+        flame: 'hsl(var(--flame) / <alpha-value>)',
+        simulation: 'hsl(var(--simulation) / <alpha-value>)',
+        note: {
+          DEFAULT: 'hsl(var(--note))',
+          border: 'hsl(var(--note-border))',
+          foreground: 'hsl(var(--note-foreground))',
+        },
+      },
+      fontFamily: {
+        sans: ['var(--font-sans)'],
+        serif: ['var(--font-serif)'],
+        display: ['var(--font-serif)'],
+        mono: ['var(--font-sans)'],
+        code: ['var(--font-code)'],
       },
       borderRadius: {
         lg: 'var(--radius)',

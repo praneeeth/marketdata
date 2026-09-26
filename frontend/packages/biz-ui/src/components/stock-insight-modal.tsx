@@ -167,7 +167,7 @@ function formatTime(isoTime?: string): string {
   if (!isoTime) return ''
   const d = new Date(isoTime)
   if (isNaN(d.getTime())) return ''
-  return d.toLocaleString('zh-CN', {
+  return d.toLocaleString('en-IN', { timeZone: 'Asia/Kolkata',
     month: '2-digit',
     day: '2-digit',
     hour: '2-digit',
@@ -874,12 +874,12 @@ export default function StockInsightModal(props: {
 
   const quoteUp = (quote?.change_pct || 0) > 0
   const quoteDown = (quote?.change_pct || 0) < 0
-  const changeColor = quoteUp ? 'text-emerald-500' : quoteDown ? 'text-rose-500' : 'text-foreground'
-  const priceColor = quoteUp ? 'text-emerald-500' : quoteDown ? 'text-rose-500' : 'text-foreground'
+  const changeColor = quoteUp ? 'text-up' : quoteDown ? 'text-down' : 'text-foreground'
+  const priceColor = quoteUp ? 'text-up' : quoteDown ? 'text-down' : 'text-foreground'
   const levelColor = (value: number | null | undefined) => {
     if (value == null || quote?.prev_close == null) return 'text-foreground'
-    if (value > quote.prev_close) return 'text-emerald-500'
-    if (value < quote.prev_close) return 'text-rose-500'
+    if (value > quote.prev_close) return 'text-up'
+    if (value < quote.prev_close) return 'text-down'
     return 'text-foreground'
   }
   const badge = getMarketBadge(market)
@@ -969,7 +969,7 @@ export default function StockInsightModal(props: {
       ? `Support ${formatNumber(klineSummary.support)} / Resistance ${formatNumber(klineSummary.resistance)}`
       : '--'
     const source = latestShareSuggestion?.agent_label || latestShareSuggestion?.agent_name || 'Technical indicators'
-    const ts = new Date().toLocaleString('zh-CN', {
+    const ts = new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata',
       year: 'numeric',
       month: '2-digit',
       day: '2-digit',
@@ -1454,19 +1454,19 @@ export default function StockInsightModal(props: {
                       <div className="text-[11px] text-muted-foreground mb-2">Holding</div>
                       {holdingAgg ? (
                         <div className="grid grid-cols-2 gap-2 text-[12px]">
-                          <div className="rounded bg-emerald-500/10 px-2 py-1.5">
+                          <div className="rounded bg-success/10 px-2 py-1.5">
                             <div className="text-[10px] text-muted-foreground">Quantity</div>
                             <div className="font-mono">{holdingAgg.quantity}</div>
                           </div>
-                          <div className="rounded bg-emerald-500/10 px-2 py-1.5">
+                          <div className="rounded bg-success/10 px-2 py-1.5">
                             <div className="text-[10px] text-muted-foreground">Cost (per share)</div>
                             <div
                               className={`font-mono ${
                                 quote?.current_price != null
                                   ? quote.current_price > holdingAgg.unitCost
-                                    ? 'text-rose-500'
+                                    ? 'text-destructive'
                                     : quote.current_price < holdingAgg.unitCost
-                                      ? 'text-emerald-500'
+                                      ? 'text-success'
                                       : 'text-foreground'
                                   : 'text-foreground'
                               }`}
@@ -1474,13 +1474,13 @@ export default function StockInsightModal(props: {
                               {formatNumber(holdingAgg.unitCost)}
                             </div>
                           </div>
-                          <div className="rounded bg-emerald-500/10 px-2 py-1.5">
+                          <div className="rounded bg-success/10 px-2 py-1.5">
                             <div className="text-[10px] text-muted-foreground">Market value</div>
                             <div className="font-mono">{formatCompactNumber(holdingAgg.marketValue)}</div>
                           </div>
-                          <div className="rounded bg-emerald-500/10 px-2 py-1.5">
+                          <div className="rounded bg-success/10 px-2 py-1.5">
                             <div className="text-[10px] text-muted-foreground">Total P&amp;L</div>
-                            <div className={`font-mono ${holdingAgg.pnl >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
+                            <div className={`font-mono ${holdingAgg.pnl >= 0 ? 'text-up' : 'text-down'}`}>
                               {holdingAgg.pnl >= 0 ? '+' : ''}{formatCompactNumber(holdingAgg.pnl)}
                             </div>
                           </div>
@@ -1910,9 +1910,9 @@ export default function StockInsightModal(props: {
 }
 
 const DEEP_DECISION_COLOR: Record<string, string> = {
-  buy: 'text-emerald-600 dark:text-emerald-400',
+  buy: 'text-up',
   hold: 'text-amber-600 dark:text-amber-400',
-  sell: 'text-rose-600 dark:text-rose-400',
+  sell: 'text-down',
 }
 
 const DEEP_STAGE_LABEL: Record<string, string> = {
@@ -2089,7 +2089,7 @@ function DeepHistoryComparison({
   const fmtPct = (v: number | null): string => (v == null ? '-' : `${(v * 100).toFixed(0)}%`)
   const fmtRet = (v: number | null): string => (v == null ? '-' : `${v > 0 ? '+' : ''}${v.toFixed(2)}%`)
   const retCls = (v: number | null): string =>
-    v == null ? 'text-muted-foreground' : v > 0 ? 'text-emerald-600 dark:text-emerald-400' : v < 0 ? 'text-rose-600 dark:text-rose-400' : 'text-muted-foreground'
+    v == null ? 'text-muted-foreground' : v > 0 ? 'text-up' : v < 0 ? 'text-down' : 'text-muted-foreground'
 
   return (
     <div className="rounded-lg border border-border/50 p-3 space-y-2">
@@ -2104,11 +2104,11 @@ function DeepHistoryComparison({
         </div>
         <div className="rounded bg-accent/30 px-2 py-1.5">
           <div className="text-muted-foreground">Buy ({stats.buy_count})</div>
-          <div className="font-semibold text-emerald-600 dark:text-emerald-400">{fmtPct(stats.buy_hit_rate)}</div>
+          <div className="font-semibold text-success">{fmtPct(stats.buy_hit_rate)}</div>
         </div>
         <div className="rounded bg-accent/30 px-2 py-1.5">
           <div className="text-muted-foreground">Sell ({stats.sell_count})</div>
-          <div className="font-semibold text-rose-600 dark:text-rose-400">{fmtPct(stats.sell_hit_rate)}</div>
+          <div className="font-semibold text-destructive">{fmtPct(stats.sell_hit_rate)}</div>
         </div>
         <div className="rounded bg-accent/30 px-2 py-1.5">
           <div className="text-muted-foreground">Average 20-day return</div>

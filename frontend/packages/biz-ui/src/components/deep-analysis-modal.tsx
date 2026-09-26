@@ -44,9 +44,9 @@ const STAGE_LABEL: Record<string, string> = {
 }
 
 const DECISION_COLOR: Record<string, string> = {
-  buy: 'text-emerald-600 dark:text-emerald-400',
+  buy: 'text-up',
   hold: 'text-amber-600 dark:text-amber-400',
-  sell: 'text-rose-600 dark:text-rose-400',
+  sell: 'text-down',
 }
 
 const POLL_INTERVAL_MS = 2000
@@ -371,7 +371,7 @@ export function DeepAnalysisModal({
 
         {stage === 'error' && (
           <div className="space-y-3 text-[13px]">
-            <div className="rounded-lg bg-rose-500/10 border border-rose-500/30 p-3 text-rose-600">
+            <div className="rounded-lg bg-destructive/10 border border-destructive/30 p-3 text-destructive">
               <div className="font-semibold mb-1">Analysis failed</div>
               <div className="text-[12px]">{error}</div>
             </div>
@@ -419,16 +419,16 @@ function IdleView({
 
       {/* This month's budget */}
       {budget && (
-        <div className={`rounded-lg p-3 text-[12px] ${overBudget ? 'bg-rose-500/10 border border-rose-500/30' : 'bg-accent/20'}`}>
+        <div className={`rounded-lg p-3 text-[12px] ${overBudget ? 'bg-destructive/10 border border-destructive/30' : 'bg-accent/20'}`}>
           <div className="flex items-center justify-between">
             <span className="font-medium">This month's budget</span>
-            <span className={overBudget ? 'text-rose-600' : 'text-muted-foreground'}>
+            <span className={overBudget ? 'text-destructive' : 'text-muted-foreground'}>
               ${budget.used.toFixed(2)} / ${budget.limit.toFixed(2)}
               {budget.runs_this_month > 0 && ` · ${budget.runs_this_month} runs`}
             </span>
           </div>
           {overBudget && (
-            <div className="text-[11px] text-rose-600 mt-1">
+            <div className="text-[11px] text-destructive mt-1">
               ⚠️ This month's budget is used up. To continue, raise `monthly_budget_usd` under "Agents → TradingAgents → Deep config".
             </div>
           )}
@@ -525,7 +525,7 @@ function DataCollectionDiagnostics({ sources }: { sources: ProgressDataSource[] 
   const statusClasses: Record<ProgressDataSource['status'], string> = {
     pending: 'text-muted-foreground',
     running: 'text-sky-600 dark:text-sky-400',
-    done: 'text-emerald-600 dark:text-emerald-400',
+    done: 'text-success',
     error: 'text-amber-600 dark:text-amber-400',
   }
 
@@ -579,11 +579,11 @@ export function ToolkitDiagnostics({
   const total = hit + miss + pass + fall + err
 
   const ACTION_CLS: Record<string, string> = {
-    HIT: 'text-emerald-600 dark:text-emerald-400',
+    HIT: 'text-success',
     MISS: 'text-amber-600 dark:text-amber-400',
     PASSTHROUGH: 'text-sky-600 dark:text-sky-400',
     FALLTHROUGH: 'text-orange-600 dark:text-orange-400',
-    ERROR: 'text-rose-600',
+    ERROR: 'text-destructive',
   }
 
   return (
@@ -598,7 +598,7 @@ export function ToolkitDiagnostics({
           <span className="text-muted-foreground"> · MISS {miss}</span>
           <span className={ACTION_CLS.PASSTHROUGH}> · passthrough {pass}</span>
           {fall > 0 && <span className={ACTION_CLS.FALLTHROUGH}> · fallback {fall}</span>}
-          {err > 0 && <span className="text-rose-600"> · errors {err}</span>}
+          {err > 0 && <span className="text-destructive"> · errors {err}</span>}
         </span>
       </summary>
       <div className="text-[10.5px] text-muted-foreground/80 mt-2 leading-relaxed">
@@ -681,7 +681,7 @@ function StageRow({ stage }: { stage: ProgressStage }) {
     stage.status === 'done' ? '✓' : stage.status === 'running' ? '🔄' : '⏸'
   const cls =
     stage.status === 'done'
-      ? 'text-emerald-600 dark:text-emerald-400'
+      ? 'text-success'
       : stage.status === 'running'
       ? 'text-primary'
       : 'text-muted-foreground/60'

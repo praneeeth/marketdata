@@ -15,6 +15,8 @@ import { Switch } from '@candlewise/base-ui/components/ui/switch'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@candlewise/base-ui/components/ui/dialog'
 import { useToast } from '@candlewise/base-ui/components/ui/toast'
 import { useCompliance } from '@/hooks/use-compliance'
+import { formatINR } from '@/lib/format'
+import { Change } from '@/components/common/Change'
 
 const EXIT_REASON_MAP: Record<string, string> = {
   stop_loss: 'Stop loss',
@@ -23,20 +25,17 @@ const EXIT_REASON_MAP: Record<string, string> = {
   manual: 'Manual close',
 }
 
+/** Simulated rupees (never real money). */
 function formatCurrency(v: number) {
-  return v.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  return formatINR(v)
 }
 
 function PnlText({ value, suffix = '' }: { value: number; suffix?: string }) {
-  const color = value > 0 ? 'text-emerald-500' : value < 0 ? 'text-rose-500' : 'text-muted-foreground'
-  const prefix = value > 0 ? '+' : ''
-  return <span className={color}>{prefix}{formatCurrency(value)}{suffix}</span>
+  return <span><Change value={value} kind="inr" />{suffix}</span>
 }
 
 function PnlPctText({ value }: { value: number }) {
-  const color = value > 0 ? 'text-emerald-500' : value < 0 ? 'text-rose-500' : 'text-muted-foreground'
-  const prefix = value > 0 ? '+' : ''
-  return <span className={color}>{prefix}{value.toFixed(2)}%</span>
+  return <Change value={value} />
 }
 
 function EquityChart({ data }: { data: EquityCurvePoint[] }) {
@@ -449,7 +448,7 @@ export default function PaperTradingPage() {
               <BarChart3 className="w-3.5 h-3.5" />
               Max drawdown
             </div>
-            <div className="text-lg font-bold text-emerald-500">{account.max_drawdown_pct.toFixed(2)}%</div>
+            <div className="text-lg font-bold tabular-nums text-down">{account.max_drawdown_pct > 0 ? '-' : ''}{account.max_drawdown_pct.toFixed(2)}%</div>
           </div>
           <div className="card p-3">
             <div className="flex items-center gap-1.5 text-muted-foreground text-xs mb-1">
@@ -492,7 +491,7 @@ export default function PaperTradingPage() {
                     <td className="text-right py-2 px-2">{s.total_trades}</td>
                     <td className="text-right py-2 px-2">
                       {s.total_trades > 0 ? (
-                        <span className={s.win_rate >= 50 ? 'text-emerald-500' : s.win_rate > 0 ? 'text-amber-500' : 'text-muted-foreground'}>
+                        <span className={s.win_rate >= 50 ? 'text-up' : s.win_rate > 0 ? 'text-amber-500' : 'text-muted-foreground'}>
                           {s.win_rate.toFixed(1)}%
                         </span>
                       ) : '-'}

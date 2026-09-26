@@ -21,7 +21,7 @@ const STATUS_TEXT: Record<BrokerStatus, string> = {
 }
 
 const STATUS_CLASS: Record<BrokerStatus, string> = {
-  connected: 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20',
+  connected: 'bg-success/10 text-success border-success/20',
   disconnected: 'bg-muted text-muted-foreground border-border',
   expired: 'bg-amber-500/10 text-amber-600 border-amber-500/20',
   error: 'bg-destructive/10 text-destructive border-destructive/20',
@@ -279,7 +279,7 @@ export default function BrokerConnections() {
 
       {notice && (
         <p
-          className={`text-[12px] ${notice.status === 'connected' ? 'text-emerald-600' : 'text-destructive'}`}
+          className={`text-[12px] ${notice.status === 'connected' ? 'text-success' : 'text-destructive'}`}
           role="status"
         >
           {notice.status === 'connected'

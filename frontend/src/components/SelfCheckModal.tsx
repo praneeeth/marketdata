@@ -86,7 +86,7 @@ function ItemRow({ item }: { item: CheckRow }) {
               {item.error}
             </p>
           )}
-          {item.hint && <p className="text-[11px] font-medium text-rose-600">{item.hint}</p>}
+          {item.hint && <p className="text-[11px] font-medium text-destructive">{item.hint}</p>}
         </div>
       )}
       {item.status !== 'fail' && item.status !== 'checking' && item.note && (
@@ -272,7 +272,7 @@ export default function SelfCheckModal({ open, onClose }: SelfCheckModalProps) {
           </Button>
         </div>
 
-        {listError && <div className="mt-3 text-[12px] text-rose-600">{listError}</div>}
+        {listError && <div className="mt-3 text-[12px] text-destructive">{listError}</div>}
         {!listError && total === 0 && !running && (
           <div className="mt-4 rounded-xl border border-border/40 bg-accent/20 p-4 text-center text-[12px] text-muted-foreground">
             No data sources / AI / notifications set up yet; set them up in Settings first, then run the self-check.

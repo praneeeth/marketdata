@@ -6,6 +6,7 @@ import { Button } from '@candlewise/base-ui/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@candlewise/base-ui/components/ui/dialog'
 import { useToast } from '@candlewise/base-ui/components/ui/toast'
 import PriceAlertFormDialog, { type AlertConditionItem, type PriceAlertFormState, type PriceAlertSubmitPayload } from '@candlewise/biz-ui/components/price-alert-form-dialog'
+import { formatIST } from '@/lib/format'
 
 type RuleOp = 'and' | 'or'
 
@@ -64,7 +65,7 @@ function fmt(iso?: string | null): string {
   if (!iso) return '--'
   const d = new Date(iso)
   if (isNaN(d.getTime())) return '--'
-  return d.toLocaleString('zh-CN', { hour12: false, month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
+  return formatIST(d, 'short')
 }
 
 function conditionText(item: AlertConditionItem): string {
@@ -313,7 +314,7 @@ export default function PriceAlertsPage() {
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className="text-[14px] font-semibold">{r.name || `${r.stock_name} alert`}</span>
                     <span className="text-[11px] px-2 py-0.5 rounded bg-accent/50 text-muted-foreground">{r.market}:{r.stock_symbol}</span>
-                    <span className={`text-[11px] px-2 py-0.5 rounded ${r.enabled ? 'bg-emerald-500/15 text-emerald-500' : 'bg-muted text-muted-foreground'}`}>{r.enabled ? 'On' : 'Paused'}</span>
+                    <span className={`text-[11px] px-2 py-0.5 rounded ${r.enabled ? 'bg-success/15 text-success' : 'bg-muted text-muted-foreground'}`}>{r.enabled ? 'On' : 'Paused'}</span>
                   </div>
                   <div className="mt-2 text-[12px] text-muted-foreground">
                     {(r.condition_group?.items || []).map(conditionText).join(r.condition_group?.op === 'or' ? ' or ' : ' and ')}
@@ -371,7 +372,7 @@ export default function PriceAlertsPage() {
               <div key={h.id} className="rounded border border-border/40 p-3">
                 <div className="flex items-center justify-between gap-2">
                   <div className="text-[12px] text-muted-foreground">{fmt(h.trigger_time)}</div>
-                  <div className={`text-[11px] ${h.notify_success ? 'text-emerald-500' : 'text-rose-500'}`}>
+                  <div className={`text-[11px] ${h.notify_success ? 'text-success' : 'text-destructive'}`}>
                     {h.notify_success ? 'Notified' : `Notification failed ${h.notify_error || ''}`}
                   </div>
                 </div>

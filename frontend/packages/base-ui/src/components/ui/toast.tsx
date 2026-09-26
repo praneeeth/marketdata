@@ -51,14 +51,14 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
 }
 
 const ICONS: Record<ToastType, React.ReactNode> = {
-  success: <CheckCircle2 className="w-4 h-4 text-emerald-500 flex-shrink-0" />,
-  error: <AlertCircle className="w-4 h-4 text-red-500 flex-shrink-0" />,
+  success: <CheckCircle2 className="w-4 h-4 text-success flex-shrink-0" />,
+  error: <AlertCircle className="w-4 h-4 text-destructive flex-shrink-0" />,
   info: <Info className="w-4 h-4 text-primary flex-shrink-0" />,
 }
 
 const BG: Record<ToastType, string> = {
-  success: 'border-emerald-500/20',
-  error: 'border-red-500/20',
+  success: 'border-success/20',
+  error: 'border-destructive/20',
   info: 'border-primary/20',
 }
 

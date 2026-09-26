@@ -214,13 +214,13 @@ export default function HistoryPage() {
             <div className="grid grid-cols-2 gap-2">
               <button
                 onClick={() => setMobileView('list')}
-                className={`h-9 rounded-lg text-[12px] font-medium transition-colors ${mobileView === 'list' ? 'bg-primary text-white' : 'bg-accent/30 text-muted-foreground hover:bg-accent/50'}`}
+                className={`h-9 rounded-lg text-[12px] font-medium transition-colors ${mobileView === 'list' ? 'bg-primary text-primary-foreground' : 'bg-accent/30 text-muted-foreground hover:bg-accent/50'}`}
               >
                 Contents
               </button>
               <button
                 onClick={() => setMobileView('reader')}
-                className={`h-9 rounded-lg text-[12px] font-medium transition-colors ${mobileView === 'reader' ? 'bg-primary text-white' : 'bg-accent/30 text-muted-foreground hover:bg-accent/50'}`}
+                className={`h-9 rounded-lg text-[12px] font-medium transition-colors ${mobileView === 'reader' ? 'bg-primary text-primary-foreground' : 'bg-accent/30 text-muted-foreground hover:bg-accent/50'}`}
                 disabled={!selectedRecord}
               >
                 Body

@@ -126,9 +126,9 @@ export default function PatSection() {
                   <span className="text-[12px] font-medium text-foreground truncate">{it.name || 'Unnamed'}</span>
                   <code className="font-mono text-[11px] text-muted-foreground">{it.prefix}…</code>
                   {it.revoked ? (
-                    <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-rose-500/15 text-rose-600">Revoked</span>
+                    <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-destructive/15 text-destructive">Revoked</span>
                   ) : (
-                    <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-600">Active</span>
+                    <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-success/15 text-success">Active</span>
                   )}
                 </div>
                 <div className="text-[10px] text-muted-foreground mt-0.5">
@@ -137,7 +137,7 @@ export default function PatSection() {
                 </div>
               </div>
               {!it.revoked ? (
-                <Button variant="ghost" size="sm" className="h-8 text-rose-600" onClick={() => revoke(it.id)}>
+                <Button variant="ghost" size="sm" className="h-8 text-destructive" onClick={() => revoke(it.id)}>
                   <Trash2 className="w-3.5 h-3.5" /> Revoke
                 </Button>
               ) : null}

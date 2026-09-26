@@ -56,7 +56,7 @@ function formatPct(value: number | null | undefined) {
 
 function pctClass(value: number | null | undefined) {
   if (value == null || value === 0) return 'text-muted-foreground'
-  return value > 0 ? 'text-emerald-500' : 'text-rose-500'
+  return value > 0 ? 'text-up' : 'text-down'
 }
 
 function outcomeLabel(outcome?: AgentPredictionOutcomeItem) {
@@ -68,11 +68,11 @@ function outcomeLabel(outcome?: AgentPredictionOutcomeItem) {
 
 function OutcomeCell({ outcome }: { outcome?: AgentPredictionOutcomeItem }) {
   if (!outcome || outcome.status === 'pending') return <span className="text-[12px] text-muted-foreground">{outcomeLabel(outcome)}</span>
-  return <div className="text-right"><div className={`font-mono text-[12px] ${pctClass(outcome.return_pct)}`}>{formatPct(outcome.return_pct)}</div><div className={`text-[10px] ${outcome.hit ? 'text-emerald-600' : 'text-muted-foreground'}`}>{outcomeLabel(outcome)}</div></div>
+  return <div className="text-right"><div className={`font-mono text-[12px] ${pctClass(outcome.return_pct)}`}>{formatPct(outcome.return_pct)}</div><div className={`text-[10px] ${outcome.hit ? 'text-up' : 'text-muted-foreground'}`}>{outcomeLabel(outcome)}</div></div>
 }
 
 function SummaryCard({ label, value, hint, tone = 'default' }: { label: string; value: string; hint?: string; tone?: 'default' | 'positive' | 'warning' }) {
-  const valueClass = tone === 'positive' ? 'text-emerald-600' : tone === 'warning' ? 'text-amber-600' : 'text-foreground'
+  const valueClass = tone === 'positive' ? 'text-up' : tone === 'warning' ? 'text-amber-600' : 'text-foreground'
   return <div className="rounded-xl border border-border/60 bg-card/70 p-3.5"><div className="text-[11px] text-muted-foreground">{label}</div><div className={`mt-1 text-xl font-bold ${valueClass}`}>{value}</div>{hint && <div className="mt-1 text-[10px] text-muted-foreground">{hint}</div>}</div>
 }
 

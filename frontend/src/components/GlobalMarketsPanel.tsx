@@ -13,7 +13,7 @@ export function formatLevel(value: number | null, key: string): string {
 
 function changeClass(pct: number | null): string {
   if (pct == null || pct === 0) return 'text-muted-foreground'
-  return pct > 0 ? 'text-emerald-600' : 'text-rose-600'
+  return pct > 0 ? 'text-up' : 'text-down'
 }
 
 /** Read-only world cues for context (owner decision 2026-09-25). Labelled with data quality. */

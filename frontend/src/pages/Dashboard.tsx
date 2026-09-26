@@ -33,27 +33,25 @@ import DiagnosticsShareCard from '@/components/DiagnosticsShareCard'
 import DigestShareCard from '@/components/DigestShareCard'
 import { useCompliance } from '@/hooks/use-compliance'
 import GlobalMarketsPanel from '@/components/GlobalMarketsPanel'
+import { directionClass, formatINR } from '@/lib/format'
 
 function pct(v?: number | null, digits = 2): string {
   if (v == null || !isFinite(v)) return '--'
   return `${v > 0 ? '+' : ''}${v.toFixed(digits)}%`
 }
 function moveColor(v?: number | null): string {
-  if (v == null) return 'text-muted-foreground'
-  return v > 0 ? 'text-emerald-500' : v < 0 ? 'text-rose-500' : 'text-muted-foreground'
+  return directionClass(v)
 }
 /** Background + text classes for an up/down chip; null/flat -> grey. Green up, red down (Indian convention). */
 function pctChipCls(v?: number | null): string {
   if (v == null) return 'bg-accent text-muted-foreground'
-  if (v > 0) return 'bg-emerald-500/10 text-emerald-500'
-  if (v < 0) return 'bg-rose-500/10 text-rose-500'
+  if (v > 0) return 'bg-up/10 text-up'
+  if (v < 0) return 'bg-down/10 text-down'
   return 'bg-accent text-muted-foreground'
 }
-/** Money display: +₹2,175 style (thousands separators + sign), for regular display outside redacted views. */
+/** Money display: +₹2,175 / +₹1.2 L (sign + Indian units), for regular display outside redacted views. */
 function fmtMoney(v?: number | null): string {
-  if (v == null || !isFinite(v)) return '--'
-  const sign = v > 0 ? '+' : v < 0 ? '-' : ''
-  return `${sign}¥${Math.abs(v).toLocaleString('zh-CN', { maximumFractionDigits: 0 })}`
+  return formatINR(v, { signed: true, digits: 0 })
 }
 /** Strip common markdown markers, for the plain-text summary line of briefs. */
 function stripMarkdown(s: string): string {
@@ -85,8 +83,8 @@ const ALERT_LABEL: Record<string, string> = {
 }
 
 const FEED_BADGE: Record<string, { label: string; cls: string }> = {
-  alert: { label: 'Alert triggered', cls: 'bg-rose-500/15 text-rose-500' },
-  holding: { label: 'Holding', cls: 'bg-emerald-500/15 text-emerald-500' },
+  alert: { label: 'Alert triggered', cls: 'bg-destructive/15 text-destructive' },
+  holding: { label: 'Holding', cls: 'bg-success/15 text-success' },
   watch: { label: 'Watchlist', cls: 'bg-accent text-muted-foreground' },
   risk: { label: 'Risk', cls: 'bg-amber-500/15 text-amber-600' },
   opportunity: { label: 'Opportunity', cls: 'bg-primary/10 text-primary' },
@@ -95,7 +93,7 @@ const FEED_BADGE: Record<string, { label: string; cls: string }> = {
 // Market split stacked bar colours
 const MARKET_BAR_CLS: Record<string, string> = {
   CN: 'bg-primary',
-  US: 'bg-emerald-500',
+  US: 'bg-success',
   HK: 'bg-orange-500',
 }
 
@@ -613,7 +611,7 @@ export default function DashboardPage() {
                       <div className="relative h-1.5 flex-1 rounded-full bg-accent/30">
                         <div className="absolute inset-y-0 left-1/2 w-px bg-border" />
                         <div
-                          className={`absolute inset-y-0 rounded-full ${positive ? 'bg-emerald-500' : 'bg-rose-500'}`}
+                          className={`absolute inset-y-0 rounded-full ${positive ? 'bg-up' : 'bg-down'}`}
                           style={
                             positive
                               ? { left: '50%', width: `${w}%` }
@@ -638,7 +636,7 @@ export default function DashboardPage() {
                   ))}
                 </div>
               ) : (
-                <div className="pt-1 text-[11px] text-emerald-500">✓ No obvious concentration/split risk</div>
+                <div className="pt-1 text-[11px] text-success">✓ No obvious concentration/split risk</div>
               )}
               <button
                 type="button"

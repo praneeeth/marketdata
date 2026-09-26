@@ -30,9 +30,9 @@ import ShareCardModal from '../components/ShareCardModal'
 import { useCompliance } from '@/hooks/use-compliance'
 
 const DECISION_COLOR: Record<string, string> = {
-  buy: 'text-emerald-500',
+  buy: 'text-up',
   hold: 'text-amber-500',
-  sell: 'text-rose-500',
+  sell: 'text-down',
 }
 
 /** An icon per section (decision/technical/sentiment/news/fundamentals/debate/risk), matching the ids from buildAnalysisSections */
@@ -57,7 +57,7 @@ function inferMarket(_symbol: string): string {
 
 function pctClass(v: number | null | undefined): string {
   if (v == null) return 'text-muted-foreground'
-  return v > 0 ? 'text-emerald-500' : v < 0 ? 'text-rose-500' : 'text-muted-foreground'
+  return v > 0 ? 'text-up' : v < 0 ? 'text-down' : 'text-muted-foreground'
 }
 
 function fmtPct(v: number | null | undefined): string {
@@ -463,9 +463,9 @@ export default function AnalysisDetailPage() {
                       <div
                         className={`h-full rounded-full ${
                           sug.action === 'buy'
-                            ? 'bg-emerald-500'
+                            ? 'bg-success'
                             : sug.action === 'sell'
-                              ? 'bg-rose-500'
+                              ? 'bg-destructive'
                               : 'bg-amber-500'
                         }`}
                         style={{ width: `${Math.max(0, Math.min(100, sug.confidence * 10))}%` }}

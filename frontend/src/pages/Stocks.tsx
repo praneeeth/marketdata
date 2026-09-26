@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
-import { Plus, Trash2, Pencil, Search, X, TrendingUp, Bot, Play, RefreshCw, Wallet, PiggyBank, ArrowUpRight, ArrowDownRight, Building2, ChevronDown, ChevronRight, Cpu, Bell, Clock, Newspaper, ExternalLink, BarChart3, Brain } from 'lucide-react'
+import { Plus, Trash2, Pencil, Search, X, TrendingUp, Bot, Play, RefreshCw, Wallet, PiggyBank, CalendarClock, Building2, ChevronDown, ChevronRight, Cpu, Bell, Clock, Newspaper, ExternalLink, BarChart3, Brain } from 'lucide-react'
 import { fetchAPI, stocksApi, type AIService, type NotifyChannel } from '@candlewise/api'
 import { klinesApi } from '@candlewise/api/klines'
 import { useLocalStorage } from '@/lib/utils'
@@ -25,6 +25,8 @@ import StockInsightModal from '@candlewise/biz-ui/components/stock-insight-modal
 import { DeepAnalysisModal } from '@candlewise/biz-ui/components/deep-analysis-modal'
 import StockPriceAlertPanel from '@candlewise/biz-ui/components/stock-price-alert-panel'
 import { useCompliance } from '@/hooks/use-compliance'
+import { formatINR } from '@/lib/format'
+import { Change } from '@/components/common/Change'
 
 interface AgentResult {
   success?: boolean
@@ -866,8 +868,8 @@ export default function StocksPage() {
     try {
       const d = new Date(iso)
       if (isNaN(d.getTime())) return iso
-      return d.toLocaleString('zh-CN', {
-        timeZone: tz || undefined,
+      return d.toLocaleString('en-IN', {
+        timeZone: tz || 'Asia/Kolkata',
         month: '2-digit',
         day: '2-digit',
         hour: '2-digit',
@@ -1356,12 +1358,7 @@ export default function StocksPage() {
   }
 
   // ========== Helpers ==========
-  const formatMoney = (value: number) => {
-    if (Math.abs(value) >= 1e5) {
-      return Math.abs(value) >= 1e7 ? `${(value / 1e7).toFixed(2)} Cr` : `${(value / 1e5).toFixed(2)} L`
-    }
-    return value.toFixed(2)
-  }
+  const formatMoney = (value: number) => formatINR(value)
 
   const marketLabel = (m: string) => (m === 'IN' ? 'NSE/BSE' : m)
 
@@ -1561,7 +1558,7 @@ export default function StocksPage() {
                 <>
                   <div className="w-px h-4 bg-border" />
                   <span className="text-[10px] text-muted-foreground/60">
-                    {lastRefreshTime.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                    {lastRefreshTime.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false, timeZone: 'Asia/Kolkata' })}
                   </span>
                 </>
               )}
@@ -1602,7 +1599,7 @@ export default function StocksPage() {
         <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none -mx-1 px-1 md:flex-wrap md:overflow-visible">
           {marketStatus.map(m => {
             const statusColors: Record<string, string> = {
-              trading: 'bg-emerald-500',
+              trading: 'bg-success',
               pre_market: 'bg-amber-500',
               break: 'bg-amber-500',
               after_hours: 'bg-slate-400',
@@ -1616,7 +1613,7 @@ export default function StocksPage() {
               >
                 <span className={`w-1.5 h-1.5 rounded-full ${statusColors[m.status] || 'bg-slate-400'}`} />
                 <span className="text-[11px] text-muted-foreground">{m.name}</span>
-                <span className={`text-[10px] ${m.is_trading ? 'text-emerald-600' : 'text-muted-foreground/60'} hidden sm:inline`}>
+                <span className={`text-[10px] ${m.is_trading ? 'text-success' : 'text-muted-foreground/60'} hidden sm:inline`}>
                   {m.status_text}
                 </span>
               </div>
@@ -1646,7 +1643,7 @@ export default function StocksPage() {
           </div>
           {lastRefreshTime && (
             <span className="md:hidden shrink-0 text-[10px] text-muted-foreground/60 font-mono ml-1">
-              {lastRefreshTime.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+              {lastRefreshTime.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false, timeZone: 'Asia/Kolkata' })}
             </span>
           )}
         </div>
@@ -1679,18 +1676,12 @@ export default function StocksPage() {
           </div>
           <div className="card p-4">
             <div className="flex items-center gap-2 text-muted-foreground mb-1">
-              {portfolio.total.total_pnl >= 0 ? (
-                <ArrowUpRight className="w-4 h-4 text-rose-500" />
-              ) : (
-                <ArrowDownRight className="w-4 h-4 text-emerald-500" />
-              )}
+              <Wallet className="w-4 h-4" aria-hidden="true" />
               <span className="text-[12px]">Total P&amp;L</span>
             </div>
-            <div className={`text-[20px] font-bold font-mono ${portfolio.total.total_pnl >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
-              {portfolio.total.total_pnl >= 0 ? '+' : ''}{formatMoney(portfolio.total.total_pnl)}
-              <span className="text-[13px] ml-1.5">
-                ({portfolio.total.total_pnl_pct >= 0 ? '+' : ''}{portfolio.total.total_pnl_pct.toFixed(2)}%)
-              </span>
+            <div className="flex flex-wrap items-baseline gap-x-2 text-[20px] font-bold">
+              <Change value={portfolio.total.total_pnl} kind="inr" />
+              <Change value={portfolio.total.total_pnl_pct} arrow={false} className="text-[13px] font-semibold" />
             </div>
           </div>
 
@@ -1699,20 +1690,15 @@ export default function StocksPage() {
             const totalMv = portfolio.total.total_market_value
             const prevMv = totalMv - dayPnl
             const pct = prevMv > 0 ? (dayPnl / prevMv * 100) : 0
-            const isUp = dayPnl >= 0
             return (
               <div className="card p-4">
                 <div className="flex items-center gap-2 text-muted-foreground mb-1">
-                  {isUp ? (
-                    <ArrowUpRight className="w-4 h-4 text-rose-500" />
-                  ) : (
-                    <ArrowDownRight className="w-4 h-4 text-emerald-500" />
-                  )}
+                  <CalendarClock className="w-4 h-4" aria-hidden="true" />
                   <span className="text-[12px]">Today's P&amp;L</span>
                 </div>
-                <div className={`text-[20px] font-bold font-mono ${isUp ? 'text-emerald-500' : 'text-rose-500'}`}>
-                  {isUp ? '+' : ''}{formatMoney(dayPnl)}
-                  <span className="text-[13px] ml-1.5">({pct >= 0 ? '+' : ''}{pct.toFixed(2)}%)</span>
+                <div className="flex flex-wrap items-baseline gap-x-2 text-[20px] font-bold">
+                  <Change value={dayPnl} kind="inr" />
+                  <Change value={pct} arrow={false} className="text-[13px] font-semibold" />
                 </div>
               </div>
             )
@@ -1873,14 +1859,14 @@ export default function StocksPage() {
                     </div>
                     <div className="text-left md:text-right">
                       <div className="text-[10px] md:text-[11px] text-muted-foreground">P&amp;L</div>
-                      <div className={`text-[12px] md:text-[13px] font-mono font-medium whitespace-nowrap ${account.total_pnl >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
+                      <div className={`text-[12px] md:text-[13px] font-mono font-medium whitespace-nowrap ${account.total_pnl >= 0 ? 'text-up' : 'text-down'}`}>
                         {account.total_pnl >= 0 ? '+' : ''}{formatMoney(account.total_pnl)}
                         <span className="text-[10px] md:text-[11px] ml-1 hidden md:inline">({account.total_pnl_pct >= 0 ? '+' : ''}{account.total_pnl_pct.toFixed(2)}%)</span>
                       </div>
                     </div>
                     <div className="text-left md:text-right">
                       <div className="text-[10px] md:text-[11px] text-muted-foreground">Today</div>
-                      <div className={`text-[12px] md:text-[13px] font-mono font-medium whitespace-nowrap ${account.total_daily_pnl >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
+                      <div className={`text-[12px] md:text-[13px] font-mono font-medium whitespace-nowrap ${account.total_daily_pnl >= 0 ? 'text-up' : 'text-down'}`}>
                         {account.total_daily_pnl >= 0 ? '+' : ''}{formatMoney(account.total_daily_pnl)}
                       </div>
                     </div>
@@ -1933,10 +1919,10 @@ export default function StocksPage() {
                               const stock = stocks.find(s => s.id === pos.stock_id)
                               const badge = marketBadge(pos.market)
                               const changeColor = pos.change_pct != null
-                                ? (pos.change_pct > 0 ? 'text-emerald-500' : pos.change_pct < 0 ? 'text-rose-500' : 'text-muted-foreground')
+                                ? (pos.change_pct > 0 ? 'text-up' : pos.change_pct < 0 ? 'text-down' : 'text-muted-foreground')
                                 : 'text-muted-foreground'
                               const pnlColor = pos.pnl != null
-                                ? (pos.pnl > 0 ? 'text-emerald-500' : pos.pnl < 0 ? 'text-rose-500' : 'text-muted-foreground')
+                                ? (pos.pnl > 0 ? 'text-up' : pos.pnl < 0 ? 'text-down' : 'text-muted-foreground')
                                 : 'text-muted-foreground'
                               return (
                                 <tr
@@ -2021,7 +2007,7 @@ export default function StocksPage() {
                                       </div>
                                     ) : '—'}
                                   </td>
-                                  <td className={`px-4 py-2.5 text-right font-mono text-[12px] ${pos.daily_pnl != null ? (pos.daily_pnl >= 0 ? 'text-emerald-500' : 'text-rose-500') : ''}`}>
+                                  <td className={`px-4 py-2.5 text-right font-mono text-[12px] ${pos.daily_pnl != null ? (pos.daily_pnl >= 0 ? 'text-up' : 'text-down') : ''}`}>
                                     {pos.daily_pnl != null ? (
                                       <div className="flex flex-col items-end">
                                         <span>{pos.daily_pnl >= 0 ? '+' : ''}{formatMoney(pos.daily_pnl)}</span>
@@ -2031,7 +2017,7 @@ export default function StocksPage() {
                                   </td>
                                   <td className="px-4 py-2.5 text-center">
                                     {pos.trading_style ? (
-                                      <span className={`text-[10px] px-1.5 py-0.5 rounded ${pos.trading_style === 'short' ? 'bg-rose-500/10 text-rose-600' : pos.trading_style === 'long' ? 'bg-blue-500/10 text-blue-600' : 'bg-amber-500/10 text-amber-600'}`}>
+                                      <span className={`text-[10px] px-1.5 py-0.5 rounded ${pos.trading_style === 'short' ? 'bg-destructive/10 text-destructive' : pos.trading_style === 'long' ? 'bg-blue-500/10 text-blue-600' : 'bg-amber-500/10 text-amber-600'}`}>
                                         {pos.trading_style === 'short' ? 'Short term' : pos.trading_style === 'long' ? 'Long term' : 'Swing'}
                                       </span>
                                     ) : (
@@ -2099,10 +2085,10 @@ export default function StocksPage() {
                           const stock = stocks.find(s => s.id === pos.stock_id)
                           const badge = marketBadge(pos.market)
                           const changeColor = pos.change_pct != null
-                            ? (pos.change_pct > 0 ? 'text-emerald-500' : pos.change_pct < 0 ? 'text-rose-500' : 'text-muted-foreground')
+                            ? (pos.change_pct > 0 ? 'text-up' : pos.change_pct < 0 ? 'text-down' : 'text-muted-foreground')
                             : 'text-muted-foreground'
                           const pnlColor = pos.pnl != null
-                            ? (pos.pnl > 0 ? 'text-emerald-500' : pos.pnl < 0 ? 'text-rose-500' : 'text-muted-foreground')
+                            ? (pos.pnl > 0 ? 'text-up' : pos.pnl < 0 ? 'text-down' : 'text-muted-foreground')
                             : 'text-muted-foreground'
                           return (
                             <div
@@ -2151,7 +2137,7 @@ export default function StocksPage() {
                                     {pos.name}
                                   </button>
                                   {pos.trading_style && (
-                                    <span className={`shrink-0 text-[9px] px-1 py-0.5 rounded ${pos.trading_style === 'short' ? 'bg-rose-500/10 text-rose-600' : pos.trading_style === 'long' ? 'bg-blue-500/10 text-blue-600' : 'bg-amber-500/10 text-amber-600'}`}>
+                                    <span className={`shrink-0 text-[9px] px-1 py-0.5 rounded ${pos.trading_style === 'short' ? 'bg-destructive/10 text-destructive' : pos.trading_style === 'long' ? 'bg-blue-500/10 text-blue-600' : 'bg-amber-500/10 text-amber-600'}`}>
                                       {pos.trading_style === 'short' ? 'S' : pos.trading_style === 'long' ? 'L' : 'Sw'}
                                     </span>
                                   )}
@@ -2200,7 +2186,7 @@ export default function StocksPage() {
                                 </div>
                                 <div className="min-w-0">
                                   <div className="text-[10px] text-muted-foreground">Today</div>
-                                  <div className={`font-mono whitespace-nowrap ${pos.daily_pnl != null ? (pos.daily_pnl >= 0 ? 'text-emerald-500' : 'text-rose-500') : 'text-muted-foreground'}`}>
+                                  <div className={`font-mono whitespace-nowrap ${pos.daily_pnl != null ? (pos.daily_pnl >= 0 ? 'text-up' : 'text-down') : 'text-muted-foreground'}`}>
                                     {pos.daily_pnl != null ? `${pos.daily_pnl >= 0 ? '+' : ''}${formatMoney(pos.daily_pnl)}` : '—'}
                                   </div>
                                 </div>
@@ -2282,8 +2268,8 @@ export default function StocksPage() {
                 onClick={() => setWatchlistOnlyAlerts(!watchlistOnlyAlerts)}
                 className={`text-[11px] px-2.5 py-1 rounded-md border transition-colors ${
                   watchlistOnlyAlerts
-                    ? 'bg-rose-500/10 border-rose-500/30 text-rose-600'
-                    : 'bg-accent/30 border-border/50 text-muted-foreground hover:border-rose-500/30'
+                    ? 'bg-destructive/10 border-destructive/30 text-destructive'
+                    : 'bg-accent/30 border-border/50 text-muted-foreground hover:border-destructive/30'
                 }`}
                 title="Only show stocks that need attention or have an alert"
               >
@@ -2310,7 +2296,7 @@ export default function StocksPage() {
                 .map((stock) => {
                 const quote = getStockQuote(`${stock.market}:${stock.symbol}`)
                 const changeColor = quote?.change_pct != null
-                  ? (quote.change_pct > 0 ? 'text-emerald-500' : quote.change_pct < 0 ? 'text-rose-500' : 'text-muted-foreground')
+                  ? (quote.change_pct > 0 ? 'text-up' : quote.change_pct < 0 ? 'text-down' : 'text-muted-foreground')
                   : 'text-muted-foreground'
                 const { suggestion, kline } = getSuggestionForStock(stock.symbol, stock.market, false)
                 return (
@@ -2749,7 +2735,7 @@ export default function StocksPage() {
                   <div key={agent.name} className="rounded-xl bg-accent/30 hover:bg-accent/50 transition-colors overflow-hidden">
                     <div className="flex items-center justify-between p-3.5">
                       <div className="flex items-center gap-3">
-                        <div className={`w-2 h-2 rounded-full ${agent.enabled ? 'bg-emerald-500' : 'bg-border'}`} />
+                        <div className={`w-2 h-2 rounded-full ${agent.enabled ? 'bg-success' : 'bg-border'}`} />
                         <div>
                           <div className="flex items-center gap-2">
                             <span className="text-[13px] font-medium text-foreground">{agent.display_name}</span>
@@ -3010,12 +2996,12 @@ export default function StocksPage() {
                         <div className="flex items-center gap-2 mb-1.5">
                           <span className={`text-[10px] px-1.5 py-0.5 rounded ${
                             item.source === 'exchange_filing' ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400' :
-                            'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
+                            'bg-success/10 text-success'
                           }`}>
                             {item.source_label}
                           </span>
                           {item.importance >= 2 && (
-                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-rose-500/10 text-rose-500">
+                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-destructive/10 text-destructive">
                               Important
                             </span>
                           )}

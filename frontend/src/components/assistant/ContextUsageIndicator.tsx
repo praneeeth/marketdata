@@ -15,7 +15,7 @@ const STATE_LABELS: Record<ContextUsage['state'], string> = {
 export function ContextUsageIndicator({ usage, onClick }: ContextUsageIndicatorProps) {
   if (!usage) return null
   const stateClass = usage.state === 'needs_compression'
-    ? 'text-rose-600 dark:text-rose-400'
+    ? 'text-destructive'
     : usage.state === 'warning'
       ? 'text-amber-600 dark:text-amber-400'
       : 'text-muted-foreground'

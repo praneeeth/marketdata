@@ -56,9 +56,9 @@ function fmtInt(n: number | null | undefined): string {
 }
 
 const VERDICT_STYLE: Record<string, string> = {
-  Suitable: 'bg-emerald-500/15 text-emerald-500 border-emerald-500/30',
+  Suitable: 'bg-success/15 text-success border-success/30',
   Cautious: 'bg-amber-500/15 text-amber-600 border-amber-500/30',
-  'Not suitable': 'bg-rose-500/15 text-rose-500 border-rose-500/30',
+  'Not suitable': 'bg-destructive/15 text-destructive border-destructive/30',
   Unknown: 'bg-muted text-muted-foreground border-border',
 }
 
@@ -213,7 +213,7 @@ function AddPositionCalculatorInner({
               {calc.isAdd && (
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Averaged</span>
-                  <span className={`font-mono ${calc.diluteAbs >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
+                  <span className={`font-mono ${calc.diluteAbs >= 0 ? 'text-up' : 'text-down'}`}>
                     {calc.diluteAbs >= 0 ? '↓' : '↑'}
                     {fmt(Math.abs(calc.diluteAbs))} ({fmt(Math.abs(calc.dilutePct))}%)
                   </span>

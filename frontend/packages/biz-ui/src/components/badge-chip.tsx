@@ -34,7 +34,7 @@ export function BadgeChip({
   )
 
   const aiTagNode = aiTag ? (
-    <span className="pointer-events-none absolute top-0 left-0 -translate-x-1/2 -translate-y-1/2 text-[10px] leading-none px-1.5 py-[2px] rounded-sm bg-primary text-white uppercase shadow-sm ring-1 ring-black/20">
+    <span className="pointer-events-none absolute top-0 left-0 -translate-x-1/2 -translate-y-1/2 text-[10px] leading-none px-1.5 py-[2px] rounded-sm bg-primary text-primary-foreground uppercase shadow-sm ring-1 ring-black/20">
       AI
     </span>
   ) : null

@@ -93,7 +93,7 @@ function formatSuggestionTime(isoTime?: string): string {
     // Is the date valid?
     if (isNaN(date.getTime())) return ''
     // Display in local time
-    return date.toLocaleTimeString('zh-CN', {
+    return date.toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata',
       hour: '2-digit',
       minute: '2-digit',
       hour12: false
@@ -109,7 +109,7 @@ function formatSuggestionDateTime(isoTime?: string): string {
   try {
     const date = new Date(isoTime)
     if (isNaN(date.getTime())) return ''
-    return date.toLocaleString('zh-CN', {
+    return date.toLocaleString('en-IN', { timeZone: 'Asia/Kolkata',
       month: '2-digit',
       day: '2-digit',
       hour: '2-digit',
@@ -288,7 +288,7 @@ export function SuggestionBadge({
                       disabled={feedback !== null}
                       className={`text-[12px] px-3 py-1.5 rounded-md border transition-colors ${
                         feedback === 'useful'
-                          ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-700'
+                          ? 'bg-success/10 border-success/30 text-success'
                           : 'bg-background/40 border-border/60 text-muted-foreground hover:text-foreground'
                       }`}
                     >
@@ -299,7 +299,7 @@ export function SuggestionBadge({
                       disabled={feedback !== null}
                       className={`text-[12px] px-3 py-1.5 rounded-md border transition-colors ${
                         feedback === 'useless'
-                          ? 'bg-rose-500/10 border-rose-500/30 text-rose-700'
+                          ? 'bg-destructive/10 border-destructive/30 text-destructive'
                           : 'bg-background/40 border-border/60 text-muted-foreground hover:text-foreground'
                       }`}
                     >
@@ -496,7 +496,7 @@ export function SuggestionBadge({
                     disabled={feedback !== null}
                     className={`text-[12px] px-3 py-1.5 rounded-md border transition-colors ${
                       feedback === 'useful'
-                        ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-700'
+                        ? 'bg-success/10 border-success/30 text-success'
                         : 'bg-background/40 border-border/60 text-muted-foreground hover:text-foreground'
                     }`}
                   >
@@ -507,7 +507,7 @@ export function SuggestionBadge({
                     disabled={feedback !== null}
                     className={`text-[12px] px-3 py-1.5 rounded-md border transition-colors ${
                       feedback === 'useless'
-                        ? 'bg-rose-500/10 border-rose-500/30 text-rose-700'
+                        ? 'bg-destructive/10 border-destructive/30 text-destructive'
                         : 'bg-background/40 border-border/60 text-muted-foreground hover:text-foreground'
                     }`}
                   >

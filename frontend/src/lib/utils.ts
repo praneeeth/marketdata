@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 export { cn } from '@candlewise/base-ui'
+import { DASH, formatIST } from './format'
 
 /**
  * useState persisted to localStorage
@@ -30,70 +31,25 @@ export function useLocalStorage<T>(key: string, defaultValue: T): [T, (value: T 
   return [value, setValue]
 }
 
-// ==================== Time formatting helpers ====================
+// ==================== Time formatting helpers (IST) ====================
 
-/**
- * Format an ISO time as local time (time only)
- * @param isoTime ISO time string
- * @returns e.g. "15:30"
- */
+/** Time only, in IST: "15:30"; empty for missing input. */
 export function formatTime(isoTime?: string | null): string {
   if (!isoTime) return ''
-  try {
-    const date = new Date(isoTime)
-    if (isNaN(date.getTime())) return ''
-    return date.toLocaleTimeString('zh-CN', {
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: false
-    })
-  } catch {
-    return ''
-  }
+  const out = formatIST(isoTime, 'time')
+  return out === DASH ? '' : out
 }
 
-/**
- * Format an ISO time as a local date and time
- * @param isoTime ISO time string
- * @returns e.g. "01/26 15:30"
- */
+/** Date and time, in IST: "26 Sept, 15:30"; empty for missing input. */
 export function formatDateTime(isoTime?: string | null): string {
   if (!isoTime) return ''
-  try {
-    const date = new Date(isoTime)
-    if (isNaN(date.getTime())) return ''
-    return date.toLocaleString('zh-CN', {
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: false
-    })
-  } catch {
-    return ''
-  }
+  const out = formatIST(isoTime, 'short')
+  return out === DASH ? '' : out
 }
 
-/**
- * Format an ISO time as a full local date and time
- * @param isoTime ISO time string
- * @returns e.g. "2024-01-26 15:30:00"
- */
+/** Full date and time with seconds, in IST; empty for missing input. */
 export function formatFullDateTime(isoTime?: string | null): string {
   if (!isoTime) return ''
-  try {
-    const date = new Date(isoTime)
-    if (isNaN(date.getTime())) return ''
-    return date.toLocaleString('zh-CN', {
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit',
-      hour12: false
-    })
-  } catch {
-    return ''
-  }
+  const out = formatIST(isoTime, 'full')
+  return out === DASH ? '' : out
 }

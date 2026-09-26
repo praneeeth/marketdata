@@ -904,9 +904,9 @@ export default function SettingsPage() {
                         disabled={!isChanged || saving === setting.key}
                         className={`w-10 h-10 rounded-lg flex items-center justify-center transition-all ${
                           saved === setting.key
-                            ? 'bg-emerald-500/10 text-emerald-600'
+                            ? 'bg-success/10 text-success'
                             : isChanged
-                              ? 'bg-primary text-white'
+                              ? 'bg-primary text-primary-foreground'
                               : 'text-muted-foreground/30'
                         }`}
                       >
@@ -1027,9 +1027,9 @@ export default function SettingsPage() {
                 <span className="opacity-50">|</span>
                 <span>Feedback: <span className="font-mono text-foreground/90">{fbStats.total}</span></span>
                 <span className="opacity-50">|</span>
-                <span>Useful: <span className="font-mono text-emerald-600">{fbStats.useful}</span></span>
+                <span>Useful: <span className="font-mono text-success">{fbStats.useful}</span></span>
                 <span className="opacity-50">|</span>
-                <span>Not useful: <span className="font-mono text-rose-600">{fbStats.useless}</span></span>
+                <span>Not useful: <span className="font-mono text-destructive">{fbStats.useless}</span></span>
                 <span className="opacity-50">|</span>
                 <span>Useful rate: <span className="font-mono text-foreground/90">{Math.round(fbStats.useful_rate * 100)}%</span></span>
               </div>

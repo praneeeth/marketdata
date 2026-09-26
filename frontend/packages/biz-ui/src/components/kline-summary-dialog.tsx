@@ -75,7 +75,7 @@ function formatLocalDateTime(iso?: string): string {
   try {
     const d = new Date(iso)
     if (isNaN(d.getTime())) return ''
-    return d.toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false })
+    return d.toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false })
   } catch {
     return ''
   }
@@ -212,7 +212,7 @@ export function KlineSummaryDialog({
         {!initialSummary && loading ? (
           <div className="text-[12px] text-muted-foreground">Loading...</div>
         ) : error ? (
-          <div className="text-[12px] text-rose-500">{error}</div>
+          <div className="text-[12px] text-destructive">{error}</div>
         ) : !effectiveSummary ? (
           <div className="text-[12px] text-muted-foreground">No data</div>
         ) : (
@@ -237,8 +237,8 @@ export function KlineSummaryDialog({
                   <div className="mt-2 space-y-1">
                     {suggestion.items.map((it, idx) => {
                       const color =
-                        it.delta > 0 ? 'text-emerald-500' :
-                        it.delta < 0 ? 'text-emerald-500' :
+                        it.delta > 0 ? 'text-up' :
+                        it.delta < 0 ? 'text-up' :
                         'text-muted-foreground'
                       return (
                         <div key={`${it.text}-${idx}`} className="flex items-center justify-between gap-3 text-[11px]">
@@ -643,7 +643,7 @@ export function KlineSummaryDialog({
                     trigger={
                       <span className="cursor-help hover:text-foreground">
                         5d{' '}
-                        <span className={effectiveSummary.change_5d >= 0 ? 'text-emerald-500' : 'text-rose-500'}>
+                        <span className={effectiveSummary.change_5d >= 0 ? 'text-up' : 'text-down'}>
                           {effectiveSummary.change_5d >= 0 ? '+' : ''}{effectiveSummary.change_5d.toFixed(2)}%
                         </span>
                       </span>
@@ -679,7 +679,7 @@ export function KlineSummaryDialog({
                     trigger={
                       <span className="cursor-help hover:text-foreground">
                         20d{' '}
-                        <span className={effectiveSummary.change_20d >= 0 ? 'text-emerald-500' : 'text-rose-500'}>
+                        <span className={effectiveSummary.change_20d >= 0 ? 'text-up' : 'text-down'}>
                           {effectiveSummary.change_20d >= 0 ? '+' : ''}{effectiveSummary.change_20d.toFixed(2)}%
                         </span>
                       </span>

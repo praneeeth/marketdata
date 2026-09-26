@@ -33,8 +33,8 @@ const LEVEL_DOT: Record<string, string> = {
   DEBUG: 'bg-slate-400',
   INFO: 'bg-blue-500',
   WARNING: 'bg-amber-500',
-  ERROR: 'bg-red-500',
-  CRITICAL: 'bg-red-700',
+  ERROR: 'bg-destructive',
+  CRITICAL: 'bg-destructive',
 }
 const TIME_RANGES = [
   { label: '1h', value: 1 },
@@ -253,7 +253,7 @@ export default function LogsModal({ open, onOpenChange }: { open: boolean, onOpe
   const formatTime = (iso: string) => {
     if (!iso) return ''
     const d = new Date(iso)
-    return d.toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })
+    return d.toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })
   }
 
   const filterSummary = useMemo(() => {
@@ -302,7 +302,7 @@ export default function LogsModal({ open, onOpenChange }: { open: boolean, onOpe
               <button
                 key={opt.value}
                 onClick={() => setDomain(opt.value)}
-                className={`px-2.5 py-1.5 rounded-lg text-[11px] font-medium transition-all ${domain === opt.value ? 'bg-primary text-white' : 'bg-accent text-muted-foreground hover:text-foreground'}`}
+                className={`px-2.5 py-1.5 rounded-lg text-[11px] font-medium transition-all ${domain === opt.value ? 'bg-primary text-primary-foreground' : 'bg-accent text-muted-foreground hover:text-foreground'}`}
               >
                 {opt.label}
               </button>
@@ -312,7 +312,7 @@ export default function LogsModal({ open, onOpenChange }: { open: boolean, onOpe
               <button
                 key={range.value}
                 onClick={() => setTimeRange(range.value)}
-                className={`px-2.5 py-1.5 rounded-lg text-[11px] font-medium transition-all ${timeRange === range.value ? 'bg-primary text-white' : 'bg-accent text-muted-foreground hover:text-foreground'}`}
+                className={`px-2.5 py-1.5 rounded-lg text-[11px] font-medium transition-all ${timeRange === range.value ? 'bg-primary text-primary-foreground' : 'bg-accent text-muted-foreground hover:text-foreground'}`}
               >
                 {range.label}
               </button>
@@ -325,7 +325,7 @@ export default function LogsModal({ open, onOpenChange }: { open: boolean, onOpe
               <button
                 key={level}
                 onClick={() => toggleLevel(level)}
-                className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-medium transition-all ${selectedLevels.includes(level) ? 'bg-primary text-white' : 'bg-accent text-muted-foreground hover:text-foreground'}`}
+                className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-medium transition-all ${selectedLevels.includes(level) ? 'bg-primary text-primary-foreground' : 'bg-accent text-muted-foreground hover:text-foreground'}`}
               >
                 <span className={`w-1.5 h-1.5 rounded-full ${selectedLevels.includes(level) ? 'bg-white/70' : LEVEL_DOT[level]}`} />
                 {level}
@@ -338,7 +338,7 @@ export default function LogsModal({ open, onOpenChange }: { open: boolean, onOpe
               <button
                 key={flow.key || 'all'}
                 onClick={() => setSelectedFlow(flow.key)}
-                className={`px-2.5 py-1.5 rounded-lg text-[11px] font-medium transition-all ${selectedFlow === flow.key ? 'bg-primary text-white' : 'bg-accent text-muted-foreground hover:text-foreground'}`}
+                className={`px-2.5 py-1.5 rounded-lg text-[11px] font-medium transition-all ${selectedFlow === flow.key ? 'bg-primary text-primary-foreground' : 'bg-accent text-muted-foreground hover:text-foreground'}`}
               >
                 {flow.label}
               </button>
@@ -361,7 +361,7 @@ export default function LogsModal({ open, onOpenChange }: { open: boolean, onOpe
                 <button
                   key={opt.key}
                   onClick={() => toggleLogger(opt.key)}
-                  className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-medium transition-all ${selectedLoggers.includes(opt.key) ? 'bg-primary text-white' : 'bg-accent text-muted-foreground hover:text-foreground'}`}
+                  className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-medium transition-all ${selectedLoggers.includes(opt.key) ? 'bg-primary text-primary-foreground' : 'bg-accent text-muted-foreground hover:text-foreground'}`}
                   title={opt.key}
                 >
                   {opt.label}

@@ -863,48 +863,82 @@ remove? → **Remove share cards; keep PDF.**
   - Node 24.
   - Live data vendors.
 
-### 8.2 Phase 2 report (in progress)
+### 8.2 Phase 2 report
 
 Branch `phase-2/india-market-data`, stacked on the Phase 1 branch.
 
-- **Done:**
-  - `marketdata.india` core: typed data, the read-only provider protocol,
-    secret-safe sessions, and a transport with per-credential throttling and
-    typed errors.
-  - Adapters for Kite Connect v3, Upstox and Angel One SmartAPI, plus the dev-only
-    yfinance adapter. All pass one contract suite.
-  - `IndiaMarketData`: per-user failover, credential-keyed caches and per-credential
-    instrument masters (Q9).
-  - `CredentialVault` (AES-256-GCM, key rotation, row-bound ciphertext).
-  - The `broker_connections` table (migration 128) and `/api/brokers`, with the Kite
-    and Upstox redirect logins and the Angel TOTP login.
-  - The English "Broker connections" panel on the Data Sources page.
-  - ADR-007, and new environment variables in `.env.example`.
-- **Tests:**
+- **India data layer:**
+  - `marketdata.india`: Kite, Upstox and Angel One adapters, plus the dev-only yfinance
+    adapter, all under one contract suite.
+  - `IndiaMarketData`, with a per-credential `InstrumentCache`.
+  - `CredentialVault` and `broker_connections` (migration 128), `/api/brokers`, and the
+    broker panel.
+- **Global markets:** a read-only panel (world indices, Brent, gold, USD/INR) from free,
+  delayed Yahoo data labelled "Delayed / unofficial". It feeds the dashboard and the
+  pre-market outlook; `GLOBAL_CUES_SOURCE=off` hides it.
+- **India-only app:**
+  - `MarketCode.IN` is the only market. Quotes, K-lines, indices, the watchlist,
+    search, the self-check, the assistant and TradingAgents read the user's broker
+    data through the India bridge.
+  - TradingAgents never falls through to Yahoo in production (X8).
+  - NIFTY 50 is the benchmark. Values are INR only. Stock links go to NSE,
+    TradingView or Google Finance. The default timezone is Asia/Kolkata.
+- **Removed:**
+  - Chinese/HK/US vendors, akshare, efinance and Playwright.
+  - Capital and main-force flow, northbound, dragon-tiger, margin and shareholder
+    data.
+  - Eastmoney discovery, and Chinese announcements with their full text.
+  - The Xueqiu chart analyst.
+  - The Chinese stock list and symbol rules, the data-source admin and its seeds, and
+    HKD/USD FX.
+  - WeCom, DingTalk, Lark, ServerChan, PushPlus and Bark notifications.
+  - The market pickers in the UI.
+  - Migration 129 drops `data_sources`, disables removed channels and removes the chart
+    analyst row.
+- **Review fixes:** code review findings 1–9 were fixed, each with a regression test.
+- **Found while running the app:**
+  - Restarting after migration 129 crashed on legacy unversioned column migrations.
+    Fixed, with a restart regression test.
+  - Schedules ran in China time. The default timezone is now IST.
+  - Search had no results without a broker instrument list. It now offers the typed
+    symbol, marked unverified.
+  - Yahoo float noise is now rounded to paise.
+- **Tests and lint:**
 
   | Suite | Result |
   | --- | --- |
-  | Backend | 1,127 passed, 3 skipped |
+  | Backend | 1,071 passed, 3 skipped (plus the flaky upstream SSE test, which passes on rerun) |
   | Coverage on new code | 98% |
-  | `packages/marketdata` | 346 passed, 4 skipped |
-  | Frontend | vitest 75 passed; `tsc -b` and build clean |
+  | `packages/marketdata` | 173 passed, 4 skipped |
+  | Frontend | vitest 81 passed; `tsc -b` and build clean |
   | ruff, ruff format, mypy `--strict` | clean |
 
-- **Still to do in Phase 2:**
-  - Switch host features (quotes, K-lines, watchlist, agents, TradingAgents routing) from
-    the CN vendors to `IndiaMarketData`. Agents degrade with "broker session expired,
-    reconnect".
-  - Remove the Chinese vendors, akshare and efinance, and the China-only features, once
-    host features use the India layer.
-- **Found during Phase 2:**
-  - `tests/test_sse_endpoints.py` (log SSE tail) is flaky upstream. It failed 2 of 8
-    runs on the unchanged Phase 1 code.
-  - The contract suite caught Upstox listing indices with lot size 0. This is now
-    normalised to 1, as Kite does.
-- **Not verified in the sandbox:**
-  - Every live broker call: endpoints, field names and precision, rate limits,
-    instrument-master sizes, OAuth redirects and token expiry times. All are marked
-    *(verify)* in code.
+- **Tests deleted with removed features:**
+  - Backend: `test_capital_flow_routing`, `test_cn_symbol_mapping`,
+    `test_daily_report_index`, `test_datasource_admin_api`,
+    `test_datasource_reconcile`, `test_datasource_test_path`,
+    `test_datasources_health`, `test_discovery_routing`, `test_events_routing`,
+    `test_index_klines`, `test_index_routing`, `test_kline_collector_cache`,
+    `test_kline_fetch_coalesce`, `test_kline_routing`, `test_market_indices_spark`,
+    `test_marketdata_client`, `test_marketdata_flagon_caching`, `test_md_stock_data`,
+    `test_quote_routing`, `test_stock_quote_tail_routing`,
+    `test_ta_us_news_passthrough`, `test_tradingagents_a_share_data_routes` and
+    `test_tradingagents_hk_routes`.
+  - Frontend: `DataSourceTestErrors.test.tsx`.
+  - Package: every upstream vendor, client, engine and symbol test.
+  - Tests of generic logic were kept and now use Indian sample data.
+- **Still open:**
+  - Chinese UI and agent text. The English translation is next (Phase 4, decided).
+  - Indian news, filings, fundamentals and FII/DII flows (Q8).
+  - The NSE holiday calendar (Phase 3, Q11).
+  - The product name (Q17).
+  - The CI workflow still sets two unused `PLAYWRIGHT_*` variables. They're left as
+    they are because CI changes need approval.
+- **Not verified:**
+  - Live broker APIs: all adapters are tested only against doc-derived fixtures and
+    marked *(verify)*.
+  - The Docker image build.
+  - Yahoo global cues and the yfinance dev source were checked live on a local run.
 
 ---
 

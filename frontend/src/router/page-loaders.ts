@@ -14,6 +14,7 @@ export const pageLoaders = {
   dataSources: () => import('@/pages/DataSources'),
   settings: () => import('@/pages/Settings'),
   analysisDetail: () => import('@/pages/AnalysisDetail'),
+  stockDetail: () => import('@/pages/StockDetail'),
 } as const
 
 export type RouteKey = keyof typeof pageLoaders
@@ -32,6 +33,7 @@ export const routePages = {
   DataSourcesPage: lazy(pageLoaders.dataSources),
   SettingsPage: lazy(pageLoaders.settings),
   AnalysisDetailPage: lazy(pageLoaders.analysisDetail),
+  StockDetailPage: lazy(pageLoaders.stockDetail),
 } as const
 
 const routeMatchers: Array<{ key: RouteKey; matches: (pathname: string) => boolean }> = [
@@ -48,6 +50,7 @@ const routeMatchers: Array<{ key: RouteKey; matches: (pathname: string) => boole
   { key: 'dataSources', matches: pathname => pathname === '/datasources' },
   { key: 'settings', matches: pathname => pathname === '/settings' },
   { key: 'analysisDetail', matches: pathname => pathname.startsWith('/analysis/') },
+  { key: 'stockDetail', matches: pathname => pathname.startsWith('/stock/') },
 ]
 
 export function resolveRouteKey(pathname: string): RouteKey | null {

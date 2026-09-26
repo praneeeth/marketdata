@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
-import { Plus, Trash2, Pencil, Search, X, TrendingUp, Bot, Play, RefreshCw, Wallet, PiggyBank, CalendarClock, Building2, ChevronDown, ChevronRight, Cpu, Bell, Clock, Newspaper, ExternalLink, BarChart3, Brain } from 'lucide-react'
+import { Plus, Trash2, Pencil, Search, X, TrendingUp, Bot, Play, RefreshCw, Wallet, PiggyBank, CalendarClock, Building2, ChevronDown, ChevronRight, Cpu, Bell, Clock, Newspaper, ExternalLink, BarChart3, Brain, Eye } from 'lucide-react'
 import { fetchAPI, stocksApi, type AIService, type NotifyChannel } from '@candlewise/api'
 import { klinesApi } from '@candlewise/api/klines'
 import { useLocalStorage } from '@/lib/utils'
@@ -27,6 +27,7 @@ import StockPriceAlertPanel from '@candlewise/biz-ui/components/stock-price-aler
 import { useCompliance } from '@/hooks/use-compliance'
 import { formatINR } from '@/lib/format'
 import { Change } from '@/components/common/Change'
+import { useNavigate } from 'react-router-dom'
 
 interface AgentResult {
   success?: boolean
@@ -364,6 +365,7 @@ const mergePortfolioQuotes = (
 }
 
 export default function StocksPage() {
+  const navigate = useNavigate()
   const { isEnabled } = useCompliance()
   const adviceEnabled = isEnabled('suggestion_pool')
   const [stocks, setStocks] = useState<Stock[]>([])
@@ -856,7 +858,13 @@ export default function StocksPage() {
     loadNews(stockName)
   }, [loadNews])
 
-  const openStockDetail = useCallback((stockSymbol: string, stockMarket: string, stockName?: string, hasPosition?: boolean) => {
+  /** Primary path: the stock detail page (price, research summary, chart, news). */
+  const openStockDetail = useCallback((stockSymbol: string, _stockMarket?: string, _stockName?: string, _hasPosition?: boolean) => {
+    navigate(`/stock/${encodeURIComponent(stockSymbol)}`)
+  }, [navigate])
+
+  /** Secondary path: the quick-view modal, without leaving the list. */
+  const openQuickView = useCallback((stockSymbol: string, stockMarket: string, stockName?: string, hasPosition?: boolean) => {
     setInsightSymbol(stockSymbol)
     setInsightMarket(stockMarket || 'IN')
     setInsightName(stockName)
@@ -2438,10 +2446,11 @@ export default function StocksPage() {
                           variant="ghost"
                           size="icon"
                           className="h-7 w-7"
-                          onClick={() => openStockDetail(stock.symbol, stock.market, stock.name, false)}
-                          title="Details"
+                          onClick={() => openQuickView(stock.symbol, stock.market, stock.name, false)}
+                          title="Quick view"
+                          aria-label={`Quick view of ${stock.symbol}`}
                         >
-                          <ExternalLink className="w-3.5 h-3.5" />
+                          <Eye className="w-3.5 h-3.5" />
                         </Button>
                         <Button
                           variant="ghost"

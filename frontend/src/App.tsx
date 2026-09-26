@@ -34,6 +34,7 @@ const {
   PaperTradingPage,
   EvaluationsPage,
   AssistantPage,
+  StockDetailPage,
 } = routePages
 
 // Auth guard component
@@ -282,6 +283,7 @@ function App() {
               <Route path="/datasources" element={<DataSourcesPage />} />
               <Route path="/settings" element={<SettingsPage />} />
               <Route path="/analysis/:symbol/:date" element={<AnalysisDetailPage />} />
+              <Route path="/stock/:symbol" element={<StockDetailPage />} />
             </Routes>
           </Suspense>
         </RouteErrorBoundary>

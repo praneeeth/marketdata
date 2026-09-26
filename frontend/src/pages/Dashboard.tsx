@@ -25,7 +25,6 @@ import {
 } from '@candlewise/api'
 import { Button } from '@candlewise/base-ui/components/ui/button'
 import { Onboarding } from '@candlewise/biz-ui/components/onboarding'
-import StockInsightModal from '@candlewise/biz-ui/components/stock-insight-modal'
 import Sparkline from '@/components/Sparkline'
 import BenchChart from '@/components/BenchChart'
 import BenchmarkShareCard from '@/components/BenchmarkShareCard'
@@ -126,13 +125,6 @@ export default function DashboardPage() {
   const [shareDiag, setShareDiag] = useState(false)
   const [shareDigest, setShareDigest] = useState(false)
   const [showOnboarding, setShowOnboarding] = useState(false)
-  const [modal, setModal] = useState<{ open: boolean; symbol: string; market: string; name: string; hasPosition: boolean }>({
-    open: false,
-    symbol: '',
-    market: 'IN',
-    name: '',
-    hasPosition: false,
-  })
 
   // Slow lane: benchmark/attribution (K-lines for every holding, minutes); retried separately, with clear states for failure/empty
   const loadBench = useCallback(() => {
@@ -207,8 +199,9 @@ export default function DashboardPage() {
     setShowOnboarding(false)
   }
 
-  const openStock = (symbol: string, market: string, name = '', hasPosition = false) =>
-    setModal({ open: true, symbol, market: market || 'IN', name, hasPosition })
+  /** Stocks open on their detail page (price, research summary, chart, news). */
+  const openStock = (symbol: string, _market?: string, _name?: string, _hasPosition?: boolean) =>
+    navigate(`/stock/${encodeURIComponent(symbol)}`)
 
   const runAiReview = async () => {
     setAiReviewLoading(true)
@@ -740,14 +733,6 @@ export default function DashboardPage() {
       </div>
 
 
-      <StockInsightModal
-        open={modal.open}
-        onOpenChange={(o) => setModal((m) => ({ ...m, open: o }))}
-        symbol={modal.symbol}
-        market={modal.market}
-        stockName={modal.name}
-        hasPosition={modal.hasPosition}
-      />
 
       {/* Share card: simulation scorecard (vs benchmark) */}
       {shareBench && bench && (

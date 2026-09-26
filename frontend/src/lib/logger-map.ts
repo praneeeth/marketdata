@@ -6,7 +6,6 @@ export const LOGGER_MAPPING: Record<string, string> = {
   'src.agents.intraday_monitor': '盘中监测',
   'src.agents.base': 'Agent执行链路',
   'src.agents.news_digest': '新闻速递',
-  'src.agents.chart_analyst': '技术分析',
   'src.agents.tradingagents': '深度分析',
   'src.agents.tradingagents.agent': '深度分析-主流程',
   'src.agents.tradingagents.observability': '深度分析-进度与成本',

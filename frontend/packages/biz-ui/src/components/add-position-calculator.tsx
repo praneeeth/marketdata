@@ -93,8 +93,6 @@ function AddPositionCalculatorInner({
   const [aiLoading, setAiLoading] = useState(false)
   const [aiResult, setAiResult] = useState<AddPositionEvalResult | null>(null)
 
-  const isCN = market === 'CN'
-
   const addPrice = useMemo(() => {
     const p = parseFloat(priceRaw)
     if (isFinite(p) && p > 0) return p
@@ -146,7 +144,6 @@ function AddPositionCalculatorInner({
 
   const pricePlaceholder = currentPrice && currentPrice > 0 ? String(currentPrice) : '加仓价'
   const hasHolding = currentQuantity > 0 && currentCost > 0
-  const lotWarn = isCN && addQty > 0 && Math.round(addQty) % 100 !== 0
 
   return (
     <div className="mt-3 border-t border-border/50 pt-3">
@@ -203,7 +200,7 @@ function AddPositionCalculatorInner({
 
           {mode === 'amount' && addQty > 0 && (
             <div className="text-[10px] text-muted-foreground">
-              ≈ {fmtInt(addQty)} 股{isCN ? `（≈${fmtInt(addQty / 100)} 手）` : ''}
+              ≈ {fmtInt(addQty)} 股
             </div>
           )}
 
@@ -228,9 +225,6 @@ function AddPositionCalculatorInner({
                   {fmtInt(calc.newQty)} / {fmtInt(calc.totalInvested)}
                 </span>
               </div>
-              {lotWarn && (
-                <div className="text-[10px] text-amber-600">提示:A股通常 100 股/手,建议取整到 100 的倍数</div>
-              )}
             </div>
           ) : (
             <div className="text-[11px] text-muted-foreground">填写加仓股数/金额与价格后自动计算</div>
@@ -253,7 +247,6 @@ function AddPositionCalculatorInner({
                 ) : reverseShares != null ? (
                   <span>
                     需加 <span className="font-mono text-foreground">{fmtInt(reverseShares)}</span> 股
-                    {isCN ? `（≈${fmtInt(Math.ceil(reverseShares / 100))} 手）` : ''}
                     <br />约 <span className="font-mono">{fmtInt(reverseShares * addPrice)}</span> 元
                   </span>
                 ) : (

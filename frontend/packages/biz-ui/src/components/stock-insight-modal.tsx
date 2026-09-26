@@ -101,7 +101,7 @@ interface PortfolioPosition {
   market: string
   quantity: number
   cost_price: number
-  market_value_cny: number | null
+  market_value: number | null
   pnl: number | null
 }
 
@@ -149,21 +149,15 @@ function formatCompactNumber(value: number | null | undefined): string {
   return n.toFixed(0)
 }
 
-function formatMarketCap(value: number | null | undefined, market?: string): string {
+function formatMarketCap(value: number | null | undefined, _market?: string): string {
   if (value == null) return '--'
   const n = Number(value)
   if (!isFinite(n)) return '--'
-  const m = String(market || '').toUpperCase()
   const abs = Math.abs(n)
-
-  // 腾讯 A 股字段常见为“亿元”口径（如 808 表示 808 亿元）
-  if (m === 'CN' && abs > 0 && abs < 100000) {
-    return `${n.toFixed(2)}亿元`
-  }
-
-  if (abs >= 1e8) return `${(n / 1e8).toFixed(2)}亿元`
-  if (abs >= 1e4) return `${(n / 1e4).toFixed(2)}万元`
-  return `${n.toFixed(0)}元`
+  // Indian units: 1 crore = 1e7, 1 lakh = 1e5 (rupees).
+  if (abs >= 1e7) return `₹${(n / 1e7).toLocaleString('en-IN', { maximumFractionDigits: 2 })} Cr`
+  if (abs >= 1e5) return `₹${(n / 1e5).toLocaleString('en-IN', { maximumFractionDigits: 2 })} L`
+  return `₹${n.toLocaleString('en-IN', { maximumFractionDigits: 0 })}`
 }
 
 function formatTime(isoTime?: string): string {
@@ -346,7 +340,7 @@ export default function StockInsightModal(props: {
   const { isEnabled } = useCompliance()
   const adviceEnabled = isEnabled('suggestion_pool')
   const symbol = String(props.symbol || '').trim()
-  const market = String(props.market || 'CN').trim().toUpperCase()
+  const market = String(props.market || 'IN').trim().toUpperCase()
   const [loading, setLoading] = useState(false)
   const [tab, setTab] = useState<InsightTab>('overview')
   const [newsHours, setNewsHours] = useLocalStorage<string>('stock_insight_news_hours', '168')
@@ -599,7 +593,7 @@ export default function StockInsightModal(props: {
           if (p.symbol !== symbol || p.market !== market) continue
           quantity += Number(p.quantity || 0)
           cost += Number(p.cost_price || 0) * Number(p.quantity || 0)
-          marketValue += Number(p.market_value_cny || 0)
+          marketValue += Number(p.market_value || 0)
           pnl += Number(p.pnl || 0)
         }
       }

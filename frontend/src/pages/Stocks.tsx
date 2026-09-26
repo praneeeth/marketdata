@@ -72,15 +72,12 @@ interface Position {
   invested_amount: number | null
   trading_style: string  // short: 短线, swing: 波段, long: 长线
   current_price: number | null
-  current_price_cny: number | null  // 人民币价格（港股换算后）
   change_pct: number | null
   market_value: number | null
-  market_value_cny: number | null  // 人民币市值
   pnl: number | null
   pnl_pct: number | null
   daily_pnl: number | null
   daily_pnl_pct: number | null
-  exchange_rate: number | null  // 汇率（仅港股）
 }
 
 interface AccountSummary {
@@ -106,10 +103,6 @@ interface PortfolioSummary {
     total_daily_pnl: number
     available_funds: number
     total_assets: number
-  }
-  exchange_rates?: {
-    HKD_CNY: number
-    USD_CNY?: number
   }
   quotes?: Record<string, { current_price: number | null; change_pct: number | null }>
 }
@@ -227,7 +220,7 @@ interface PriceAlertRuleSummary {
   enabled: boolean
 }
 
-const emptyStockForm: StockForm = { symbol: '', name: '', market: 'CN' }
+const emptyStockForm: StockForm = { symbol: '', name: '', market: 'IN' }
 const emptyAccountForm: AccountForm = { name: '', available_funds: '0' }
 
 const buildQuoteItemsFrom = (stockList: Stock[], portfolio: PortfolioSummary | null): QuoteRequestItem[] => {
@@ -261,7 +254,7 @@ const toQuoteMap = (rows: QuoteResponse[]): Record<string, { current_price: numb
 const toPriceAlertSummaryMap = (rows: PriceAlertRuleSummary[]): Record<string, { total: number; enabled: number }> => {
   const map: Record<string, { total: number; enabled: number }> = {}
   for (const row of rows || []) {
-    const key = `${String(row.market || 'CN').toUpperCase()}:${String(row.stock_symbol || '').toUpperCase()}`
+    const key = `${String(row.market || 'IN').toUpperCase()}:${String(row.stock_symbol || '').toUpperCase()}`
     if (!map[key]) map[key] = { total: 0, enabled: 0 }
     map[key].total += 1
     if (row.enabled) map[key].enabled += 1
@@ -277,9 +270,6 @@ const mergePortfolioQuotes = (
 ): PortfolioSummary | null => {
   if (!portfolio) return null
 
-  const hkdRate = portfolio.exchange_rates?.HKD_CNY ?? 0.92
-  const usdRate = portfolio.exchange_rates?.USD_CNY ?? 7.25
-
   let grandMarketValue = 0
   let grandCost = 0
   let grandAvailable = 0
@@ -294,13 +284,10 @@ const mergePortfolioQuotes = (
       const quote = quotes[`${pos.market}:${pos.symbol}`]
       const current_price = quote?.current_price ?? pos.current_price ?? null
       const change_pct = quote?.change_pct ?? pos.change_pct ?? null
-      const rate = pos.market === 'HK' ? hkdRate : pos.market === 'US' ? usdRate : 1
-
-      const cost = pos.cost_price * pos.quantity * rate
+      const cost = pos.cost_price * pos.quantity  // INR; India is the only market
       accCost += cost
 
       let market_value: number | null = null
-      let market_value_cny: number | null = null
       let pnl: number | null = null
       let pnl_pct: number | null = null
       let daily_pnl: number | null = null
@@ -308,16 +295,15 @@ const mergePortfolioQuotes = (
 
       if (current_price != null) {
         market_value = current_price * pos.quantity
-        market_value_cny = market_value * rate
-        accMarketValue += market_value_cny
-        pnl = market_value_cny - cost
+        accMarketValue += market_value
+        pnl = market_value - cost
         pnl_pct = cost > 0 ? (pnl / cost * 100) : 0
       }
 
       if (current_price != null && change_pct != null && change_pct !== -100) {
         const prev = current_price / (1 + change_pct / 100)
         if (isFinite(prev) && prev > 0) {
-          daily_pnl = round2((current_price - prev) * pos.quantity * rate)
+          daily_pnl = round2((current_price - prev) * pos.quantity)
           daily_pnl_pct = round2(change_pct)
           accDailyPnl += daily_pnl
         }
@@ -326,15 +312,12 @@ const mergePortfolioQuotes = (
       return {
         ...pos,
         current_price,
-        current_price_cny: current_price != null ? current_price * rate : null,
         change_pct,
         market_value,
-        market_value_cny,
         pnl,
         pnl_pct,
         daily_pnl,
         daily_pnl_pct,
-        exchange_rate: pos.market === 'HK' || pos.market === 'US' ? rate : null,
       }
     })
 
@@ -428,13 +411,13 @@ export default function StocksPage() {
   // Kline Dialog
   const [klineDialogOpen, setKlineDialogOpen] = useState(false)
   const [klineDialogSymbol, setKlineDialogSymbol] = useState('')
-  const [klineDialogMarket, setKlineDialogMarket] = useState('CN')
+  const [klineDialogMarket, setKlineDialogMarket] = useState('IN')
   const [klineDialogName, setKlineDialogName] = useState<string | undefined>(undefined)
   const [klineDialogHasPosition, setKlineDialogHasPosition] = useState<boolean>(false)
   const [klineDialogInitialSummary, setKlineDialogInitialSummary] = useState<KlineSummary | null>(null)
   const [insightOpen, setInsightOpen] = useState(false)
   const [insightSymbol, setInsightSymbol] = useState('')
-  const [insightMarket, setInsightMarket] = useState('CN')
+  const [insightMarket, setInsightMarket] = useState('IN')
   const [insightName, setInsightName] = useState<string | undefined>(undefined)
   const [insightHasPosition, setInsightHasPosition] = useState(false)
 
@@ -454,7 +437,6 @@ export default function StocksPage() {
   const [searchResults, setSearchResults] = useState<SearchResult[]>([])
   const [showDropdown, setShowDropdown] = useState(false)
   const [searching, setSearching] = useState(false)
-  const [refreshingStockList, setRefreshingStockList] = useState(false)
 
   // Account form
   const [accountDialogOpen, setAccountDialogOpen] = useState(false)
@@ -463,7 +445,7 @@ export default function StocksPage() {
 
   // Position form
   const [positionDialogOpen, setPositionDialogOpen] = useState(false)
-  const [positionForm, setPositionForm] = useState<PositionForm>({ account_id: 0, stock_id: 0, cost_price: '', quantity: '', invested_amount: '', trading_style: '', stock_symbol: '', stock_name: '', stock_market: 'CN' })
+  const [positionForm, setPositionForm] = useState<PositionForm>({ account_id: 0, stock_id: 0, cost_price: '', quantity: '', invested_amount: '', trading_style: '', stock_symbol: '', stock_name: '', stock_market: 'IN' })
   const [editPositionId, setEditPositionId] = useState<number | null>(null)
   const [positionDialogAccountId, setPositionDialogAccountId] = useState<number | null>(null)
   const [positionSearchQuery, setPositionSearchQuery] = useState('')
@@ -494,7 +476,7 @@ export default function StocksPage() {
   const [agentResultDialog, setAgentResultDialog] = useState<{ title: string; content: string; should_alert: boolean; notified: boolean } | null>(null)
 
   // Stock list filter
-  const [stockListFilter, setStockListFilter] = useState('')  // '' = 全部, 'CN' = A股, 'HK' = 港股, 'US' = 美股
+  const stockListFilter = ''  // India-only: no market filter
   const [watchlistOnlyAlerts, setWatchlistOnlyAlerts] = useLocalStorage<boolean>('panwatch_watchlist_only_alerts', false)
 
   // Remove watchlist modal
@@ -857,10 +839,10 @@ export default function StocksPage() {
 
   const openKlineDialog = useCallback((symbol: string, market: string, name?: string, hasPosition?: boolean) => {
     setKlineDialogSymbol(symbol)
-    setKlineDialogMarket(market || 'CN')
+    setKlineDialogMarket(market || 'IN')
     setKlineDialogName(name)
     setKlineDialogHasPosition(!!hasPosition)
-    const m = market || 'CN'
+    const m = market || 'IN'
     setKlineDialogInitialSummary(klineSummaries[`${m}:${symbol}`] || null)
     setKlineDialogOpen(true)
   }, [klineSummaries])
@@ -874,7 +856,7 @@ export default function StocksPage() {
 
   const openStockDetail = useCallback((stockSymbol: string, stockMarket: string, stockName?: string, hasPosition?: boolean) => {
     setInsightSymbol(stockSymbol)
-    setInsightMarket(stockMarket || 'CN')
+    setInsightMarket(stockMarket || 'IN')
     setInsightName(stockName)
     setInsightHasPosition(!!hasPosition)
     setInsightOpen(true)
@@ -1048,27 +1030,7 @@ export default function StocksPage() {
     searchTimer.current = setTimeout(() => doSearch(value), 500)
   }
 
-  const handleSearchMarketChange = (market: string) => {
-    setSearchMarket(market)
-    if (searchQuery) {
-      doSearch(searchQuery, market)
-    }
-  }
 
-  const refreshStockListCache = async () => {
-    setRefreshingStockList(true)
-    try {
-      const result = await fetchAPI<{ count: number }>('/stocks/refresh-list', { method: 'POST' })
-      toast(`已刷新股票列表，共 ${result.count} 只`, 'success')
-      if (searchQuery) {
-        doSearch(searchQuery)
-      }
-    } catch (e) {
-      toast('刷新失败', 'error')
-    } finally {
-      setRefreshingStockList(false)
-    }
-  }
 
   const selectStock = (item: SearchResult) => {
     setStockForm({ symbol: item.symbol, name: item.name, market: item.market })
@@ -1188,7 +1150,7 @@ export default function StocksPage() {
         trading_style: '',
         stock_symbol: '',
         stock_name: '',
-        stock_market: 'CN',
+        stock_market: 'IN',
       })
       setEditPositionId(null)
     }
@@ -1213,12 +1175,6 @@ export default function StocksPage() {
     positionSearchTimer.current = setTimeout(() => doPositionSearch(value), 500)
   }
 
-  const handlePositionSearchMarketChange = (market: string) => {
-    setPositionSearchMarket(market)
-    if (positionSearchQuery) {
-      doPositionSearch(positionSearchQuery, market)
-    }
-  }
 
   const selectPositionStock = (item: SearchResult) => {
     // 检查是否已有此股票
@@ -1407,14 +1363,10 @@ export default function StocksPage() {
     return value.toFixed(2)
   }
 
-  const marketLabel = (m: string) => m === 'CN' ? 'A股' : m === 'HK' ? '港股' : m === 'US' ? '美股' : m
+  const marketLabel = (m: string) => (m === 'IN' ? 'NSE/BSE' : m)
 
-  // 市场徽章样式和短标签
-  const marketBadge = (m: string) => {
-    if (m === 'HK') return { style: 'bg-orange-500/10 text-orange-600', label: '港' }
-    if (m === 'US') return { style: 'bg-green-500/10 text-green-600', label: '美' }
-    return { style: 'bg-blue-500/10 text-blue-600', label: 'A' }
-  }
+  // Market badge (India is the only market)
+  const marketBadge = (_m: string) => ({ style: 'bg-violet-500/10 text-violet-600', label: 'IN' })
 
   // 保留原始精度显示价格（不强制截断小数位）
   const formatPrice = (value: number) => {
@@ -1429,13 +1381,13 @@ export default function StocksPage() {
   }
 
   const getPriceAlertSummary = (symbol: string, market: string) => {
-    const key = `${String(market || 'CN').toUpperCase()}:${String(symbol || '').toUpperCase()}`
+    const key = `${String(market || 'IN').toUpperCase()}:${String(symbol || '').toUpperCase()}`
     return priceAlertSummaryMap[key] || { total: 0, enabled: 0 }
   }
 
   // 获取股票的建议信息（优先使用建议池，包含来源和时间信息）
   const getSuggestionForStock = (symbol: string, market: string, hasPosition?: boolean): { suggestion: SuggestionInfo | null; kline: KlineSummary | null } => {
-    const key = `${market || 'CN'}:${symbol}`
+    const key = `${market || 'IN'}:${symbol}`
     // Research-only mode: no action badges, AI or rule-based; indicators only (ADR-004).
     if (!adviceEnabled) return { suggestion: null, kline: klineSummaries[key] || null }
     // 优先使用建议池的建议（包含来源和时间信息）
@@ -1445,7 +1397,7 @@ export default function StocksPage() {
         const fallback = poolSuggestions[symbol]
         if (!fallback) return null
         const fm = String(fallback.stock_market || '').toUpperCase()
-        return fm && fm !== String(market || 'CN').toUpperCase() ? null : fallback
+        return fm && fm !== String(market || 'IN').toUpperCase() ? null : fallback
       })()
     if (poolSug) {
       const preloadedKline = klineSummaries[key] || (suggestions[symbol]?.kline as any) || null
@@ -1836,45 +1788,8 @@ export default function StocksPage() {
           <form onSubmit={handleStockSubmit}>
             <div className="relative" ref={dropdownRef}>
               <div className="flex items-center gap-2 mb-2">
-                <Label className="mb-0">搜索股票</Label>
-                <div className="flex items-center gap-1">
-                  {[
-                    { value: '', label: '全部' },
-                    { value: 'CN', label: 'A股' },
-                    { value: 'HK', label: '港股' },
-                    { value: 'US', label: '美股' },
-                  ].map(opt => (
-                    <button
-                      key={opt.value}
-                      type="button"
-                      onClick={() => handleSearchMarketChange(opt.value)}
-                      className={`text-[11px] px-2 py-0.5 rounded transition-colors ${
-                        searchMarket === opt.value
-                          ? 'bg-primary text-primary-foreground'
-                          : 'bg-accent/50 text-muted-foreground hover:bg-accent'
-                      }`}
-                    >
-                      {opt.label}
-                    </button>
-                  ))}
-                </div>
-                <button
-                  type="button"
-                  onClick={refreshStockListCache}
-                  disabled={refreshingStockList}
-                  className="text-[10px] text-muted-foreground hover:text-foreground transition-colors ml-2"
-                  title="搜索不到？点击刷新股票列表"
-                >
-                  {refreshingStockList ? (
-                    <span className="flex items-center gap-1">
-                      <RefreshCw className="w-3 h-3 animate-spin" /> 刷新中...
-                    </span>
-                  ) : (
-                    <span className="flex items-center gap-1">
-                      <RefreshCw className="w-3 h-3" /> 刷新列表
-                    </span>
-                  )}
-                </button>
+                <Label className="mb-0">Search NSE / BSE</Label>
+                <span className="text-[11px] text-muted-foreground">from your connected broker's instrument list</span>
               </div>
               <div className="relative">
                 <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground/50" />
@@ -1882,7 +1797,7 @@ export default function StocksPage() {
                   value={searchQuery}
                   onChange={e => handleSearchInput(e.target.value)}
                   onFocus={() => searchResults.length > 0 && setShowDropdown(true)}
-                  placeholder={searchMarket === 'HK' ? '代码或名称，如 00700 或 腾讯' : searchMarket === 'US' ? '代码或名称，如 AAPL 或 苹果' : '代码或名称，如 600519 或 茅台'}
+                  placeholder="Symbol or name, e.g. INFY or Infosys (BSE: BSE:500209)"
                   className="pl-10"
                   autoComplete="off"
                 />
@@ -2017,7 +1932,6 @@ export default function StocksPage() {
                             {account.positions.map((pos, i) => {
                               const stock = stocks.find(s => s.id === pos.stock_id)
                               const badge = marketBadge(pos.market)
-                              const isForeign = pos.market === 'HK' || pos.market === 'US'
                               const changeColor = pos.change_pct != null
                                 ? (pos.change_pct > 0 ? 'text-rose-500' : pos.change_pct < 0 ? 'text-emerald-500' : 'text-muted-foreground')
                                 : 'text-muted-foreground'
@@ -2085,7 +1999,7 @@ export default function StocksPage() {
                                     })()}
                                   </td>
                                   <td className={`px-4 py-2.5 text-right font-mono text-[12px] ${changeColor}`}>
-                                    {pos.current_price != null ? <span>{pos.current_price.toFixed(2)}{isForeign ? (pos.market === 'HK' ? ' HKD' : ' USD') : ''}</span> : '—'}
+                                    {pos.current_price != null ? <span>{pos.current_price.toFixed(2)}</span> : '—'}
                                   </td>
                                   <td className={`px-4 py-2.5 text-right font-mono text-[12px] ${changeColor}`}>
                                     {pos.change_pct != null ? `${pos.change_pct >= 0 ? '+' : ''}${pos.change_pct.toFixed(2)}%` : '—'}
@@ -2095,12 +2009,7 @@ export default function StocksPage() {
                                   <td className="px-4 py-2.5 text-right font-mono text-[12px] text-muted-foreground">
                                     {pos.market_value != null ? (
                                       <div className="flex flex-col items-end">
-                                        {isForeign ? (
-                                          <>
-                                            <span>{formatMoney(pos.market_value)} {pos.market === 'HK' ? 'HKD' : 'USD'}</span>
-                                            {pos.market_value_cny && <span className="text-[10px] text-muted-foreground/60">≈{formatMoney(pos.market_value_cny)}</span>}
-                                          </>
-                                        ) : <span>{formatMoney(pos.market_value)}</span>}
+                                        <span>{formatMoney(pos.market_value)}</span>
                                       </div>
                                     ) : '—'}
                                   </td>
@@ -2108,7 +2017,7 @@ export default function StocksPage() {
                                     {pos.pnl != null ? (
                                       <div className="flex flex-col items-end">
                                         <span>{pos.pnl >= 0 ? '+' : ''}{formatMoney(pos.pnl)}</span>
-                                        <span className="text-[10px] opacity-70">{pos.pnl_pct != null ? `${pos.pnl_pct >= 0 ? '+' : ''}${pos.pnl_pct.toFixed(2)}%` : ''}{isForeign && ' CNY'}</span>
+                                        <span className="text-[10px] opacity-70">{pos.pnl_pct != null ? `${pos.pnl_pct >= 0 ? '+' : ''}${pos.pnl_pct.toFixed(2)}%` : ''}</span>
                                       </div>
                                     ) : '—'}
                                   </td>
@@ -2362,26 +2271,7 @@ export default function StocksPage() {
         <div className="card p-4">
           <div className="flex items-center justify-between mb-3">
             <h3 className="text-[13px] font-semibold text-foreground">关注列表</h3>
-            <div className="flex items-center gap-1">
-              {[
-                { value: '', label: '全部', count: stocks.length },
-                { value: 'CN', label: 'A股', count: stocks.filter(s => s.market === 'CN').length },
-                { value: 'HK', label: '港股', count: stocks.filter(s => s.market === 'HK').length },
-                { value: 'US', label: '美股', count: stocks.filter(s => s.market === 'US').length },
-              ].map(opt => (
-                <button
-                  key={opt.value}
-                  onClick={() => setStockListFilter(opt.value)}
-                  className={`text-[11px] px-2 py-0.5 rounded transition-colors ${
-                    stockListFilter === opt.value
-                      ? 'bg-primary text-primary-foreground'
-                      : 'bg-accent/50 text-muted-foreground hover:bg-accent'
-                  }`}
-                >
-                  {opt.label} ({opt.count})
-                </button>
-              ))}
-            </div>
+            <span className="text-[11px] text-muted-foreground">NSE / BSE ({stocks.length})</span>
           </div>
 
           <div className="flex items-center justify-between mb-3">
@@ -2721,28 +2611,7 @@ export default function StocksPage() {
             ) : (
               <div>
                 <div className="flex items-center gap-2 mb-2">
-                  <Label className="mb-0">搜索股票</Label>
-                  <div className="flex items-center gap-1">
-                    {[
-                      { value: '', label: '全部' },
-                      { value: 'CN', label: 'A股' },
-                      { value: 'HK', label: '港股' },
-                      { value: 'US', label: '美股' },
-                    ].map(opt => (
-                      <button
-                        key={opt.value}
-                        type="button"
-                        onClick={() => handlePositionSearchMarketChange(opt.value)}
-                        className={`text-[11px] px-2 py-0.5 rounded transition-colors ${
-                          positionSearchMarket === opt.value
-                            ? 'bg-primary text-primary-foreground'
-                            : 'bg-accent/50 text-muted-foreground hover:bg-accent'
-                        }`}
-                      >
-                        {opt.label}
-                      </button>
-                    ))}
-                  </div>
+                  <Label className="mb-0">Search NSE / BSE</Label>
                 </div>
                 <div className="relative" ref={positionDropdownRef}>
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground/50" />
@@ -2750,7 +2619,7 @@ export default function StocksPage() {
                     value={positionSearchQuery}
                     onChange={e => handlePositionSearchInput(e.target.value)}
                     onFocus={() => positionSearchResults.length > 0 && setShowPositionDropdown(true)}
-                    placeholder={positionSearchMarket === 'HK' ? '代码或名称，如 00700 或 腾讯' : positionSearchMarket === 'US' ? '代码或名称，如 LI 或 理想汽车' : positionSearchMarket === 'CN' ? '代码或名称，如 600519 或 茅台' : '代码或名称，如 600519 / 00700 / AAPL'}
+                    placeholder="Symbol or name, e.g. INFY or Infosys (BSE: BSE:500209)"
                     className="pl-9"
                     autoComplete="off"
                   />

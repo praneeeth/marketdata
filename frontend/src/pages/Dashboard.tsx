@@ -26,7 +26,6 @@ import {
 import { Button } from '@panwatch/base-ui/components/ui/button'
 import { Onboarding } from '@panwatch/biz-ui/components/onboarding'
 import StockInsightModal from '@panwatch/biz-ui/components/stock-insight-modal'
-import DiscoveryPanel from '@/components/DiscoveryPanel'
 import Sparkline from '@/components/Sparkline'
 import BenchChart from '@/components/BenchChart'
 import BenchmarkShareCard from '@/components/BenchmarkShareCard'
@@ -132,7 +131,7 @@ export default function DashboardPage() {
   const [modal, setModal] = useState<{ open: boolean; symbol: string; market: string; name: string; hasPosition: boolean }>({
     open: false,
     symbol: '',
-    market: 'CN',
+    market: 'IN',
     name: '',
     hasPosition: false,
   })
@@ -211,7 +210,7 @@ export default function DashboardPage() {
   }
 
   const openStock = (symbol: string, market: string, name = '', hasPosition = false) =>
-    setModal({ open: true, symbol, market: market || 'CN', name, hasPosition })
+    setModal({ open: true, symbol, market: market || 'IN', name, hasPosition })
 
   const runAiReview = async () => {
     setAiReviewLoading(true)
@@ -461,7 +460,7 @@ export default function DashboardPage() {
                   <div
                     key={i}
                     className={`flex items-center gap-2 py-1 text-[12px] ${t.symbol ? 'cursor-pointer hover:bg-accent/30' : ''}`}
-                    onClick={() => t.symbol && openStock(t.symbol, t.market || 'CN', '')}
+                    onClick={() => t.symbol && openStock(t.symbol, t.market || 'IN', '')}
                   >
                     <span className="shrink-0 rounded bg-amber-500/15 px-1 text-[9px] text-amber-600">
                       {t.type === 'no_alert' ? '加提醒' : '将到期'}
@@ -481,7 +480,7 @@ export default function DashboardPage() {
                   <div
                     key={i}
                     className={`flex items-center gap-3 py-2 ${it.symbol ? 'cursor-pointer hover:bg-accent/30' : ''}`}
-                    onClick={() => it.symbol && openStock(it.symbol, it.market || 'CN', it.name || '')}
+                    onClick={() => it.symbol && openStock(it.symbol, it.market || 'IN', it.name || '')}
                   >
                     <span className={`shrink-0 rounded px-1 text-[9px] ${badge.cls}`}>{badge.label}</span>
                     <div className="min-w-0 flex-1">
@@ -742,7 +741,6 @@ export default function DashboardPage() {
         )}
       </div>
 
-      <DiscoveryPanel monitorStocks={scan} onOpenStock={openStock} />
 
       <StockInsightModal
         open={modal.open}

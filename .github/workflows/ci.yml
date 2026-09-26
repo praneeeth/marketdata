@@ -36,7 +36,7 @@ jobs:
           sudo apt-get install -y --no-install-recommends \
             libpango-1.0-0 libpangocairo-1.0-0 libpangoft2-1.0-0 \
             libcairo2 libcairo-gobject2 libgdk-pixbuf-2.0-0 \
-            libffi-dev libfontconfig1 fonts-noto-cjk
+            libffi-dev libfontconfig1 fonts-dejavu-core
 
       - name: Install dependencies
         run: pip install -r requirements.txt -r requirements-dev.txt

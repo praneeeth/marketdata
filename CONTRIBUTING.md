@@ -1,351 +1,256 @@
-# 贡献指南
+# Contributing
 
-感谢你对 PanWatch 的兴趣！本文档将指导你如何贡献代码，特别是如何编写 Agent 和数据源。
+Thanks for your interest in PanWatch! This guide explains how to contribute, in particular
+how to write agents and market data providers.
 
-## 目录
+This is the India fork: the app is research-only by default (see `ADVISORY_MODE` in
+[`.env.example`](.env.example) and `docs/adr.md`). New features must not produce buy/sell/hold
+calls, price targets, entry levels, stop-losses or position sizes in research-only mode; the
+compliance guard in `src/platform/compliance/` enforces this, and new user-facing text should
+pass through it.
 
-- [项目结构](#项目结构)
-- [开发环境](#开发环境)
-- [编写 Agent](#编写-agent)
-- [编写数据源](#编写数据源)
-- [提交规范](#提交规范)
+## Contents
+
+- [Project layout](#project-layout)
+- [Development setup](#development-setup)
+- [Writing an agent](#writing-an-agent)
+- [Adding a market data provider](#adding-a-market-data-provider)
+- [Commit conventions](#commit-conventions)
 
 ---
 
-## 项目结构
+## Project layout
 
 ```
-PanWatch/
+.
 ├── src/
-│   ├── agents/           # Agent 实现
-│   │   ├── base.py       # 基类和数据结构
-│   │   ├── daily_report.py
-│   │   └── ...
-│   ├── collectors/       # 数据采集器
-│   │   ├── news_collector.py
-│   │   ├── kline_collector.py
-│   │   └── ...
-│   ├── core/             # 核心模块
-│   │   ├── ai_client.py
-│   │   └── notifier.py
-│   └── web/              # Web API
-├── prompts/              # AI Prompt 模板
-├── frontend/             # React 前端
-└── server.py             # 入口文件
+│   ├── bootstrap/        # app startup and wiring
+│   ├── platform/         # technical capabilities (persistence, AI, market data, scheduling, notifications, compliance)
+│   ├── modules/          # product capabilities (automation agents, market, portfolio, research, strategy, ...)
+│   └── web/              # shared HTTP middleware
+├── packages/
+│   ├── marketdata/       # standalone market data package (India broker providers, global cues)
+│   └── pan-agent-*/      # the bounded agent runtime and its plugins
+├── prompts/              # AI prompt templates
+├── frontend/             # React frontend
+└── server.py             # entry point
 ```
+
+See [`src/ARCHITECTURE.md`](src/ARCHITECTURE.md) for the module boundaries.
 
 ---
 
-## 开发环境
+## Development setup
 
 ```bash
-# 后端
-python -m venv venv
-source venv/bin/activate
+# Backend
+python -m venv .venv
+source .venv/bin/activate
 pip install -r requirements.txt
 python server.py
 
-# 前端
+# Frontend
 cd frontend
 pnpm install
 pnpm dev
 ```
 
+Or use `make dev-api` and `make dev-web`.
+
 ---
 
-## 编写 Agent
+## Writing an agent
 
-Agent 是 PanWatch 的核心分析单元，负责采集数据、调用 AI 分析、发送通知。
+An agent is PanWatch's core analysis unit: it collects data, calls the AI and sends
+notifications.
 
-### 1. 创建 Agent 文件
+### 1. Create the agent file
 
-在 `src/modules/automation/` 目录创建新文件，例如 `my_agent.py`：
+Create a new file in `src/modules/automation/`, for example `my_agent.py`:
 
 ```python
 import logging
+from datetime import datetime
 from pathlib import Path
 
 from src.modules.automation.base import BaseAgent, AgentContext, AnalysisResult
 
 logger = logging.getLogger(__name__)
 
-# Prompt 文件路径
+# Prompt file path
 PROMPT_PATH = Path(__file__).resolve().parents[3] / "prompts" / "my_agent.txt"
 
 
 class MyAgent(BaseAgent):
-    """我的自定义 Agent"""
+    """My custom agent."""
 
-    # 必填：Agent 标识（英文，用于数据库和 API）
+    # Required: the agent id (used in the database and API)
     name = "my_agent"
 
-    # 必填：显示名称（中文，用于界面展示）
-    display_name = "我的 Agent"
+    # Required: the display name shown in the UI
+    display_name = "My agent"
 
-    # 必填：描述
-    description = "这是一个自定义 Agent 的示例"
+    # Required: a description
+    description = "An example of a custom agent"
 
     async def collect(self, context: AgentContext) -> dict:
         """
-        采集数据
+        Collect data.
 
         Args:
-            context: 包含 watchlist（自选股列表）、portfolio（持仓信息）等
+            context: includes watchlist (the watchlist stocks), portfolio (holdings), etc.
 
         Returns:
-            采集到的数据字典，将传递给 build_prompt
+            A dict of collected data, passed to build_prompt
         """
         data = {
             "stocks": [],
             "timestamp": datetime.now().isoformat(),
         }
 
-        # 遍历自选股采集数据
+        # Collect data for each watchlist stock
         for stock in context.watchlist:
-            # stock.symbol: 股票代码
-            # stock.name: 股票名称
-            # stock.market: 市场（CN/HK/US）
+            # stock.symbol: the NSE symbol, e.g. INFY
+            # stock.name: the company name
+            # stock.market: the market (IN)
             pass
 
-        # 获取持仓信息
-        # context.portfolio.all_positions: 所有持仓列表
-        # context.portfolio.get_aggregated_position(symbol): 获取某只股票的汇总持仓
+        # Holdings
+        # context.portfolio.all_positions: every position
+        # context.portfolio.get_aggregated_position(symbol): one stock's combined position
 
         return data
 
     def build_prompt(self, data: dict, context: AgentContext) -> tuple[str, str]:
         """
-        构建 AI Prompt
+        Build the AI prompt.
 
         Args:
-            data: collect() 返回的数据
-            context: Agent 上下文
+            data: what collect() returned
+            context: the agent context
 
         Returns:
-            (system_prompt, user_content) 元组
+            A (system_prompt, user_content) tuple
         """
-        # 读取 Prompt 模板
+        # Read the prompt template
         system_prompt = PROMPT_PATH.read_text(encoding="utf-8")
 
-        # 构建用户输入
+        # Build the user input
         lines = []
-        lines.append("## 数据")
-        # ... 格式化数据
+        lines.append("## Data")
+        # ... format the data
 
         user_content = "\n".join(lines)
         return system_prompt, user_content
 
     async def should_notify(self, result: AnalysisResult) -> bool:
         """
-        是否发送通知（可选重写）
+        Whether to send a notification (optional override).
 
-        默认返回 True，可根据分析结果决定是否通知
+        Returns True by default; decide from the analysis result if needed.
         """
-        # 例如：只有重要信号才通知
-        # return "重要" in result.content
+        # e.g. only notify on important signals
+        # return "important" in result.content
         return True
 ```
 
-### 2. 创建 Prompt 模板
+### 2. Create the prompt template
 
-在 `prompts/` 目录创建对应的 Prompt 文件 `my_agent.txt`：
+Create the matching prompt file `prompts/my_agent.txt`. Keep it research-only: describe
+and explain, never recommend trades.
 
 ```
-你是一个专业的股票分析师。
+You are a careful equity research assistant for Indian markets (NSE/BSE).
 
-## 任务
-根据提供的数据进行分析...
+## Task
+Analyse the data provided...
 
-## 输出格式
-请按以下格式输出：
-1. 概述
-2. 详细分析
-3. 建议
+## Output format
+1. Overview
+2. Detailed analysis
+3. What to research next
 ```
 
-### 3. 注册 Agent
+### 3. Register the agent
 
-在 `server.py` 中注册：
+Register it in `server.py`, and add a seed spec in `src/modules/automation/agent_catalog.py`:
 
 ```python
-# 1. 导入
+# server.py
 from src.modules.automation.my_agent import MyAgent
 
-# 2. 添加到 AGENT_REGISTRY
 AGENT_REGISTRY: dict[str, type] = {
     "daily_report": DailyReportAgent,
     # ...
-    "my_agent": MyAgent,  # 添加这行
+    "my_agent": MyAgent,  # add this line
 }
-
-# 3. 在 seed_agents() 中添加配置
-def seed_agents():
-    agents = [
-        # ...
-        {
-            "name": "my_agent",
-            "display_name": "我的 Agent",
-            "description": "这是一个自定义 Agent",
-            "enabled": False,  # 默认禁用，用户手动启用
-            "schedule": "0 16 * * 1-5",  # cron 表达式
-            "execution_mode": "batch",  # batch: 批量分析 / single: 逐只分析
-        },
-    ]
 ```
 
-### 4. Agent 上下文说明
+```python
+# agent_catalog.py: add an AgentSeedSpec to AGENT_SEED_SPECS
+AgentSeedSpec(
+    name="my_agent",
+    display_name="My agent",
+    description="A custom agent",
+    enabled=False,               # off by default; the user enables it
+    schedule="0 16 * * 1-5",     # cron expression (IST)
+    execution_mode="batch",      # batch: analysed together / single: one stock at a time
+    kind="workflow",             # workflow (scheduled) or capability (internal)
+    visible=True,
+)
+```
 
-`AgentContext` 提供以下信息：
+### 4. The agent context
 
-| 属性 | 类型 | 说明 |
+`AgentContext` provides:
+
+| Attribute | Type | Description |
 |------|------|------|
-| `watchlist` | `list[StockConfig]` | 关联的自选股列表 |
-| `portfolio` | `PortfolioInfo` | 持仓组合信息 |
-| `ai_client` | `AIClient` | AI 客户端 |
-| `notifier` | `NotifierManager` | 通知管理器 |
-| `model_label` | `str` | 当前使用的模型标签 |
+| `watchlist` | `list[StockConfig]` | the linked watchlist stocks |
+| `portfolio` | `PortfolioInfo` | holdings |
+| `ai_client` | `AIClient` | the AI client |
+| `notifier` | `NotifierManager` | the notification manager |
+| `model_label` | `str` | the label of the model in use |
 
-### 5. 执行模式
+### 5. Run modes
 
-- **batch**：所有股票一起分析，适合日报类
-- **single**：逐只股票分析，适合实时监控类
+- **batch**: all stocks analysed together; suits reports
+- **single**: one stock at a time; suits live monitoring
 
 ---
 
-## 编写数据源
+## Adding a market data provider
 
-数据源负责从外部 API 获取数据（行情、新闻、K线等）。
+Quotes and K-lines for NSE/BSE come from the user's own broker connection, through the
+standalone `packages/marketdata` package.
 
-### 1. 数据源类型
+### 1. Implement the provider
 
-| 类型 | 说明 | 示例 |
-|------|------|------|
-| `quote` | 实时行情 | 腾讯行情 |
-| `kline` | K线数据 | 腾讯K线 |
-| `news` | 新闻资讯 | 东方财富新闻 |
-| `capital_flow` | 资金流向 | 东方财富资金 |
-| `chart` | K线截图 | 雪球截图 |
+Add a module under `packages/marketdata/src/marketdata/india/` that implements the
+`MarketDataProvider` protocol in `provider.py` (`quotes`, `candles`, `instruments`,
+`corporate_actions`, `option_chain`). `kite.py` (Zerodha Kite Connect) and `angel.py`
+(Angel One SmartAPI) are the reference implementations. Raise the typed errors from
+`marketdata.india.errors` rather than returning empty data, so callers can tell "no data" from
+"failed".
 
-### 2. 创建数据采集器
+### 2. Wire up the broker connection
 
-以新闻采集器为例，在 `src/collectors/` 创建文件：
+Broker connections (API keys, login, encrypted token storage) are managed by
+`src/modules/market/brokers.py` (`BrokerManager`). Add the provider there so it shows up
+under **Data sources** in the app. Credentials are encrypted at rest with
+`CREDENTIALS_MASTER_KEY`.
 
-```python
-"""我的新闻采集器"""
-import logging
-from datetime import datetime
-from dataclasses import dataclass, field
+### 3. Data terms
 
-import httpx
-
-logger = logging.getLogger(__name__)
-
-
-@dataclass
-class NewsItem:
-    """新闻数据结构"""
-    source: str           # 数据源标识
-    external_id: str      # 外部唯一ID
-    title: str
-    content: str
-    publish_time: datetime
-    symbols: list[str] = field(default_factory=list)
-    url: str = ""
-
-
-class MyNewsCollector:
-    """我的新闻采集器"""
-
-    source = "my_news"
-
-    def __init__(self, config: dict = None):
-        """
-        初始化
-
-        Args:
-            config: 数据源配置（来自数据库 DataSource.config）
-        """
-        self.config = config or {}
-        self.api_key = self.config.get("api_key", "")
-
-    async def fetch_news(
-        self,
-        symbols: list[str] | None = None,
-        since: datetime | None = None,
-    ) -> list[NewsItem]:
-        """
-        获取新闻
-
-        Args:
-            symbols: 股票代码列表（可选，用于过滤）
-            since: 起始时间（可选）
-
-        Returns:
-            NewsItem 列表
-        """
-        results = []
-
-        async with httpx.AsyncClient() as client:
-            # 调用 API
-            resp = await client.get("https://api.example.com/news")
-            data = resp.json()
-
-            for item in data:
-                results.append(NewsItem(
-                    source=self.source,
-                    external_id=str(item["id"]),
-                    title=item["title"],
-                    content=item["content"],
-                    publish_time=datetime.fromisoformat(item["time"]),
-                    symbols=item.get("symbols", []),
-                    url=item.get("url", ""),
-                ))
-
-        return results
-```
-
-### 3. 注册数据源
-
-在 `server.py` 的 `seed_data_sources()` 中添加：
-
-```python
-def seed_data_sources():
-    sources = [
-        # ...
-        {
-            "name": "我的新闻源",
-            "type": "news",
-            "provider": "my_news",  # 对应 collector 的 source
-            "config": {
-                "api_key": "",  # 用户在界面配置
-            },
-            "enabled": False,
-            "priority": 10,  # 优先级，数字越小优先级越高
-            "supports_batch": True,  # 是否支持批量查询
-            "test_symbols": ["600519"],  # 测试用股票代码
-        },
-    ]
-```
-
-### 4. 在 Agent 中使用数据源
-
-```python
-from src.platform.marketdata.collectors.my_collector import MyNewsCollector
-
-class MyAgent(BaseAgent):
-    async def collect(self, context: AgentContext) -> dict:
-        collector = MyNewsCollector()
-        news = await collector.fetch_news(
-            symbols=[s.symbol for s in context.watchlist]
-        )
-        return {"news": news}
-```
+Only use data you're allowed to use. Unofficial sources (such as Yahoo Finance) are for
+development only and must stay behind `ALLOW_UNOFFICIAL_DATA`; say in the PR where the data
+comes from and what its limits are.
 
 ---
 
-## 提交规范
+## Commit conventions
 
-### Commit 格式
+### Commit format
 
 ```
 <type>: <subject>
@@ -353,32 +258,32 @@ class MyAgent(BaseAgent):
 <body>
 ```
 
-**Type 类型：**
-- `feat`: 新功能
-- `fix`: Bug 修复
-- `docs`: 文档更新
-- `refactor`: 重构
-- `style`: 格式调整
-- `test`: 测试相关
+**Types:**
+- `feat`: a new feature
+- `fix`: a bug fix
+- `docs`: documentation
+- `refactor`: refactoring
+- `style`: formatting
+- `test`: tests
 
-**示例：**
+**Example:**
 ```
-feat: 添加盘中监控 Agent
+feat: add the intraday monitor agent
 
-- 支持价格异动检测
-- 支持成交量异动检测
-- AI 智能判断是否需要通知
+- detect unusual price moves
+- detect unusual volume
+- let the AI decide whether a notification is needed
 ```
 
-### PR 要求
+### PR requirements
 
-1. 确保代码通过 lint 检查
-2. 新增功能需要更新文档
-3. Agent 需要提供 Prompt 模板
-4. 数据源需要说明 API 来源和限制
+1. Lint passes (`ruff check .`, `ruff format --check .`, `mypy`), and tests pass (`make test`, frontend `pnpm test`).
+2. New features update the documentation.
+3. Agents come with a prompt template.
+4. Market data providers state their data source and its limits.
 
 ---
 
-## 问题反馈
+## Questions
 
-如有问题，请提交 Issue 或 PR。
+Open an issue or a PR.

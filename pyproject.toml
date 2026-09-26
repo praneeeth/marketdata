@@ -1,8 +1,8 @@
-# pytest 配置
-# 运行全部单测：        python -m pytest tests/ -v
-# 运行单个文件：        python -m pytest tests/test_notify_policy.py -v
-# 实际发送通知：        python -m pytest tests/ -v --notify （默认不发通知）
-# 安装 pre-push hook： bash scripts/install-hooks.sh
+# pytest config
+# Run all unit tests:      python -m pytest tests/ -v
+# Run one file:            python -m pytest tests/test_notify_policy.py -v
+# Really send notifications: python -m pytest tests/ -v --notify (off by default)
+# Install the pre-push hook: bash scripts/install-hooks.sh
 #
 # India fork: lint, type and coverage checks apply to new code only (see
 # docs/india-fork/PLAN.md §4.1). Add new modules to the lists below as they are written.

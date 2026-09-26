@@ -297,7 +297,7 @@ paths. An adversarial suite enforces all of this.
 | `NotifierManager.notify_with_result` | Guard title and content. Truncate to the channel budget, then **append the short disclaimer** so it can never be truncated. If blocked, skip sending and log (or send "an update is available in the app"; Q-minor). Add a test that every channel send path goes through here |
 | 5 agents (`base.py` + overrides) | Replace the `<!--PANWATCH_JSON-->` action contract with a `ResearchSummary` JSON contract (bull points, bear points, key risks, technical levels {support[], resistance[]}, upcoming events, sources[{title, url, published_at}]). Skip `suggestion_pool` writes in research_only. Guard the Markdown |
 | TradingAgents | Replace the PM decision with a **Research summary** (ADR-005). Preferred: build the graph without the trader, risk-debate and PM nodes via a `GraphSetup` override, then run our neutral summariser over the analyst reports and bull/bear debate. Fallback: run the unmodified graph and discard trader/risk/PM output before persistence or display. Guard analyst and debate text too (it contains "buy" language). Remove `emit_paper_trading_signal` and the 5-tier rating UI. Set `output_language: English` |
-| Insights / dashboard / agent ad-hoc endpoints | Guard. Rewrite the portfolio check-up prompt to be diagnostics-only (no "调仓建议", i.e. "rebalancing suggestions") |
+| Insights / dashboard / agent ad-hoc endpoints | Guard. Rewrite the portfolio check-up prompt to be diagnostics-only (no "rebalancing suggestions") |
 | Assistant, legacy chat, planner (streaming) | `GuardedStream`: buffer deltas and release them at sentence boundaries after the guard runs. On a block, emit the replacement and stop. The persisted message is the guarded full text. Rewrite system prompts (research-only policy). Tool outputs are data and are not guarded, but the model's narration is |
 | PDF export | Render only from guarded stored content. Existing footer disclaimer becomes the new `LONG` text |
 | Share cards | Disable in research_only (Q-share) |
@@ -769,7 +769,7 @@ holiday and special-session circular? The sandbox can't reach NSE.
 - Approve dev dependencies `ruff`, `mypy`, `pytest-cov`, `hypothesis`?
 - Approve a new PR CI workflow and disabling upstream `release.yml`/`pullfrog.yml`?
 
-**Q17. Product name and branding.** The "PanWatch/盯盘侠" name is replaced in UI, PDF,
+**Q17. Product name and branding.** The "PanWatch" name (and its Chinese name) is replaced in UI, PDF,
 share cards and MCP. What name should we use?
 
 **Q18. ADVISORY_MODE switching.** Environment-only (**recommended**) or also an admin UI
@@ -846,7 +846,7 @@ remove? → **Remove share cards; keep PDF.**
   - The frontend computed its own buy/sell/hold labels from K-line indicators
     (`frontend/src/lib/kline-scorer.ts`). This advice never reached the backend guard.
     It is now switched off when `suggestion_pool` is disabled.
-  - The deep-analysis modal showed "持有" (hold) whenever a run had no decision. It now
+  - The deep-analysis modal showed "Hold" whenever a run had no decision. It now
     shows the research summary.
   - `/api/agents/tradingagents/history-comparison` scored past buy/sell calls against
     later returns. It is now gated with `tradingagents_rating`.
@@ -1001,3 +1001,16 @@ the imported upstream history that option A exists to preserve.
 | Global markets | A read-only "Global markets" panel for context: US (S&P 500, Nasdaq, Dow), Asia (Nikkei, Hang Seng), Europe (FTSE, DAX), crude, gold and USD/INR. No global stocks in the watchlist | decided |
 | Q8, global cues source | Free delayed sources now, labelled "Delayed / unofficial"; switch to a licensed feed before any public launch. Their terms may not permit commercial display, so this is part of the legal review | decided (interim) |
 | Q8, other market-level data | GIFT Nifty, FII/DII flows, filings, fundamentals | **open** |
+
+**2026-09-26.** English-only (owner: "change into english completely"):
+
+| Topic | Decision | Status |
+| --- | --- | --- |
+| Language | Backend, frontend, tests, packages, docs and scripts are English. Chinese remains only as detection data in the compliance guard (`input_screen.py`, `rules.py`, `structured.py` and their tests) and in released migrations, whose source is checksummed | done |
+| Stored labels | Migration 130 translates stored action labels, agent labels, strategy names, the default account name and setting descriptions; strategy and agent seeds re-sync from code at startup | done |
+| Indicator vocabulary | K-line status strings are English (e.g. "bullish alignment", "golden cross", "overbought"); the backend, frontend scorer and tests share one vocabulary | done |
+| Up/down colours | Green = up, red = down (Indian convention), replacing the A-share red-up convention | done |
+| English guard coverage | New rules for English decision labels ("Final trade decision: Buy", "Action: Sell", "Infosys: Buy") and tranche/position-change sizing, with false-positive tests | done |
+| Units and defaults | Lakh/crore instead of the Chinese 10^4/10^8 units; Docker `TZ=Asia/Kolkata`; default AI endpoint OpenAI instead of Zhipu; unsupported Chinese notification channels removed from the UI | done |
+| Upstream assets | Donation QR codes and Chinese-UI screenshots removed (E5); README rewritten with MIT attribution | done |
+| Simulation costs and lot size | Still the inherited A-share cost model and 100-share lot; comments say so. Replace with Indian STT/brokerage and lot = 1 in Phase 3 | **open** |

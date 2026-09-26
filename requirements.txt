@@ -15,34 +15,34 @@ sqlalchemy>=2.0.0
 PyJWT>=2.8.0
 # AES-GCM encryption of users' broker credentials (India fork, Phase 2).
 cryptography>=42.0.0
-# 详情报告导出 PDF(后台直出,不依赖 Chromium):
-# 主引擎 WeasyPrint(HTML 保真排版,需系统库 pango/cairo + 中文字体,如 Docker 加 fonts-noto-cjk);
-# WeasyPrint 不可用时回退 xhtml2pdf(纯库保底,中文用 reportlab STSong-Light)。
+# Detailed report PDF export (generated on the server, no Chromium):
+# main engine WeasyPrint (faithful HTML layout; needs the pango/cairo system libraries and a font, e.g. fonts-dejavu-core in Docker);
+# falls back to xhtml2pdf when WeasyPrint is unavailable (pure Python, always works).
 weasyprint>=60
 xhtml2pdf>=0.2.17
 
-# 深度分析 — TradingAgents (多 Agent 投资决策框架, 76k star)。
-# 不在 PyPI,用 git+ URL 安装。会拉 langchain/langgraph/yfinance 等较重依赖
-# (~115 个包,首次安装 2-5 分钟)。
-# 用户启用「TradingAgents 深度分析」Agent 时才会真正调用它;不启用零开销。
-# 锁定到 v0.5.0(release tag,非 @main)。该版本新增原生 portfolio 参数、按 filing
-# 时间的 SEC EDGAR 基本面与独立决策回测。适配层依赖的
-# route_to_vendor/load_ohlcv/get_graph_args/create_initial_state 仍保持签名稳定；
-# REVIEW 不是可交易的 Hold，必须由 result_mapper 显式展示为“待人工复核”。
+# Deep research: TradingAgents (a multi-agent research framework).
+# Not on PyPI; installed from a git+ URL. Pulls fairly heavy dependencies such as langchain/langgraph/yfinance
+# (~115 packages; the first install takes 2-5 minutes).
+# It's only called when the "TradingAgents deep research" agent is enabled; no overhead otherwise.
+# Pinned to v0.5.0 (a release tag, not @main). That version adds a native portfolio parameter, SEC EDGAR fundamentals by
+# filing date and a separate decision back-test. The adapter layer's dependencies
+# route_to_vendor/load_ohlcv/get_graph_args/create_initial_state keep stable signatures;
+# REVIEW isn't a tradable Hold and must be shown explicitly as "Needs manual review" by result_mapper.
 tradingagents @ git+https://github.com/TauricResearch/TradingAgents.git@v0.5.0
 
-# 本仓内独立行情数据包(editable 本地安装;发 PyPI 前不占外部依赖)
+# The standalone market data package in this repo (editable local install; no external dependency before it's on PyPI)
 -e ./packages/marketdata
 
-# 业务无关的受限智能体运行时(可单独发布)
+# The business-agnostic bounded agent runtime (can be published separately)
 -e ./packages/pan-agent-runtime
 
 # Optional provider usage normalization and token measurement plugin.
 -e ./packages/pan-agent-token-meter
 
-# 可选的工具检索插件；PanWatch 默认启用 shadow 模式。
+# Optional tool retrieval plugin; PanWatch enables shadow mode by default.
 -e ./packages/pan-agent-tool-research
 
-# OpenTelemetry 导出为「可选依赖组」,不在主依赖内(默认关闭,未装即 no-op)。
-# 需要把 trace 导出到 Jaeger/Tempo/Langfuse 时:pip install -r requirements-otel.txt
-# 详见 requirements-otel.txt 与 README「OTel 导出」。
+# OpenTelemetry export is an optional dependency group, not in the main dependencies (off by default; a no-op when not installed).
+# To export traces to Jaeger/Tempo/Langfuse: pip install -r requirements-otel.txt
+# See requirements-otel.txt and "OTel export" in the README.

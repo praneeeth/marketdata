@@ -16,21 +16,21 @@ function Invoke-CheckedCommand {
 
 foreach ($command in "node", "pnpm", "docker") {
     if (-not (Get-Command $command -ErrorAction SilentlyContinue)) {
-        throw "需要 $command"
+        throw "$command is required"
     }
 }
 
 $projectRoot = Split-Path -Parent $PSScriptRoot
 $staticDirectory = Join-Path $projectRoot "static"
-$imageName = "sunxiao0721/panwatch"
+$imageName = if ($env:IMAGE_NAME) { $env:IMAGE_NAME } else { "panwatch" }
 $fullImage = "${imageName}:$Version"
 
 Push-Location $projectRoot
 try {
-    Write-Host "🚀 PanWatch 构建脚本"
-    Write-Host "版本: $Version"
+    Write-Host "🚀 PanWatch build script"
+    Write-Host "Version: $Version"
 
-    Write-Host "📦 构建前端..."
+    Write-Host "📦 Building the frontend..."
     Push-Location "frontend"
     try {
         Invoke-CheckedCommand "pnpm" @("install", "--frozen-lockfile")
@@ -40,20 +40,20 @@ try {
         Pop-Location
     }
 
-    Write-Host "📁 复制静态文件..."
+    Write-Host "📁 Copying static files..."
     Remove-Item -LiteralPath $staticDirectory -Recurse -Force -ErrorAction SilentlyContinue
     New-Item -ItemType Directory -Path $staticDirectory | Out-Null
     Copy-Item -Path (Join-Path $projectRoot "frontend\dist\*") -Destination $staticDirectory -Recurse -Force
 
-    Write-Host "🐳 构建 Docker 镜像 (linux/amd64)..."
+    Write-Host "🐳 Building the Docker image (linux/amd64)..."
     Invoke-CheckedCommand "docker" @("build", "--platform", "linux/amd64", "--build-arg", "VERSION=$Version", "-t", $fullImage, ".")
 
     if ($Version -ne "latest") {
         Invoke-CheckedCommand "docker" @("tag", $fullImage, "${imageName}:latest")
-        Write-Host "✅ 镜像已构建: $fullImage 和 ${imageName}:latest"
+        Write-Host "✅ Image built: $fullImage and ${imageName}:latest"
     }
     else {
-        Write-Host "✅ 镜像已构建: $fullImage"
+        Write-Host "✅ Image built: $fullImage"
     }
 }
 finally {

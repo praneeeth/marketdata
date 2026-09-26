@@ -1,29 +1,29 @@
 # PanWatch Dockerfile
-# 多阶段构建，减小最终镜像大小
+# Multi-stage build to keep the final image small
 
-# ===== Stage 1: 前端构建 =====
+# ===== Stage 1: frontend build =====
 FROM node:24.14.0-alpine AS frontend-builder
 
 WORKDIR /app/frontend
 
-# 启用并固定 pnpm，避免镜像构建时随 npm 全局安装漂移
+# Enable and pin pnpm so image builds don't drift with a global npm install
 RUN corepack enable && corepack prepare pnpm@9.15.9 --activate
 
-# 复制依赖文件
+# Copy dependency files
 COPY frontend/package.json frontend/pnpm-lock.yaml ./
 
-# 安装依赖
+# Install dependencies
 RUN pnpm install --frozen-lockfile
 
-# 复制源码并构建
+# Copy the source and build
 COPY frontend/ ./
 RUN pnpm build
 
 
-# ===== Stage 2: Python 运行环境 =====
+# ===== Stage 2: Python runtime =====
 FROM python:3.11-slim
 
-# 版本号（构建时传入）
+# Version (passed at build time)
 ARG VERSION=dev
 
 WORKDIR /app
@@ -31,12 +31,12 @@ WORKDIR /app
 # System dependencies
 # - tzdata: zoneinfo time zones
 # - git: requirements.txt installs tradingagents from a git+https URL
-# - fonts-noto-cjk: reports/PDFs still contain Chinese text until the Phase 4 translation
+# - fonts-dejavu-core: a font with the rupee sign (₹) for PDF export
 # - pango/cairo/gdk-pixbuf/ffi/fontconfig: WeasyPrint PDF export
 RUN apt-get update && apt-get install -y --no-install-recommends \
     tzdata \
     git \
-    fonts-noto-cjk \
+    fonts-dejavu-core \
     libpango-1.0-0 \
     libpangocairo-1.0-0 \
     libpangoft2-1.0-0 \
@@ -49,43 +49,43 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/* \
     && fc-cache -fv
 
-# 复制依赖文件
+# Copy dependency files
 COPY requirements.txt ./
 
-# 复制本仓内本地包(requirements.txt 里 -e ./packages/marketdata 需要它先在)
+# Copy the local packages in this repo (-e ./packages/marketdata in requirements.txt needs them first)
 COPY packages/ ./packages/
 
-# 安装 Python 依赖
+# Install Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
-# 复制后端代码
+# Copy the backend code
 COPY src/ ./src/
 COPY server.py ./
 COPY prompts/ ./prompts/
 
-# 写入版本号
+# Write the version
 RUN echo "${VERSION}" > VERSION
 
-# 从前端构建阶段复制静态文件
+# Copy the static files from the frontend build stage
 COPY --from=frontend-builder /app/frontend/dist ./static/
 
-# 创建数据目录
+# Create the data directory
 RUN mkdir -p /app/data
 
-# 环境变量
+# Environment variables
 ENV PYTHONUNBUFFERED=1
 ENV DATA_DIR=/app/data
 ENV DOCKER=1
 
-# 默认时区（可在 docker run 时用 -e TZ=... 覆盖）
-ENV TZ=Asia/Shanghai
+# Default time zone (override with -e TZ=... on docker run)
+ENV TZ=Asia/Kolkata
 
-# 暴露端口（保持 8000 不变，避免影响存量用户升级）
+# Expose the port (kept at 8000 so existing users' upgrades aren't affected)
 EXPOSE 8000
 
-# 健康检查（使用 Python）
+# Health check (using Python)
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health')" || exit 1
 
-# 启动命令
+# Start command
 CMD ["python", "server.py"]

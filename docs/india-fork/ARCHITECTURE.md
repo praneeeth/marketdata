@@ -177,7 +177,7 @@ injected.
 - 53 tables in `src/platform/persistence/models.py`. 26 idempotent versioned migrations in
   `migrations.py`, run at startup.
 - **No table has a `user_id` or tenant column.** The PAT model docstring says so
-  explicitly: "单用户应用,不设 user_id" ("single-user app, no user_id",
+  explicitly: "single-user app, no user_id" (translated from the Chinese comment,
   `models.py:1294`).
 - **Secrets are stored in plaintext columns and returned by the API**:
   - `ai_services.api_key` is returned verbatim by `GET /api/providers`
@@ -216,9 +216,9 @@ Seeded agents (`modules/automation/agent_catalog.py`):
 
 | Agent | Seed schedule (TZ = `Asia/Shanghai`) | Mode | Default |
 | --- | --- | --- | --- |
-| `premarket_outlook` 盘前分析 | `0 9 * * 1-5` (:64) | batch | off |
-| `intraday_monitor` 盘中监测 | `*/5 9-15 * * 1-5` (:75) | single (per stock, skipped outside session) | off |
-| `daily_report` 收盘复盘 | `30 15 * * 1-5` (:94) | batch | **on** |
+| `premarket_outlook` (pre-market outlook) | `0 9 * * 1-5` (:64) | batch | off |
+| `intraday_monitor` (intraday monitor) | `*/5 9-15 * * 1-5` (:75) | single (per stock, skipped outside session) | off |
+| `daily_report` (daily close report) | `30 15 * * 1-5` (:94) | batch | **on** |
 | `news_digest` | none (capability, deprecated) | batch | off |
 | `chart_analyst` | none (capability, needs Playwright screenshots) | single | off |
 | `tradingagents` | manual, or auto-trigger from intraday on a big move | single | off |
@@ -243,8 +243,8 @@ override `analyze` and parse a trailing
   through to upstream vendors, i.e. yfinance, which means Indian tickers would bypass any
   BYOK broker connection.**
 - `decision.py` maps the PM text to a 5-tier rating (`buy/overweight/hold/underweight/sell`,
-  labels 买入/增持/持有/减持/卖出) and a 3-tier action, and renders Markdown plus a
-  notification body titled `【深度】name(symbol):<rating>`.
+  labels Buy/Overweight/Hold/Underweight/Sell, originally in Chinese) and a 3-tier action, and renders Markdown plus a
+  notification body titled `[Deep research] name (symbol): <rating>` (originally in Chinese).
 - `emit_paper_trading_signal` (off by default) writes BUY decisions into
   `strategy_signal_runs`, which the paper-trading engine consumes.
 - Cost tracking: a LangChain callback estimates USD per run, with a monthly budget in the
@@ -261,12 +261,12 @@ override `analyze` and parse a trailing
   **`find_research_candidates`**, K-line summary, news, search, market status, hot
   stocks/boards/board stocks, fundamentals, capital flow, dragon-tiger, alerts) and 3
   **write** tools (create/update/delete price alert), which need user approval.
-  `find_research_candidates` returns "候选标的、评分、风险和入场计划" (candidates, scores,
+  `find_research_candidates` returns "candidates, scores,
   risks and **entry plans**); see §5.5.
 - `/api/chat` (`assistant/chat_api.py`) is the legacy tool-calling chat, with streaming.
   `chat_planner.py` is a multi-step "portfolio diagnosis" planner.
-- System prompt (`assistant/prompt.py`) is Chinese and says "给出明确的观点和理由" ("give
-  clear opinions and reasons") and "涉及买卖建议时说明风险" ("mention risks when giving
+- System prompt (`assistant/prompt.py`) is Chinese and says (translated) "give
+  clear opinions and reasons" and "mention risks when giving
   buy/sell suggestions").
 
 ### 5.4 Inventory of AI output surfaces
@@ -294,7 +294,7 @@ output guard in front of all of these.**
 | 16 | Context summariser | `assistant/context_summarizer.py` | internal, re-fed to the model | no |
 | 17 | PDF export | `reporting/pdf_export.py` | downloadable PDF of analysis | n/a |
 | 18 | Share cards | `frontend/src/components/*ShareCard*.tsx` | PNG images users post externally | n/a |
-| 19 | Paper-trading notifier | `paper_trading/paper_trading_notifier.py` | "跟单通知" (copy-trade notifications) with entry, stop-loss and target prices (template text, driven by AI signals) | n/a |
+| 19 | Paper-trading notifier | `paper_trading/paper_trading_notifier.py` | "copy-trade notifications" (translated) with entry, stop-loss and target prices (template text, driven by AI signals) | n/a |
 | 20 | MCP server | `administration/api/mcp.py` | exposes 5 legacy tools (`get_portfolio`, `get_stock_quote`, `get_technical_analysis`, `get_stock_suggestions`, `get_watchlist`) to external MCP clients; `get_stock_suggestions` returns stored AI actions and reasons | n/a |
 
 ### 5.5 Recommendation machinery (compliance-relevant)
@@ -303,7 +303,7 @@ These parts of the product exist to generate buy/sell calls. All of them conflic
 `research_only`:
 
 - **Structured action taxonomy** `buy/add/reduce/sell/hold/watch/alert/avoid`, with Chinese
-  labels such as 建仓/加仓/减仓/清仓/考虑止损 ("open position / add / reduce / exit / consider
+  labels such as "open position / add / reduce / exit / consider
   stop-loss"). It is required in every prompt's JSON contract and persisted in
   `stock_suggestions.action`.
 - **Entry candidates / Opportunities page** (`strategy/entry_candidates.py`,
@@ -323,15 +323,15 @@ These parts of the product exist to generate buy/sell calls. All of them conflic
   SL/target/trailing stops. It pushes "premarket plan" and "daily summary" notifications
   listing entries, stops and targets.
 - **Add-position calculator** (`biz-ui/.../add-position-calculator.tsx`): position sizing
-  with an "AI 结论" ("AI conclusion").
-- **Portfolio check-up** (#11 above): prompt demands "可执行调仓建议" ("actionable
+  with an "AI conclusion" (translated).
+- **Portfolio check-up** (#11 above): prompt demands (translated) "actionable
   rebalancing suggestions").
 - **Evaluations** (`research/api/evaluations.py`, `automation/agent_prediction_evaluation.py`,
   `frontend/src/pages/Evaluations.tsx`): tracks hit-rate and returns of AI calls. Shown to
   users, these are performance claims.
 - **Intraday monitor thresholds** `stop_loss_warning` / `take_profit_warning`
   (`intraday_monitor.py:80-81`). They are user-configured P&L % thresholds, but they are
-  worded as 止损预警 ("stop-loss warning") and 止盈提醒 ("take-profit reminder").
+  worded as "stop-loss warning" and "take-profit reminder" (translated).
 
 ### 5.6 Order execution
 
@@ -342,7 +342,7 @@ endpoint. The only execution-like paths are simulated or advisory:
 2. TradingAgents `emit_paper_trading_signal`.
 3. The assistant's write tools, which are limited to the user's own price alerts.
 
-The "portfolio diagnostics" module is explicitly "只读不下单" ("read-only, never places
+The "portfolio diagnostics" module is explicitly (translated) "read-only, never places
 orders"). Phase 1's "disable execution" is therefore mostly about **keeping it that way
 structurally**: read-only broker adapters, plus an architecture test. The simulated paths
 also need re-scoping (see PLAN open questions).
@@ -406,7 +406,7 @@ also need re-scoping (see PLAN open questions).
   about 30 places, with no central token.
 - Onboarding dialog (`biz-ui/.../onboarding.tsx`) covers welcome → AI → notify → done.
   There is no consent step. Completion is stored in `localStorage`.
-- Existing disclaimers are ad hoc: "仅供参考,不构成投资建议" ("for reference only, not
+- Existing disclaimers are ad hoc (translated): "for reference only, not
   investment advice") in the PDF footer, the deep-analysis modal, share cards and
   `AnalysisDetail`. There is no global footer.
 - PWA-installable.
@@ -476,8 +476,8 @@ Every assumption found, grouped, with the India replacement and the phase that o
 | S5 | Symbol regexes `^[036]\d{5}$`, `^\d{5}$`, `^[A-Z]{1,5}$` | `platform/marketdata/models.py:63,73,82` | tradingsymbol charset `[A-Z0-9&-]` and BSE numeric scrip codes | 2 |
 | S6 | Stock universe list from Eastmoney clist (CN/HK/US/BJ), cached 7 days; akshare fallback; Eastmoney search API | `platform/marketdata/stock_list.py` | broker instrument master (per-user fetch) → local search index | 2 |
 | S7 | TradingAgents routing predicates `is_a_share` / `is_hk_share` | `tradingagents/toolkit_adapter.py:121-160` | `is_indian_instrument` → route to the user's provider; never fall through to yfinance in production | 2/4 |
-| S8 | Code-shape checks in prompts ("A 股 6 位数字；港股 5 位数字…" = "A-shares 6 digits; HK 5 digits…") | `prompts/*.txt` | NSE tradingsymbol rules | 4 |
-| S9 | `config/watchlist.yaml` sample: 贵州茅台 (Kweichow Moutai), 平安银行 (Ping An Bank), 腾讯 (Tencent) | `config/watchlist.yaml` | Indian examples or remove (legacy YAML path) | 2 |
+| S8 | Code-shape checks in prompts ("A-shares 6 digits; HK 5 digits…", translated) | `prompts/*.txt` | NSE tradingsymbol rules | 4 |
+| S9 | `config/watchlist.yaml` sample: Kweichow Moutai, Ping An Bank, Tencent | `config/watchlist.yaml` | Indian examples or remove (legacy YAML path) | 2 |
 
 ### 11.3 Data vendors and data types
 
@@ -485,16 +485,16 @@ Every assumption found, grouped, with the India replacement and the phase that o
 | --- | --- | --- | --- | --- |
 | D1 | Quotes from Tencent / Sina / Eastmoney / yfinance | `packages/marketdata/src/marketdata/vendors/{tencent,sina,eastmoney,yfinance}.py`, seeds `server.py:463-500` | Kite → Upstox → Angel (BYOK); yfinance dev-only | 2 |
 | D2 | Daily K-lines from Tencent / Eastmoney / Stooq / Yahoo; no intraday | `vendors/kline.py` | broker historical candles (minute…day) | 2 |
-| D3 | 主力资金流 ("main-force capital flow", super/big/mid/small orders) from Eastmoney/Sina | `vendors/capital_flow.py`, `platform/marketdata/collectors/capital_flow_collector.py`, prompts, UI | no retail equivalent. Remove. Market-level FII/DII flows instead (source TBD) | 2/3 |
-| D4 | 北向资金 (Northbound Stock Connect) from Tonghuashun | `vendors/northbound.py` | remove; FII/DII daily provisional as the concept analogue | 2/3 |
-| D5 | 龙虎榜 (dragon-tiger list) | `vendors/market_flow.py`, assistant tool `get_dragon_tiger` | remove; bulk/block deals are the closest analogue (source TBD) | 2/4 |
-| D6 | 融资融券 (CN margin trading) | `vendors/market_flow.py` | remove (India MTF/pledge data comes from filings; defer) | 2 |
-| D7 | 股东户数 (shareholder count) | `vendors/market_flow.py` | remove; quarterly shareholding pattern from exchange filings (defer) | 2/4 |
-| D8 | CN dividend schema (`PRETAX_BONUS_RMB`, 每10股转增 "bonus shares per 10") | `vendors/market_flow.py:232` | corporate actions (dividend/bonus/split/rights) with ex/record dates | 2 |
+| D3 | "Main-force capital flow" ( super/big/mid/small orders) from Eastmoney/Sina | `vendors/capital_flow.py`, `platform/marketdata/collectors/capital_flow_collector.py`, prompts, UI | no retail equivalent. Remove. Market-level FII/DII flows instead (source TBD) | 2/3 |
+| D4 | Northbound Stock Connect flows from Tonghuashun | `vendors/northbound.py` | remove; FII/DII daily provisional as the concept analogue | 2/3 |
+| D5 | Dragon-tiger list | `vendors/market_flow.py`, assistant tool `get_dragon_tiger` | remove; bulk/block deals are the closest analogue (source TBD) | 2/4 |
+| D6 | CN margin trading | `vendors/market_flow.py` | remove (India MTF/pledge data comes from filings; defer) | 2 |
+| D7 | Shareholder count | `vendors/market_flow.py` | remove; quarterly shareholding pattern from exchange filings (defer) | 2/4 |
+| D8 | CN dividend schema (`PRETAX_BONUS_RMB`, "bonus shares per 10") | `vendors/market_flow.py:232` | corporate actions (dividend/bonus/split/rights) with ex/record dates | 2 |
 | D9 | Announcements from Eastmoney; full text via `np-cnotice-stock.eastmoney.com` | `vendors/events.py`, `vendors/news.py`, `collectors/events_collector.py:24` | NSE/BSE corporate announcements | 4 |
 | D10 | News from Xueqiu, Eastmoney search, CLS/Sina/Eastmoney flash news; keyword search in Chinese | `vendors/news.py`, `vendors/flash_news.py`, `client.py:293` | Indian financial RSS + exchange filings | 4 |
 | D11 | Fundamentals from Tencent/Eastmoney; TradingAgents financial statements from akshare | `vendors/fundamentals.py`, `tradingagents/data_context.py` | source TBD (broker APIs do not provide financial statements) | 2/4 |
-| D12 | Hot stocks/boards (Eastmoney 热门榜/板块, "hot lists / sectors") | `vendors/discovery.py`, `market/api/discovery.py`, `DiscoveryPanel.tsx` | top gainers/losers by NSE sector index from the user's provider, or remove | 2 |
+| D12 | Hot stocks/boards (Eastmoney "hot lists / sectors") | `vendors/discovery.py`, `market/api/discovery.py`, `DiscoveryPanel.tsx` | top gainers/losers by NSE sector index from the user's provider, or remove | 2 |
 | D13 | K-line screenshots scraped with Playwright from Xueqiu/Eastmoney/Sina | `platform/marketdata/collectors/screenshot_collector.py`, `server.py:211,627-650` | remove (also drops the Chromium dependency); render charts from OHLC if vision analysis is kept | 2 |
 | D14 | `DbConfigProvider` special case: Tencent US K-line returns 501 on "current network" | `platform/marketdata/marketdata_client.py:39-47` | remove | 2 |
 | D15 | Datasource seeds, test symbols `600519/601127/00700/00386/AAPL/NVDA` | `server.py:355-650`, `market/data_collector.py:18-27` | Indian seeds + `RELIANCE`, `INFY`, `HDFCBANK`… | 2 |
@@ -505,36 +505,36 @@ Every assumption found, grouped, with the India replacement and the phase that o
 
 | # | Assumption | Where | India replacement | Phase |
 | --- | --- | --- | --- | --- |
-| I1 | Header indices: 上证 (SSE Composite) / 深成指 (SZSE Component) / 创业板 (ChiNext) / 恒生 (Hang Seng) / NASDAQ / Dow | `market/api/market.py:22-32` | Nifty 50, Sensex, Nifty Bank, India VIX, Nifty Midcap/Smallcap; sector indices | 3 |
+| I1 | Header indices: SSE Composite / SZSE Component / ChiNext / Hang Seng / NASDAQ / Dow | `market/api/market.py:22-32` | Nifty 50, Sensex, Nifty Bank, India VIX, Nifty Midcap/Smallcap; sector indices | 3 |
 | I2 | `INDEX_SECID` / `INDEX_TENCENT` maps | `packages/marketdata/src/marketdata/client.py:36-58` | broker index instruments (e.g. `NSE:NIFTY 50`) | 2 |
 | I3 | Daily report fetches CN indices only | `automation/daily_report.py:39` | Nifty/Sensex + sector indices | 3 |
 | I4 | Premarket "overnight US" = DJI/IXIC/INX via Tencent | `automation/premarket_outlook.py:78-94` | GIFT Nifty, US close, Asian open, crude, USD/INR, US 10Y (source TBD) | 3 |
-| I5 | Relative-strength benchmark 沪深300 (CSI 300) / 恒生 / 标普500 (S&P 500) | `research/context_builder.py:29-35` | Nifty 50 (or sector index) | 3 |
+| I5 | Relative-strength benchmark CSI 300 / Hang Seng / S&P 500 | `research/context_builder.py:29-35` | Nifty 50 (or sector index) | 3 |
 
 ### 11.5 Trading rules, costs and money
 
 | # | Assumption | Where | India replacement | Phase |
 | --- | --- | --- | --- | --- |
-| R1 | Lot = 100 shares (A-share 一手, "one board lot") | `paper_trading/paper_trading_engine.py:29-30,58-74` | equity cash lot = 1; F&O lot sizes from the instrument master | 3 |
+| R1 | Lot = 100 shares (an A-share "board lot") | `paper_trading/paper_trading_engine.py:29-30,58-74` | equity cash lot = 1; F&O lot sizes from the instrument master | 3 |
 | R2 | T+1: cannot sell on buy day | `strategy/backtest/engine.py:7,126` | India allows same-day sell (intraday) and BTST; T+1 applies to **settlement** (funds/securities), which matters for P&L/cash availability | 3 |
 | R3 | CN costs: stamp duty 0.05% sell-side, commission 2.5 bp min ¥5, transfer fee | `strategy/backtest/cost_model.py:3-24` | STT, exchange txn charges, SEBI fee, stamp duty (buy), GST, DP charges, all as config (rates change) | 3 |
 | R4 | Price limits (±10%/20%) not modelled (TODO) | `strategy/backtest/engine.py:12` | NSE price bands (2/5/10/20%, none for F&O stocks with dynamic bands) + index circuit breakers; take per-stock limits from broker quotes where available | 3 |
 | R5 | Base currency CNY; HKD/USD→CNY FX from Sina with hard-coded fallbacks 0.92/7.25 | `portfolio/api/accounts.py:22-75,493,579,634-841` | INR single currency (drop FX unless US kept) | 3 |
-| R6 | Units 万 (10⁴) / 亿 (10⁸) in UI and prompts; "Turnover (CNY)" | `frontend/src/pages/DataSources.tsx:697-729`, `tradingagents/toolkit_adapter.py:992`, `Fundamentals` docstrings (亿) | lakh / crore formatting (`₹12,34,567.89`, `₹12.35 L`, `₹1.23 Cr`) | 3/4 |
+| R6 | Chinese units of 10⁴ and 10⁸ in UI and prompts; "Turnover (CNY)" | `frontend/src/pages/DataSources.tsx:697-729`, `tradingagents/toolkit_adapter.py:992`, `Fundamentals` docstrings (units of 10⁸) | lakh / crore formatting (`₹12,34,567.89`, `₹12.35 L`, `₹1.23 Cr`) | 3/4 |
 | R7 | Paper-trading capital ¥1,000,000; allocations `{"CN":0.5,"HK":0.3,"US":0.2}` | `persistence/models.py:1009`, `paper_trading_engine.py:111` | INR amount; single market | 3 |
-| R8 | Account name examples 招商证券/华泰证券 (Chinese brokers) | `persistence/models.py:71` | n/a (cosmetic) | 4 |
+| R8 | Account name examples naming Chinese brokers (China Merchants Securities, Huatai Securities) | `persistence/models.py:71` | n/a (cosmetic) | 4 |
 | R9 | No F&O concepts (expiry, lot, strike, OI) anywhere | — | new: instrument master, option chain, expiry calendar from the instrument master (not hard-coded; weekly expiry days were changed in 2024–25) | 2/3 |
 
 ### 11.6 Language and content
 
 | # | Assumption | Where | India replacement | Phase |
 | --- | --- | --- | --- | --- |
-| L1 | All 5 prompt files in Chinese, A-share framing (上证/创业板/主力资金/隔夜美股 = SSE/ChiNext/main-force flows/overnight US) | `prompts/*.txt` | English, Indian context, research-only | 1 (output contract) / 4 (content) |
+| L1 | All 5 prompt files in Chinese, A-share framing (SSE/ChiNext/main-force flows/overnight US) | `prompts/*.txt` | English, Indian context, research-only | 1 (output contract) / 4 (content) |
 | L2 | Inline Chinese system prompts | `research/api/insights.py:244,336`, `portfolio/api/accounts.py:850`, `portfolio/api/dashboard.py:424`, `assistant/chat_planner.py:40,150,152`, `assistant/context_summarizer.py:12`, `assistant/prompt.py:5` | same | 1/4 |
 | L3 | TradingAgents `output_language: "Chinese"` and Chinese rating labels | `agent_catalog.py:147`, `tradingagents/decision.py:30-51` | English; ratings removed in research_only | 1 |
-| L4 | Chinese notification titles and templates (`【盘中监测】…`, `【模拟盘建仓】`, "open position" etc.) | agents, `paper_trading_notifier.py`, `price_alert_engine.py` | English templates via i18n keys | 4 |
+| L4 | Chinese notification titles and templates (bracketed Chinese titles such as "[Intraday monitor]…" and "[Simulation entry]", "open position" etc.) | agents, `paper_trading_notifier.py`, `price_alert_engine.py` | English templates via i18n keys | 4 |
 | L5 | Frontend strings (2,797 lines / 88 files), `lang="zh-CN"`, `zh-CN` date formatting | `frontend/**` | i18n catalogs (en-IN first, hi-IN later) | 4 |
-| L6 | API error messages in Chinese (`"未登录"` "not logged in", `"登录已过期"` "login expired", …) | all routers | English, with stable machine-readable error codes | 4 |
+| L6 | API error messages in Chinese ("not logged in", "login expired", … in Chinese) | all routers | English, with stable machine-readable error codes | 4 |
 | L7 | Logs and docstrings in Chinese | everywhere | logs → English (operability); docstrings opportunistically | 4 |
 | L8 | Chinese fonts in Docker/PDF (`fonts-noto-cjk`, STSong fallback) | `Dockerfile`, `reporting/pdf_export.py`, `requirements.txt` comments | Noto Sans (+ Devanagari later) | 4 |
 | L9 | Eval cases in Chinese | `tests/eval/cases/*.py` | English cases + adversarial suite | 1/4 |
@@ -549,7 +549,7 @@ Every assumption found, grouped, with the India replacement and the phase that o
 | E4 | Update checker polls Docker Hub `sunxiao0721/panwatch` | `administration/update_checker.py` | point to fork releases or disable | 4 |
 | E5 | Donation QR codes (WeChat/Alipay), Telegram community link, upstream Docker badges | `README.md`, `docs/donate/` | replace (keep MIT attribution) | 4 |
 | E6 | Release workflow pushes to upstream Docker Hub + Telegram | `.github/workflows/release.yml` | replace (needs CI approval) | 1 |
-| E7 | Branding 盯盘侠 PanWatch in UI, PDF, share cards, MCP `SERVER_INFO` | many | new product name (open question) | 4 |
+| E7 | Branding (the Chinese name) PanWatch in UI, PDF, share cards, MCP `SERVER_INFO` | many | new product name (open question) | 4 |
 | E8 | Colour convention red = up / green = down | ~30 sites in `frontend/**` (e.g. `DiscoveryPanel.tsx:286`, `DataSources.tsx:633`) | green = up / red = down via central tokens | 4 |
 
 ### 11.8 Not China-specific but blocking for a public Indian product

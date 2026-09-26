@@ -33,7 +33,9 @@ const DialogContent = React.forwardRef<
     <DialogPrimitive.Content
       ref={ref}
       className={cn(
-        'fixed left-1/2 top-[max(1rem,env(safe-area-inset-top))] md:top-1/2 z-50 w-[calc(100vw-1rem)] max-w-lg -translate-x-1/2 md:-translate-y-1/2 bg-card rounded-2xl shadow-[0_16px_70px_rgba(0,0,0,0.15)] p-6 pr-4 max-h-[calc(100vh-2rem-env(safe-area-inset-top))] md:max-h-[calc(100vh-2rem)] overflow-y-auto overflow-x-hidden overscroll-contain scrollbar duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95',
+        // Phones: a bottom sheet within thumb reach. md and up: a centred dialog.
+        'fixed inset-x-0 bottom-0 mx-auto z-50 w-full max-w-lg bg-card border border-border/70 rounded-t-2xl shadow-[0_-8px_40px_rgba(0,0,0,0.12)] p-5 pr-4 pb-[max(1.25rem,env(safe-area-inset-bottom))] max-h-[88dvh] overflow-y-auto overflow-x-hidden overscroll-contain scrollbar duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=open]:slide-in-from-bottom-6 data-[state=closed]:slide-out-to-bottom-6',
+        'md:inset-x-auto md:bottom-auto md:left-1/2 md:top-1/2 md:w-[calc(100vw-2rem)] md:-translate-x-1/2 md:-translate-y-1/2 md:rounded-2xl md:p-6 md:pr-4 md:max-h-[calc(100vh-2rem)] md:shadow-[0_16px_70px_rgba(0,0,0,0.15)] md:data-[state=open]:slide-in-from-bottom-0 md:data-[state=closed]:slide-out-to-bottom-0 md:data-[state=closed]:zoom-out-95 md:data-[state=open]:zoom-in-95',
         className
       )}
       {...props}
@@ -60,7 +62,7 @@ const DialogTitle = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <DialogPrimitive.Title
     ref={ref}
-    className={cn('text-[16px] font-semibold text-foreground', className)}
+    className={cn('font-display text-[18px] font-semibold text-foreground pr-8', className)}
     {...props}
   />
 ))

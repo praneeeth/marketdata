@@ -9,14 +9,18 @@ export interface NavItem {
   feature?: ComplianceFeature
 }
 
+/**
+ * Order matters: the first four visible items are the phone tab bar (plus "More"), the first
+ * five are the desktop bar, and the rest live under "More" / the account menu.
+ */
 export const navItems: NavItem[] = [
   { to: '/', icon: LayoutDashboard, label: 'Home' },
-  { to: '/portfolio', icon: List, label: 'Holdings' },
-  { to: '/opportunities', icon: Sparkles, label: 'Opportunities', feature: 'entry_candidates' },
-  { to: '/paper-trading', icon: Activity, label: 'Simulation' },
-  { to: '/assistant', icon: MessageCircle, label: 'Assistant' },
+  { to: '/portfolio', icon: List, label: 'Portfolio' },
+  { to: '/assistant', icon: MessageCircle, label: 'Research' },
   { to: '/alerts', icon: BellRing, label: 'Alerts' },
-  { to: '/agents', icon: Bot, label: 'Agent' },
+  { to: '/paper-trading', icon: Activity, label: 'Simulation' },
+  { to: '/opportunities', icon: Sparkles, label: 'Opportunities', feature: 'entry_candidates' },
+  { to: '/agents', icon: Bot, label: 'Agents' },
   { to: '/evaluations', icon: ClipboardCheck, label: 'Evaluations', feature: 'evaluations' },
   { to: '/history', icon: Clock, label: 'History' },
   { to: '/datasources', icon: Database, label: 'Data sources' },

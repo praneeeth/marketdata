@@ -1,3 +1,4 @@
+import { ErrorState, LoadingState } from '@/components/common/states'
 import { Component, type ErrorInfo, type ReactNode } from 'react'
 
 interface RouteErrorBoundaryProps {
@@ -10,11 +11,8 @@ interface RouteErrorBoundaryState {
 
 export function RouteLoadingFallback() {
   return (
-    <div className="flex min-h-[320px] items-center justify-center rounded-2xl border border-border/40 bg-card/30">
-      <div className="flex items-center gap-3 text-sm text-muted-foreground">
-        <span className="h-5 w-5 animate-spin rounded-full border-2 border-primary/20 border-t-primary" />
-        Loading the page…
-      </div>
+    <div className="flex min-h-[320px] items-center justify-center">
+      <LoadingState label="Loading the page…" />
     </div>
   )
 }
@@ -33,16 +31,12 @@ export class RouteErrorBoundary extends Component<RouteErrorBoundaryProps, Route
   render() {
     if (this.state.error) {
       return (
-        <div className="flex min-h-[320px] flex-col items-center justify-center gap-3 rounded-2xl border border-destructive/20 bg-card/30 px-6 text-center">
-          <p className="text-sm font-medium text-foreground">The page failed to load</p>
-          <p className="max-w-md text-xs text-muted-foreground">Please retry; if it keeps happening, your browser may have cached an old version of the page.</p>
-          <button
-            type="button"
-            className="rounded-lg bg-primary px-3 py-2 text-xs font-medium text-primary-foreground transition-opacity hover:opacity-90"
-            onClick={() => window.location.reload()}
-          >
-            Reload
-          </button>
+        <div className="card flex min-h-[320px] items-center justify-center">
+          <ErrorState
+            title="The page failed to load"
+            message="Please retry; if it keeps happening, your browser may have cached an old version of the page."
+            onRetry={() => window.location.reload()}
+          />
         </div>
       )
     }

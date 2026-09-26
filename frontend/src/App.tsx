@@ -1,13 +1,13 @@
 import { Suspense, useState, useEffect, useRef } from 'react'
 import { Routes, Route, NavLink, useLocation, Navigate } from 'react-router-dom'
-import { ScrollText, Github } from 'lucide-react'
+import { ScrollText, Github, MoreHorizontal } from 'lucide-react'
 import { useTheme } from '@/hooks/use-theme'
 import { CandlewiseLogo } from '@/components/CandlewiseLogo'
 import { RELEASES_URL, REPO_URL } from '@/lib/brand'
 import { appApi } from '@candlewise/api/app'
 import { fetchAPI, isAuthenticated } from '@candlewise/api/client'
 import LogsModal from '@candlewise/biz-ui/components/logs-modal'
-import AmbientBackground from '@candlewise/biz-ui/components/AmbientBackground'
+import MobileMoreSheet from '@/components/MobileMoreSheet'
 import AccountMenu from '@/components/AccountMenu'
 import AssistantOpenBridge from '@/components/AssistantOpenBridge'
 import SelfCheckModal from '@/components/SelfCheckModal'
@@ -74,8 +74,10 @@ function App() {
   const visibleNavItems = filterNavItems(isEnabled)
   const desktopPrimaryNavItems = visibleNavItems.slice(0, 5)
   const desktopMoreNavItems = visibleNavItems.slice(5)
-  const mobilePrimaryNavItems = visibleNavItems.slice(0, 5)
-  const mobileMoreNavItems = visibleNavItems.slice(5)
+  const mobilePrimaryNavItems = visibleNavItems.slice(0, 4)
+  const mobileMoreNavItems = visibleNavItems.slice(4)
+  const [moreOpen, setMoreOpen] = useState(false)
+  const moreActive = mobileMoreNavItems.some(({ to }) => location.pathname.startsWith(to))
   const isAssistantRoute = location.pathname === '/assistant' || location.pathname.startsWith('/assistant/')
   const [version, setVersion] = useState('')
   const [logsOpen, setLogsOpen] = useState(false)
@@ -129,144 +131,133 @@ function App() {
     <RequireAuth>
     <div
       className={isAssistantRoute
-        ? 'relative flex h-dvh flex-col overflow-hidden bg-background pb-16 md:pb-0'
-        : 'min-h-screen pb-16 md:pb-0 relative overflow-x-clip bg-background'}
+        ? 'relative flex h-dvh flex-col overflow-hidden bg-background pb-[calc(3.5rem+env(safe-area-inset-bottom))] md:pb-0'
+        : 'relative min-h-screen overflow-x-clip bg-background pb-[calc(3.5rem+env(safe-area-inset-bottom))] md:pb-0'}
     >
-      <AmbientBackground />
-      {/* Desktop Floating Nav */}
-      <div className="sticky top-0 z-50 px-4 md:px-6 pt-3 md:pt-4 pb-2 hidden md:block">
-        <header className="card px-4 md:px-5">
-          <div className="h-14 flex items-center justify-between">
-            {/* Logo */}
-            <NavLink to="/" className="flex items-center gap-2.5 group">
-              <CandlewiseLogo markClassName="w-8 h-8" wordmarkClassName="text-[15px] font-bold" />
-              {version && <span className="text-[11px] text-muted-foreground/60 font-normal">v{version}</span>}
-            </NavLink>
+      {/* Desktop top bar */}
+      <div className="sticky top-0 z-40 hidden border-b border-border/70 bg-background/90 backdrop-blur md:block">
+        <header className="mx-auto flex h-14 w-full max-w-6xl items-center gap-6 px-6">
+          <NavLink to="/" className="flex shrink-0 items-center gap-2" aria-label="Candlewise home">
+            <CandlewiseLogo markClassName="w-7 h-7" wordmarkClassName="font-display text-[17px] font-semibold tracking-tight" />
+            {version && <span className="text-[11px] text-muted-foreground/70">v{version}</span>}
+          </NavLink>
 
-            {/* Nav Links */}
-            <nav className="flex items-center gap-1">
-              {desktopPrimaryNavItems.map(({ to, icon: Icon, label }) => {
-                const isActive = to === '/' ? location.pathname === '/' : location.pathname.startsWith(to)
-                return (
-                  <NavLink
-                    key={to}
-                    to={to}
-                    className="relative"
-                    onMouseEnter={() => preloadRoute(to)}
-                    onFocus={() => preloadRoute(to)}
-                  >
-                    <span
-                      className={`absolute inset-0 rounded-xl transition-all ${
-                        isActive
-                          ? 'bg-[linear-gradient(135deg,hsl(var(--primary)/0.14),hsl(var(--primary)/0.04),hsl(var(--success)/0.06))] ring-1 ring-primary/20 shadow-[0_8px_24px_-18px_hsl(var(--primary)/0.55)]'
-                          : 'bg-transparent'
-                      }`}
-                    />
-                    <span
-                      className={`relative px-3.5 py-2 rounded-xl text-[13px] font-medium transition-all flex items-center gap-1.5 ${
-                        isActive
-                          ? 'text-foreground'
-                          : 'text-muted-foreground hover:text-foreground hover:bg-accent'
-                      }`}
-                    >
-                      <Icon className={`w-4 h-4 ${isActive ? 'text-primary' : ''}`} />
-                      {label}
-                    </span>
-                  </NavLink>
-                )
-              })}
-            </nav>
+          <nav aria-label="Main" className="flex flex-1 items-center gap-1">
+            {desktopPrimaryNavItems.map(({ to, label }) => {
+              const isActive = to === '/' ? location.pathname === '/' : location.pathname.startsWith(to)
+              return (
+                <NavLink
+                  key={to}
+                  to={to}
+                  aria-current={isActive ? 'page' : undefined}
+                  onMouseEnter={() => preloadRoute(to)}
+                  onFocus={() => preloadRoute(to)}
+                  className={`relative px-3 py-2 text-[13px] font-medium transition-colors ${
+                    isActive ? 'text-foreground' : 'text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  {label}
+                  <span
+                    aria-hidden="true"
+                    className={`absolute inset-x-3 -bottom-[11px] h-0.5 rounded-full ${isActive ? 'bg-primary' : 'bg-transparent'}`}
+                  />
+                </NavLink>
+              )
+            })}
+          </nav>
 
-            {/* action wrapper: GitHub + logs + avatar (the avatar dropdown has more navigation/theme/sign-out) */}
-            <div className="flex items-center gap-1.5 px-1.5 py-1 rounded-2xl bg-accent/20 border border-border/40">
-              <button
-                onClick={() => window.open(repoUrl, '_blank', 'noopener,noreferrer')}
-                className="w-9 h-9 rounded-xl flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-background/70 transition-all"
-                title="GitHub project"
-              >
-                <Github className="w-4 h-4" />
-              </button>
-              <button
-                onClick={() => setLogsOpen(true)}
-                className="w-9 h-9 rounded-xl flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-background/70 transition-all"
-                title="View logs"
-              >
-                <ScrollText className="w-4 h-4" />
-              </button>
-              <AccountMenu
-                navItems={desktopMoreNavItems}
-                mode={mode}
-                onSetMode={setMode}
-                onOpenSelfCheck={() => setSelfCheckOpen(true)}
-              />
-            </div>
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => window.open(repoUrl, '_blank', 'noopener,noreferrer')}
+              className="flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+              title="Project on GitHub"
+              aria-label="Project on GitHub"
+            >
+              <Github className="h-4 w-4" />
+            </button>
+            <button
+              onClick={() => setLogsOpen(true)}
+              className="flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+              title="View logs"
+              aria-label="View logs"
+            >
+              <ScrollText className="h-4 w-4" />
+            </button>
+            <AccountMenu
+              navItems={desktopMoreNavItems}
+              mode={mode}
+              onSetMode={setMode}
+              onOpenSelfCheck={() => setSelfCheckOpen(true)}
+            />
           </div>
         </header>
       </div>
 
-      {/* Mobile Top Bar */}
-      <div className="sticky top-0 z-50 px-4 pt-[max(0.75rem,env(safe-area-inset-top))] pb-2 md:hidden">
-        <header className="card px-4">
-          <div className="h-12 flex items-center justify-between">
-            <NavLink to="/" className="flex items-center gap-2 group">
-              <CandlewiseLogo markClassName="w-7 h-7" wordmarkClassName="text-[14px] font-bold" />
-              {version && <span className="text-[10px] text-muted-foreground/60 font-normal">v{version}</span>}
-            </NavLink>
-            <div className="flex items-center gap-1.5 px-1.5 py-1 rounded-2xl bg-accent/20 border border-border/40">
-              <button
-                onClick={() => window.open(repoUrl, '_blank', 'noopener,noreferrer')}
-                className="w-8 h-8 rounded-xl flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-background/70 transition-all"
-                title="GitHub project"
-              >
-                <Github className="w-4 h-4" />
-              </button>
-              <button
-                onClick={() => setLogsOpen(true)}
-                className="w-8 h-8 rounded-xl flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-background/70 transition-all"
-                title="View logs"
-              >
-                <ScrollText className="w-4 h-4" />
-              </button>
-              <AccountMenu
-                size="sm"
-                navItems={mobileMoreNavItems}
-                mode={mode}
-                onSetMode={setMode}
-                onOpenSelfCheck={() => setSelfCheckOpen(true)}
-              />
-            </div>
-          </div>
+      {/* Phone top bar */}
+      <div className="sticky top-0 z-40 border-b border-border/70 bg-background/90 pt-[env(safe-area-inset-top)] backdrop-blur md:hidden">
+        <header className="flex h-12 items-center justify-between px-4">
+          <NavLink to="/" className="flex min-w-0 items-center" aria-label="Candlewise home">
+            <CandlewiseLogo markClassName="w-6 h-6" wordmarkClassName="font-display text-[16px] font-semibold tracking-tight" />
+          </NavLink>
+          <AccountMenu
+            size="sm"
+            navItems={mobileMoreNavItems}
+            mode={mode}
+            onSetMode={setMode}
+            onOpenSelfCheck={() => setSelfCheckOpen(true)}
+          />
         </header>
       </div>
 
-      {/* Mobile Bottom Nav */}
-      <nav className="fixed bottom-0 left-0 right-0 z-50 md:hidden bg-card border-t border-border px-2 pb-[env(safe-area-inset-bottom)]">
-        <div className="flex items-center justify-around h-14">
+      {/* Phone tab bar: four pages + More */}
+      <nav
+        aria-label="Main"
+        className="fixed inset-x-0 bottom-0 z-40 border-t border-border/70 bg-background/95 pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden"
+      >
+        <div className="mx-auto grid h-14 max-w-md grid-cols-5">
           {mobilePrimaryNavItems.map(({ to, icon: Icon, label }) => {
             const isActive = to === '/' ? location.pathname === '/' : location.pathname.startsWith(to)
             return (
               <NavLink
                 key={to}
                 to={to}
-                onMouseEnter={() => preloadRoute(to)}
+                aria-current={isActive ? 'page' : undefined}
                 onFocus={() => preloadRoute(to)}
-                className={`flex flex-col items-center justify-center gap-0.5 px-2 py-1.5 rounded-xl transition-all min-w-[56px] ${
-                  isActive
-                    ? 'text-primary bg-primary/8 ring-1 ring-primary/15'
-                    : 'text-muted-foreground hover:bg-accent/30'
+                className={`relative flex flex-col items-center justify-center gap-0.5 text-[11px] font-medium ${
+                  isActive ? 'text-primary' : 'text-muted-foreground'
                 }`}
               >
-                <Icon className="w-5 h-5" />
-                <span className="text-[10px] font-medium">{label}</span>
+                <span aria-hidden="true" className={`absolute top-0 h-0.5 w-8 rounded-full ${isActive ? 'bg-primary' : 'bg-transparent'}`} />
+                <Icon className="h-5 w-5" aria-hidden="true" />
+                {label}
               </NavLink>
             )
           })}
+          <button
+            type="button"
+            onClick={() => setMoreOpen(true)}
+            aria-haspopup="dialog"
+            className={`relative flex flex-col items-center justify-center gap-0.5 text-[11px] font-medium ${
+              moreActive ? 'text-primary' : 'text-muted-foreground'
+            }`}
+          >
+            <span aria-hidden="true" className={`absolute top-0 h-0.5 w-8 rounded-full ${moreActive ? 'bg-primary' : 'bg-transparent'}`} />
+            <MoreHorizontal className="h-5 w-5" aria-hidden="true" />
+            More
+          </button>
         </div>
       </nav>
+      <MobileMoreSheet
+        open={moreOpen}
+        onOpenChange={setMoreOpen}
+        items={mobileMoreNavItems}
+        onOpenLogs={() => setLogsOpen(true)}
+        repoUrl={repoUrl}
+      />
 
       {/* Content */}
       <main
-        className={`${isAssistantRoute ? 'flex min-h-0 flex-1 flex-col overflow-hidden' : ''} px-4 md:px-6 py-4 md:py-6 w-full`}
+        className={`${isAssistantRoute ? 'flex min-h-0 flex-1 flex-col overflow-hidden' : 'mx-auto max-w-6xl'} w-full min-w-0 px-4 py-4 md:px-6 md:py-8`}
       >
         <AssistantOpenBridge />
         <RouteErrorBoundary>

@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { TrendingUp, Bot, Bell, CheckCircle2, ChevronRight, Sparkles } from 'lucide-react'
+import { TrendingUp, Bot, Bell, CheckCircle2, ChevronRight, Sparkles, Info } from 'lucide-react'
+import { CandlewiseMark } from '@/components/CandlewiseLogo'
+import { TAGLINE } from '@/lib/brand'
 import { Dialog, DialogContent } from '@candlewise/base-ui/components/ui/dialog'
 import { Button } from '@candlewise/base-ui/components/ui/button'
 import { useCompliance } from '@/hooks/use-compliance'
@@ -64,12 +66,11 @@ export function Onboarding({ open, onComplete, hasStocks }: OnboardingProps) {
         <div className="p-6 pt-4">
           {step === 'welcome' && (
             <div className="text-center">
-              <div className="w-16 h-16 rounded-2xl bg-primary flex items-center justify-center mx-auto mb-4">
-                <TrendingUp className="w-8 h-8 text-white" />
-              </div>
+              <CandlewiseMark className="mx-auto mb-3 h-16 w-16 text-slate-600 dark:text-slate-300" title="" />
               <h2 className="text-[20px] font-bold text-foreground mb-2">
                 Welcome to Candlewise
               </h2>
+              <p className="font-display text-[15px] italic text-foreground/80 mb-2">{TAGLINE}</p>
               <p className="text-[14px] text-muted-foreground mb-6">
                 {hasStocks
                   ? 'Your watchlist is ready; you can start now'
@@ -229,10 +230,11 @@ export function Onboarding({ open, onComplete, hasStocks }: OnboardingProps) {
           )}
 
           <p
-            className="mt-5 border-t border-border/40 pt-3 text-[11px] leading-snug text-muted-foreground"
+            className="note mt-5 flex gap-1.5 px-3 py-2 text-[11px] leading-snug"
             data-testid="onboarding-disclaimer"
           >
-            {shortDisclaimer}
+            <Info className="mt-0.5 h-3 w-3 shrink-0" aria-hidden="true" />
+            <span>{shortDisclaimer}</span>
           </p>
         </div>
       </DialogContent>

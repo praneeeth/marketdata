@@ -27,6 +27,8 @@ import StockPriceAlertPanel from '@candlewise/biz-ui/components/stock-price-aler
 import { useCompliance } from '@/hooks/use-compliance'
 import { formatINR } from '@/lib/format'
 import { Change } from '@/components/common/Change'
+import { PageHeader } from '@/components/common/Brand'
+import { ErrorState, errorMessage } from '@/components/common/states'
 import { useNavigate } from 'react-router-dom'
 
 interface AgentResult {
@@ -366,6 +368,7 @@ const mergePortfolioQuotes = (
 
 export default function StocksPage() {
   const navigate = useNavigate()
+  const [pageError, setPageError] = useState('')
   const { isEnabled } = useCompliance()
   const adviceEnabled = isEnabled('suggestion_pool')
   const [stocks, setStocks] = useState<Stock[]>([])
@@ -814,7 +817,11 @@ export default function StocksPage() {
         if (!signal.aborted) console.warn('Failed to load background data for the holdings page:', error)
       })
     })().catch(error => {
-      if (!signal.aborted) console.error('Failed to load the holdings page data:', error)
+      if (signal.aborted) return
+      console.error('Failed to load the holdings page data:', error)
+      setPageError(errorMessage(error, 'Failed to load your portfolio'))
+      setLoading(false)
+      setPortfolioLoading(false)
     }).finally(() => {
       initialLoadPromiseRef.current = null
     })
@@ -905,14 +912,16 @@ export default function StocksPage() {
     ])
   }, [loadPoolSuggestions, loadPriceAlertSummaries, refreshKlines, refreshQuotes])
 
+  const [reloadKey, setReloadKey] = useState(0)
   useEffect(() => {
     const controller = new AbortController()
+    setPageError('')
     void loadInitialData(controller.signal)
     return () => {
       controller.abort()
       initialLoadPromiseRef.current = null
     }
-  }, [loadInitialData])
+  }, [loadInitialData, reloadKey])
 
   useEffect(() => {
     if (agentDialogStock) void loadConfigAsync()
@@ -1473,9 +1482,20 @@ export default function StocksPage() {
   }
 
   // Skeleton screen on the first load
-  if (loading) {
+  if (pageError && !portfolio) {
     return (
       <div>
+        <PageHeader eyebrow="Portfolio" title="Holdings" />
+        <div className="card">
+          <ErrorState title="Couldn't load your portfolio" message={pageError} onRetry={() => setReloadKey((k) => k + 1)} />
+        </div>
+      </div>
+    )
+  }
+
+  if (loading) {
+    return (
+      <div role="status" aria-label="Loading your portfolio">
         {/* Header Skeleton */}
         <div className="flex items-center justify-between mb-6">
           <div>
@@ -1525,7 +1545,10 @@ export default function StocksPage() {
       {/* Header */}
       <div className="flex flex-col gap-2 md:gap-3 mb-5 md:mb-6">
         <div className="flex items-center justify-between gap-2">
-          <h1 className="text-[18px] md:text-[22px] font-bold text-foreground tracking-tight shrink-0">Holdings</h1>
+          <div className="shrink-0">
+            <div className="eyebrow">Portfolio</div>
+            <h1 className="page-title">Holdings</h1>
+          </div>
           {/* Desktop buttons + controls */}
           <div className="hidden md:flex items-center gap-3">
             {/* Controls */}
@@ -1868,14 +1891,14 @@ export default function StocksPage() {
                     <div className="text-left md:text-right">
                       <div className="text-[10px] md:text-[11px] text-muted-foreground">P&amp;L</div>
                       <div className={`text-[12px] md:text-[13px] font-mono font-medium whitespace-nowrap ${account.total_pnl >= 0 ? 'text-up' : 'text-down'}`}>
-                        {account.total_pnl >= 0 ? '+' : ''}{formatMoney(account.total_pnl)}
-                        <span className="text-[10px] md:text-[11px] ml-1 hidden md:inline">({account.total_pnl_pct >= 0 ? '+' : ''}{account.total_pnl_pct.toFixed(2)}%)</span>
+                        <Change value={account.total_pnl} kind="inr" />
+                        <span className="text-[10px] md:text-[11px] ml-1 hidden md:inline">(<Change value={account.total_pnl_pct} />)</span>
                       </div>
                     </div>
                     <div className="text-left md:text-right">
                       <div className="text-[10px] md:text-[11px] text-muted-foreground">Today</div>
                       <div className={`text-[12px] md:text-[13px] font-mono font-medium whitespace-nowrap ${account.total_daily_pnl >= 0 ? 'text-up' : 'text-down'}`}>
-                        {account.total_daily_pnl >= 0 ? '+' : ''}{formatMoney(account.total_daily_pnl)}
+                        <Change value={account.total_daily_pnl} kind="inr" />
                       </div>
                     </div>
                     <div className="text-left md:text-right hidden sm:block">
@@ -1996,7 +2019,7 @@ export default function StocksPage() {
                                     {pos.current_price != null ? <span>{pos.current_price.toFixed(2)}</span> : '—'}
                                   </td>
                                   <td className={`px-4 py-2.5 text-right font-mono text-[12px] ${changeColor}`}>
-                                    {pos.change_pct != null ? `${pos.change_pct >= 0 ? '+' : ''}${pos.change_pct.toFixed(2)}%` : '—'}
+                                    {pos.change_pct != null ? <Change value={pos.change_pct} /> : '—'}
                                   </td>
                                   <td className="px-4 py-2.5 text-right font-mono text-[12px] text-muted-foreground">{formatPrice(pos.cost_price)}</td>
                                   <td className="px-4 py-2.5 text-right font-mono text-[12px] text-muted-foreground">{pos.quantity}</td>
@@ -2010,16 +2033,16 @@ export default function StocksPage() {
                                   <td className={`px-4 py-2.5 text-right font-mono text-[12px] ${pnlColor}`}>
                                     {pos.pnl != null ? (
                                       <div className="flex flex-col items-end">
-                                        <span>{pos.pnl >= 0 ? '+' : ''}{formatMoney(pos.pnl)}</span>
-                                        <span className="text-[10px] opacity-70">{pos.pnl_pct != null ? `${pos.pnl_pct >= 0 ? '+' : ''}${pos.pnl_pct.toFixed(2)}%` : ''}</span>
+                                        <span><Change value={pos.pnl} kind="inr" /></span>
+                                        <span className="text-[10px] opacity-70">{pos.pnl_pct != null ? <Change value={pos.pnl_pct} /> : ''}</span>
                                       </div>
                                     ) : '—'}
                                   </td>
                                   <td className={`px-4 py-2.5 text-right font-mono text-[12px] ${pos.daily_pnl != null ? (pos.daily_pnl >= 0 ? 'text-up' : 'text-down') : ''}`}>
                                     {pos.daily_pnl != null ? (
                                       <div className="flex flex-col items-end">
-                                        <span>{pos.daily_pnl >= 0 ? '+' : ''}{formatMoney(pos.daily_pnl)}</span>
-                                        <span className="text-[10px] opacity-70">{pos.daily_pnl_pct != null ? `${pos.daily_pnl_pct >= 0 ? '+' : ''}${pos.daily_pnl_pct.toFixed(2)}%` : ''}</span>
+                                        <span><Change value={pos.daily_pnl} kind="inr" /></span>
+                                        <span className="text-[10px] opacity-70">{pos.daily_pnl_pct != null ? <Change value={pos.daily_pnl_pct} /> : ''}</span>
                                       </div>
                                     ) : '—'}
                                   </td>
@@ -2152,7 +2175,7 @@ export default function StocksPage() {
                                 </div>
                                 <div className={`font-mono text-[13px] font-medium whitespace-nowrap shrink-0 ${changeColor}`}>
                                   {pos.current_price?.toFixed(2) || '—'}
-                                  {pos.change_pct != null && <span className="text-[11px] ml-1">{pos.change_pct >= 0 ? '+' : ''}{pos.change_pct.toFixed(2)}%</span>}
+                                  {pos.change_pct != null && <span className="text-[11px] ml-1"><Change value={pos.change_pct} /></span>}
                                 </div>
                               </div>
                               {/* Row 2 (Suggestion badge, dedicated row to avoid wrapping mess) */}
@@ -2184,18 +2207,18 @@ export default function StocksPage() {
                                 <div className="min-w-0">
                                   <div className="text-[10px] text-muted-foreground">P&amp;L</div>
                                   <div className={`font-mono whitespace-nowrap ${pnlColor}`}>
-                                    {pos.pnl != null ? `${pos.pnl >= 0 ? '+' : ''}${formatMoney(pos.pnl)}` : '—'}
+                                    {pos.pnl != null ? <Change value={pos.pnl} kind="inr" /> : '—'}
                                   </div>
                                   {pos.pnl_pct != null && (
                                     <div className={`text-[10px] font-mono ${pnlColor} opacity-80`}>
-                                      {pos.pnl_pct >= 0 ? '+' : ''}{pos.pnl_pct.toFixed(2)}%
+                                      <Change value={pos.pnl_pct} />
                                     </div>
                                   )}
                                 </div>
                                 <div className="min-w-0">
                                   <div className="text-[10px] text-muted-foreground">Today</div>
                                   <div className={`font-mono whitespace-nowrap ${pos.daily_pnl != null ? (pos.daily_pnl >= 0 ? 'text-up' : 'text-down') : 'text-muted-foreground'}`}>
-                                    {pos.daily_pnl != null ? `${pos.daily_pnl >= 0 ? '+' : ''}${formatMoney(pos.daily_pnl)}` : '—'}
+                                    {pos.daily_pnl != null ? <Change value={pos.daily_pnl} kind="inr" /> : '—'}
                                   </div>
                                 </div>
                               </div>
@@ -2367,7 +2390,7 @@ export default function StocksPage() {
                           {quote?.current_price != null ? quote.current_price.toFixed(2) : '--'}
                         </div>
                         <div className={`font-mono text-[11px] leading-tight ${changeColor}`}>
-                          {quote?.change_pct != null ? `${quote.change_pct >= 0 ? '+' : ''}${quote.change_pct.toFixed(2)}%` : '--'}
+                          {quote?.change_pct != null ? <Change value={quote.change_pct} /> : '—'}
                         </div>
                       </div>
                     </div>

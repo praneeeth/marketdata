@@ -159,12 +159,22 @@ export default function ResearchSummary({
 
         <Section title="Key levels" icon={<Ruler className="h-4 w-4" />}>
           <div className="space-y-2">
-            <LevelRow label="Support" values={support} lastClose={lastClose} />
-            <LevelRow label="Resistance" values={resistance} lastClose={lastClose} />
-            {parsed.levels.length > 0 && <Items items={parsed.levels} empty="" />}
-            <p className="text-[11px] text-muted-foreground">
-              Computed from daily candles{levels?.asof ? ` up to ${formatIST(levels.asof, 'date')}` : ''}; % is the distance from the last close. Descriptive only.
-            </p>
+            {levels !== undefined && (
+              <>
+                <LevelRow label="Support" values={support} lastClose={lastClose} />
+                <LevelRow label="Resistance" values={resistance} lastClose={lastClose} />
+              </>
+            )}
+            {parsed.levels.length > 0 ? (
+              <Items items={parsed.levels} empty="" />
+            ) : levels === undefined ? (
+              <p className="text-[13px] text-muted-foreground">No levels mentioned in this report.</p>
+            ) : null}
+            {levels !== undefined && (
+              <p className="text-[11px] text-muted-foreground">
+                Computed from daily candles{levels?.asof ? ` up to ${formatIST(levels.asof, 'date')}` : ''}; % is the distance from the last close. Descriptive only.
+              </p>
+            )}
           </div>
         </Section>
 

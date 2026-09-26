@@ -18,12 +18,17 @@ describe('route page loaders', () => {
       'dataSources',
       'settings',
       'analysisDetail',
+      'stockDetail',
     ])
   })
 
   it('resolves both assistant routes to the same page loader', () => {
     expect(resolveRouteKey('/assistant')).toBe('assistant')
     expect(resolveRouteKey('/assistant/123')).toBe('assistant')
+  })
+
+  it('resolves the stock detail page', () => {
+    expect(resolveRouteKey('/stock/INFY')).toBe('stockDetail')
   })
 
   it('does not preload an unknown route', () => {

@@ -8,6 +8,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { Label } from '@candlewise/base-ui/components/ui/label'
 import { Input } from '@candlewise/base-ui/components/ui/input'
 import { useToast } from '@candlewise/base-ui/components/ui/toast'
+import { PageHeader } from '@/components/common/Brand'
+import { EmptyState, ErrorState, LoadingState, errorMessage } from '@/components/common/states'
 
 interface AgentConfig {
   id: number
@@ -155,6 +157,7 @@ export default function AgentsPage() {
   const [services, setServices] = useState<AIService[]>([])
   const [channels, setChannels] = useState<NotifyChannel[]>([])
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState('')
   const [triggering, setTriggering] = useState<string | null>(null)
 
   const [bindDialogAgent, setBindDialogAgent] = useState<AgentConfig | null>(null)
@@ -200,6 +203,7 @@ export default function AgentsPage() {
   }
 
   const load = async () => {
+    setLoadError('')
     try {
       const [agentData, stockData, servicesData, channelData] = await Promise.all([
         fetchAPI<AgentConfig[]>('/agents'),
@@ -226,6 +230,7 @@ export default function AgentsPage() {
       setPreviews(Object.fromEntries(previewPairs))
     } catch (e) {
       console.error(e)
+      setLoadError(errorMessage(e, 'Failed to load agents'))
     } finally {
       setLoading(false)
     }
@@ -482,19 +487,24 @@ export default function AgentsPage() {
   }
 
   if (loading) {
+    return <div className="card"><LoadingState rows={5} label="Loading agents…" /></div>
+  }
+  if (loadError && agents.length === 0) {
     return (
-      <div className="flex items-center justify-center py-20">
-        <span className="w-5 h-5 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
+      <div>
+        <PageHeader eyebrow="Automation" title="Agents" />
+        <div className="card"><ErrorState title="Couldn't load agents" message={loadError} onRetry={() => { setLoading(true); void load() }} /></div>
       </div>
     )
   }
 
   return (
     <div>
-      <div className="mb-4 md:mb-8">
-        <h1 className="text-[20px] md:text-[22px] font-bold text-foreground tracking-tight">Agent</h1>
-        <p className="text-[12px] md:text-[13px] text-muted-foreground mt-0.5 md:mt-1">Automated tasks and schedules</p>
-      </div>
+      <PageHeader
+        eyebrow="Automation"
+        title="Agents"
+        description="Scheduled research tasks. Schedules run in IST; every output goes through the research-only guard."
+      />
 
       {/* Scheduler Health */}
       <div className="card p-4 mb-4">
@@ -522,12 +532,8 @@ export default function AgentsPage() {
       </div>
 
       {agents.length === 0 ? (
-        <div className="card flex flex-col items-center justify-center py-20">
-          <div className="w-14 h-14 rounded-xl bg-primary/10 flex items-center justify-center mb-4">
-            <Bot className="w-6 h-6 text-primary" />
-          </div>
-          <p className="text-[15px] font-semibold text-foreground">No agents</p>
-          <p className="text-[13px] text-muted-foreground mt-1.5">Agents register automatically once the backend starts</p>
+        <div className="card">
+          <EmptyState icon={<Bot className="h-5 w-5" />} title="No agents yet" description="Agents register automatically once the backend starts." />
         </div>
       ) : (
         <div className="space-y-4">

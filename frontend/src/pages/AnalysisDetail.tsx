@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { Link, useParams, useNavigate } from 'react-router-dom'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import {
@@ -28,6 +28,10 @@ import { Switch } from '@candlewise/base-ui/components/ui/switch'
 import { buildAnalysisSections } from '@candlewise/biz-ui/analysis-sections'
 import ShareCardModal from '../components/ShareCardModal'
 import { useCompliance } from '@/hooks/use-compliance'
+import ResearchSummary from '@/components/research/ResearchSummary'
+import { DisclaimerNote } from '@/components/common/Brand'
+import { EmptyState, ErrorState, LoadingState, errorMessage } from '@/components/common/states'
+import { formatIST } from '@/lib/format'
 
 const DECISION_COLOR: Record<string, string> = {
   buy: 'text-up',
@@ -119,6 +123,8 @@ export default function AnalysisDetailPage() {
     }
   })
   const [pdfBusy, setPdfBusy] = useState(false)
+  const [loadError, setLoadError] = useState('')
+  const [reloadKey, setReloadKey] = useState(0)
   const [shareOpen, setShareOpen] = useState(false)
 
   const handleExportPdf = async () => {
@@ -135,16 +141,17 @@ export default function AnalysisDetailPage() {
 
   useEffect(() => {
     setLoading(true)
+    void reloadKey
     tradingAgentsApi
       .getAnalysisByDate(symbol, date)
-      .then(setResult)
-      .catch(() => setResult(null))
+      .then((r) => { setResult(r); setLoadError('') })
+      .catch((e) => { setResult(null); setLoadError(errorMessage(e)) })
       .finally(() => setLoading(false))
     tradingAgentsApi
       .getHistoryComparison(symbol, inferMarket(symbol), 90)
       .then(setHistory)
       .catch(() => setHistory(null))
-  }, [symbol, date])
+  }, [symbol, date, reloadKey])
 
   // Remember the sub-heading toggle
   useEffect(() => {
@@ -198,16 +205,23 @@ export default function AnalysisDetailPage() {
   }, [result, toc.length])
 
   if (loading) {
-    return <div className="p-12 text-center text-muted-foreground">Loading...</div>
+    return <LoadingState label="Loading the research report…" className="py-24" />
+  }
+  if (loadError) {
+    return <ErrorState title="Couldn't load this report" message={loadError} onRetry={() => setReloadKey((k) => k + 1)} className="py-24" />
   }
   if (!result) {
     return (
-      <div className="p-12 text-center text-muted-foreground space-y-3">
-        <div>No deep research record for {symbol} on {date}</div>
-        <button onClick={() => navigate(-1)} className="text-primary hover:underline">
-          Back
-        </button>
-      </div>
+      <EmptyState
+        title="No report for this date"
+        description={`There's no deep research for ${symbol} on ${date}.`}
+        action={
+          <Link to={`/stock/${encodeURIComponent(symbol)}`} className="text-[13px] font-medium text-primary hover:underline">
+            Open {symbol}
+          </Link>
+        }
+        className="py-24"
+      />
     )
   }
 
@@ -283,8 +297,12 @@ export default function AnalysisDetailPage() {
             >
               <ArrowLeft className="w-4 h-4" />
             </button>
-            <h1 className="text-base font-bold truncate min-w-0">{result.title || `${symbol} deep research`}</h1>
-            <span className="text-[12px] text-muted-foreground shrink-0">{date}</span>
+            <div className="min-w-0">
+              <div className="eyebrow">
+                <Link to={`/stock/${encodeURIComponent(symbol)}`} className="hover:text-foreground">{symbol}</Link> · {formatIST(date, 'date')}
+              </div>
+              <h1 className="font-display text-[20px] md:text-[24px] font-semibold leading-tight truncate">{result.title || `${symbol} deep research`}</h1>
+            </div>
             <button
               onClick={() => setShareOpen(true)}
               className="ml-auto shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border/50 text-[12.5px] text-muted-foreground hover:text-foreground hover:bg-accent transition-all"
@@ -305,6 +323,15 @@ export default function AnalysisDetailPage() {
           </div>
 
           {/* Body */}
+          {rawData.research_summary && (
+            <div className="mb-8">
+              <ResearchSummary
+                markdown={rawData.research_summary}
+                analysisDate={date}
+                sources={[{ label: 'Deep research', title: 'Multi-agent research summary', time: date }]}
+              />
+            </div>
+          )}
           <article>
           {/* Decision summary (at the top of the body on mobile; in the right sidebar on desktop, see the aside below) */}
           {sug && (
@@ -323,7 +350,7 @@ export default function AnalysisDetailPage() {
           )}
 
           {/* Mobile table of contents: a sticky collapsed bar showing the current section; opens an overlay dropdown that closes on choice/outside click (hidden on desktop) */}
-          <div className="lg:hidden sticky top-16 z-30 mb-6">
+          <div className="lg:hidden sticky top-14 z-30 mb-6">
             <div className="relative">
               <button
                 onClick={() => setTocOpen((o) => !o)}
@@ -428,9 +455,7 @@ export default function AnalysisDetailPage() {
           )}
 
           {/* Disclaimer */}
-          <div className="text-[11px] text-muted-foreground/70 italic border-t border-border/30 pt-4">
-            {shortDisclaimer}
-          </div>
+          <DisclaimerNote className="mt-6">{shortDisclaimer}</DisclaimerNote>
           </article>
         </div>
 

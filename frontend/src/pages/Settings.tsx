@@ -11,6 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@candlewise/base-ui/components/ui/select'
 import { useToast } from '@candlewise/base-ui/components/ui/toast'
 import { PRODUCT_NAME, UPSTREAM_NAME, UPSTREAM_URL } from '@/lib/brand'
+import { ErrorState, LoadingState, errorMessage } from '@/components/common/states'
 
 interface Setting {
   key: string
@@ -105,6 +106,7 @@ export default function SettingsPage() {
   const [channels, setChannels] = useState<NotifyChannel[]>([])
   const [version, setVersion] = useState<string>('')
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState('')
   const [health, setHealth] = useState<AgentsHealth | null>(null)
   const [saving, setSaving] = useState<string | null>(null)
   const [saved, setSaved] = useState<string | null>(null)
@@ -211,6 +213,7 @@ export default function SettingsPage() {
   ]
 
   const load = async () => {
+    setLoadError('')
     try {
       const [settingsData, servicesData, channelsData, versionData, healthData] = await Promise.all([
         fetchAPI<Setting[]>('/settings'),
@@ -226,6 +229,7 @@ export default function SettingsPage() {
       setHealth(healthData)
     } catch (e) {
       console.error(e)
+      setLoadError(errorMessage(e, 'Failed to load settings'))
     } finally {
       setLoading(false)
     }
@@ -590,9 +594,12 @@ export default function SettingsPage() {
   }
 
   if (loading) {
+    return <div className="card"><LoadingState rows={6} label="Loading settings…" /></div>
+  }
+  if (loadError && settings.length === 0) {
     return (
-      <div className="flex items-center justify-center py-20">
-        <span className="w-5 h-5 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
+      <div className="card">
+        <ErrorState title="Couldn't load settings" message={loadError} onRetry={() => { setLoading(true); void load() }} />
       </div>
     )
   }

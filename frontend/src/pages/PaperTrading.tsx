@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react'
-import { RefreshCw, Power, RotateCcw, X, TrendingUp, TrendingDown, Trophy, BarChart3, Wallet, Activity, Play, Bell, SlidersHorizontal } from 'lucide-react'
+import { RefreshCw, Power, RotateCcw, X, TrendingUp, TrendingDown, Trophy, BarChart3, Wallet, Play, Bell, SlidersHorizontal } from 'lucide-react'
 import {
   paperTradingApi,
   type PaperTradingAccountResponse,
@@ -15,8 +15,10 @@ import { Switch } from '@candlewise/base-ui/components/ui/switch'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@candlewise/base-ui/components/ui/dialog'
 import { useToast } from '@candlewise/base-ui/components/ui/toast'
 import { useCompliance } from '@/hooks/use-compliance'
-import { formatINR } from '@/lib/format'
+import { formatCompact, formatINR } from '@/lib/format'
 import { Change } from '@/components/common/Change'
+import { FlaskConical } from 'lucide-react'
+import { EmptyState, ErrorState, LoadingState, errorMessage } from '@/components/common/states'
 
 const EXIT_REASON_MAP: Record<string, string> = {
   stop_loss: 'Stop loss',
@@ -64,8 +66,9 @@ function EquityChart({ data }: { data: EquityCurvePoint[] }) {
   const areaD = pathD + ` L${points[points.length - 1].x},${pad.top + h} L${points[0].x},${pad.top + h} Z`
 
   const isPositive = values[values.length - 1] >= values[0]
-  const strokeColor = isPositive ? '#10b981' : '#ef4444'
-  const fillColor = isPositive ? 'rgba(244,63,94,0.1)' : 'rgba(16,185,129,0.1)'
+  const strokeColor = isPositive ? 'hsl(var(--up))' : 'hsl(var(--down))'
+  const fillColor = isPositive ? 'hsl(var(--up) / 0.1)' : 'hsl(var(--down) / 0.1)'
+  const changePct = values[0] ? ((values[values.length - 1] - values[0]) / values[0]) * 100 : 0
 
   // Y axis ticks
   const yTicks = 4
@@ -79,13 +82,19 @@ function EquityChart({ data }: { data: EquityCurvePoint[] }) {
   const xLabels = xIndices.map(i => ({ label: data[i].date.slice(5), x: points[i].x }))
 
   return (
-    <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-auto" preserveAspectRatio="xMidYMid meet">
+    <svg
+      viewBox={`0 0 ${width} ${height}`}
+      className="w-full h-auto"
+      preserveAspectRatio="xMidYMid meet"
+      role="img"
+      aria-label={`Simulated return curve from ${data[0].date} to ${data[data.length - 1].date}: ${changePct >= 0 ? 'up' : 'down'} ${Math.abs(changePct).toFixed(2)}%`}
+    >
       {/* Grid lines */}
       {yLabels.map((t, i) => (
         <g key={i}>
           <line x1={pad.left} x2={width - pad.right} y1={t.y} y2={t.y} stroke="hsl(var(--border))" strokeWidth={0.5} />
           <text x={pad.left - 6} y={t.y + 4} textAnchor="end" fill="hsl(var(--muted-foreground))" fontSize={10}>
-            {(t.v / 100000).toFixed(1)}L
+            ₹{formatCompact(t.v, 1)}
           </text>
         </g>
       ))}
@@ -114,6 +123,7 @@ export default function PaperTradingPage() {
   const [equityCurve, setEquityCurve] = useState<EquityCurvePoint[]>([])
   const [strategyPerf, setStrategyPerf] = useState<StrategyPerformanceItem[]>([])
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState('')
   const [scanning, setScanning] = useState(false)
   const [tradesPage, setTradesPage] = useState(0)
   const tradesPageSize = 20
@@ -141,6 +151,7 @@ export default function PaperTradingPage() {
 
   const loadData = useCallback(async () => {
     setLoading(true)
+    setLoadError('')
     try {
       const mkt = marketView === 'ALL' ? undefined : marketView
       const [acc, pos, tradeData, metrics] = await Promise.all([
@@ -155,8 +166,8 @@ export default function PaperTradingPage() {
       setTradesTotal(tradeData.total)
       setEquityCurve(metrics.equity_curve)
       setStrategyPerf(metrics.strategy_performance || [])
-    } catch {
-      toast('Failed to load', 'error')
+    } catch (e) {
+      setLoadError(errorMessage(e, 'Failed to load the simulation account'))
     } finally {
       setLoading(false)
     }
@@ -319,15 +330,16 @@ export default function PaperTradingPage() {
     <div className="space-y-5">
       {/* Header */}
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-        <div className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-primary to-primary/70 flex items-center justify-center shrink-0">
-            <Activity className="w-4 h-4 text-white" />
+        <div className="flex flex-wrap items-center gap-2">
+          <div>
+            <div className="eyebrow">Paper trading</div>
+            <h1 className="page-title">Simulation</h1>
           </div>
-          <h1 className="text-lg font-bold">Simulation</h1>
           <span
-            className="text-xs px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-600 font-semibold"
+            className="inline-flex items-center gap-1 self-end rounded-md border border-simulation/30 bg-simulation/10 px-1.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-simulation"
             data-testid="simulation-label"
           >
+            <FlaskConical className="h-3 w-3" aria-hidden="true" />
             {compliance?.simulation.label || 'Simulation'}
           </span>
           {aiTradingEnabled && account && (
@@ -375,14 +387,28 @@ export default function PaperTradingPage() {
       </div>
 
       <div
-        className="rounded-xl border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-[12px] text-foreground"
+        className="flex gap-2 rounded-lg border border-simulation/30 bg-simulation/5 px-3 py-2.5 text-[12px] leading-relaxed text-foreground"
         data-testid="simulation-notice"
+        role="note"
       >
+        <FlaskConical className="mt-0.5 h-3.5 w-3.5 shrink-0 text-simulation" aria-hidden="true" />
+        <span>
         {compliance?.simulation.notice ||
           'Simulated trades only. No real orders are placed and no money is at risk.'}
         {!aiTradingEnabled &&
           ' AI-generated simulated trades are turned off in research-only mode; past simulation history remains visible.'}
+        </span>
       </div>
+
+      {loading && !account ? (
+        <div className="card"><LoadingState rows={5} label="Loading the simulation account…" /></div>
+      ) : loadError && !account ? (
+        <div className="card"><ErrorState title="Couldn't load the simulation" message={loadError} onRetry={loadData} /></div>
+      ) : !account ? (
+        <div className="card">
+          <EmptyState title="No simulation account yet" description="The simulation account is created automatically; reset it to start fresh with simulated rupees." />
+        </div>
+      ) : null}
 
       {/* Market View Filter + capital allocation */}
       {account && (
@@ -448,7 +474,7 @@ export default function PaperTradingPage() {
               <BarChart3 className="w-3.5 h-3.5" />
               Max drawdown
             </div>
-            <div className="text-lg font-bold tabular-nums text-down">{account.max_drawdown_pct > 0 ? '-' : ''}{account.max_drawdown_pct.toFixed(2)}%</div>
+            <div className={`text-lg font-bold tabular-nums ${account.max_drawdown_pct > 0 ? 'text-down' : 'text-muted-foreground'}`}>{account.max_drawdown_pct > 0 ? '▼ -' : ''}{account.max_drawdown_pct.toFixed(2)}%</div>
           </div>
           <div className="card p-3">
             <div className="flex items-center gap-1.5 text-muted-foreground text-xs mb-1">

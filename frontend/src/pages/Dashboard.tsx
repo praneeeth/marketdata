@@ -32,11 +32,14 @@ import DiagnosticsShareCard from '@/components/DiagnosticsShareCard'
 import DigestShareCard from '@/components/DigestShareCard'
 import { useCompliance } from '@/hooks/use-compliance'
 import GlobalMarketsPanel from '@/components/GlobalMarketsPanel'
-import { directionClass, formatINR } from '@/lib/format'
+import { directionClass, formatIST, formatPct } from '@/lib/format'
+import { ErrorState, errorMessage } from '@/components/common/states'
+import { Change } from '@/components/common/Change'
 
+/** Signed percentage with a direction arrow, so colour is never the only cue: "▲ +0.34%". */
 function pct(v?: number | null, digits = 2): string {
-  if (v == null || !isFinite(v)) return '--'
-  return `${v > 0 ? '+' : ''}${v.toFixed(digits)}%`
+  if (v == null || !isFinite(v)) return '—'
+  return `${v > 0 ? '▲ ' : v < 0 ? '▼ ' : ''}${formatPct(v, digits)}`
 }
 function moveColor(v?: number | null): string {
   return directionClass(v)
@@ -48,10 +51,6 @@ function pctChipCls(v?: number | null): string {
   if (v < 0) return 'bg-down/10 text-down'
   return 'bg-accent text-muted-foreground'
 }
-/** Money display: +₹2,175 / +₹1.2 L (sign + Indian units), for regular display outside redacted views. */
-function fmtMoney(v?: number | null): string {
-  return formatINR(v, { signed: true, digits: 0 })
-}
 /** Strip common markdown markers, for the plain-text summary line of briefs. */
 function stripMarkdown(s: string): string {
   return s
@@ -62,14 +61,8 @@ function stripMarkdown(s: string): string {
     .replace(/\s+/g, ' ')
     .trim()
 }
-const WEEKDAY_LABEL = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 function formatHeaderTime(d: Date): string {
-  const y = d.getFullYear()
-  const m = String(d.getMonth() + 1).padStart(2, '0')
-  const day = String(d.getDate()).padStart(2, '0')
-  const hh = String(d.getHours()).padStart(2, '0')
-  const mm = String(d.getMinutes()).padStart(2, '0')
-  return `${y}-${m}-${day} ${WEEKDAY_LABEL[d.getDay()]} · refreshed ${hh}:${mm}`
+  return `Refreshed ${formatIST(d, 'time', { suffix: true })}`
 }
 const ALERT_LABEL: Record<string, string> = {
   surge: 'Sharp rise',
@@ -125,6 +118,7 @@ export default function DashboardPage() {
   const [shareDiag, setShareDiag] = useState(false)
   const [shareDigest, setShareDigest] = useState(false)
   const [showOnboarding, setShowOnboarding] = useState(false)
+  const [loadError, setLoadError] = useState('')
 
   // Slow lane: benchmark/attribution (K-lines for every holding, minutes); retried separately, with clear states for failure/empty
   const loadBench = useCallback(() => {
@@ -142,6 +136,7 @@ export default function DashboardPage() {
 
   const load = useCallback(async () => {
     setLoading(true)
+    setLoadError('')
     // Index pills: loaded separately without blocking the first paint (a cold spark may take ~1s; it appears when ready)
     dashboardApi.indices().then(setIndices).catch(() => {})
     // Fast lane: DB/light queries, so the first paint (essentials / check split / portfolio overview) comes quickly
@@ -161,6 +156,10 @@ export default function DashboardPage() {
     if (td.status === 'fulfilled') setTodos(td.value.todos || [])
     if (ps.status === 'fulfilled') setPortfolioSummary(ps.value)
     if (ms.status === 'fulfilled') setMarketStatus(ms.value)
+    // Every core request failed: say so instead of showing "no holdings".
+    const core = [ov, dg, ps]
+    const firstFailure = core.find((r): r is PromiseRejectedResult => r.status === 'rejected')
+    setLoadError(core.every((r) => r.status === 'rejected') ? errorMessage(firstFailure?.reason, "Couldn't reach the server") : '')
     setLoading(false) // the first paint no longer waits for benchmark/attribution (K-lines for every holding)
     setRefreshedAt(new Date())
 
@@ -332,8 +331,11 @@ export default function DashboardPage() {
     <div className="page-container pb-10">
       {/* Top: title + refresh + date/market status pills */}
       <div className="mb-3 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-        <div className="flex items-center gap-2">
-          <h1 className="text-[20px] font-bold tracking-tight text-foreground md:text-[22px]">What to look at today</h1>
+        <div className="flex items-end gap-2">
+          <div>
+            <div className="eyebrow">{formatIST(new Date(), 'date')}</div>
+            <h1 className="page-title">What to look at today</h1>
+          </div>
           <Button onClick={load} disabled={loading} size="sm" variant="ghost" className="h-7 px-2">
             <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />
           </Button>
@@ -359,14 +361,14 @@ export default function DashboardPage() {
           <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
             <div>
               <div className="text-[11px] text-muted-foreground">Today's P&amp;L</div>
-              <div className={`font-mono text-[22px] font-bold leading-tight ${moveColor(dailyPnl)}`}>{fmtMoney(dailyPnl)}</div>
+              <div className="text-[22px] font-bold leading-tight"><Change value={dailyPnl} kind="inr" digits={0} /></div>
               {dailyPnlPct != null && <div className={`font-mono text-[11px] ${moveColor(dailyPnlPct)}`}>{pct(dailyPnlPct)}</div>}
             </div>
             <div className="hidden h-9 w-px bg-border/60 sm:block" />
             <div>
               <div className="text-[11px] text-muted-foreground">Unrealised P&amp;L</div>
-              <div className={`font-mono text-[14px] ${moveColor(diag!.total_unrealized_pnl)}`}>
-                {fmtMoney(diag!.total_unrealized_pnl)} <span className="text-[11px]">{pct(portfolioPnlPct)}</span>
+              <div className="text-[14px]">
+                <Change value={diag!.total_unrealized_pnl} kind="inr" digits={0} /> <Change value={portfolioPnlPct} arrow={false} className="text-[11px]" />
               </div>
             </div>
             <div>
@@ -394,6 +396,12 @@ export default function DashboardPage() {
           </div>
         )}
       </div>
+
+      {loadError && (
+        <div className="card mb-4">
+          <ErrorState title="Couldn't load today's overview" message={loadError} onRetry={load} className="py-6" />
+        </div>
+      )}
 
       {/* Index pills */}
       <div className="mb-3 grid grid-cols-2 gap-2.5 md:grid-cols-3 lg:grid-cols-5">

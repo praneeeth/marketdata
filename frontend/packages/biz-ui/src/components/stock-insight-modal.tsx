@@ -1436,7 +1436,7 @@ export default function StockInsightModal(props: {
                         {quote?.current_price != null ? formatNumber(quote.current_price) : '--'}
                       </div>
                       <div className={`text-[16px] font-mono ${changeColor}`}>
-                        {quote?.change_pct != null ? `${quote.change_pct >= 0 ? '+' : ''}${quote.change_pct.toFixed(2)}%` : '--'}
+                        {quote?.change_pct != null ? `${quote.change_pct > 0 ? '▲ +' : quote.change_pct < 0 ? '▼ ' : ''}${quote.change_pct.toFixed(2)}%` : '—'}
                       </div>
                     </div>
                     <div className="mt-3 grid grid-cols-3 gap-2 text-[12px]">

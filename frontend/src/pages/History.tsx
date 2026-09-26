@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Clock, Trash2, FileText, ArrowLeft } from 'lucide-react'
+import { Trash2, FileText, ArrowLeft } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import { fetchAPI } from '@candlewise/api'
 import { Button } from '@candlewise/base-ui/components/ui/button'
@@ -8,6 +8,8 @@ import { Badge } from '@candlewise/base-ui/components/ui/badge'
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@candlewise/base-ui/components/ui/select'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@candlewise/base-ui/components/ui/dialog'
 import { useToast } from '@candlewise/base-ui/components/ui/toast'
+import { formatIST } from '@/lib/format'
+import { EmptyState, ErrorState, LoadingState, errorMessage } from '@/components/common/states'
 
 interface HistoryRecord {
   id: number
@@ -41,6 +43,7 @@ export default function HistoryPage() {
   const navigate = useNavigate()
   const [records, setRecords] = useState<HistoryRecord[]>([])
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState('')
   const [selectedAgent, setSelectedAgent] = useState<string>('all')
   const [historyKind, setHistoryKind] = useState<'workflow' | 'capability' | 'all'>('workflow')
   const [selectedId, setSelectedId] = useState<number | null>(null)
@@ -48,40 +51,13 @@ export default function HistoryPage() {
   const [detailRecord, setDetailRecord] = useState<HistoryRecord | null>(null)
 
   const displayTime = (record: HistoryRecord) => record.updated_at || record.created_at
-  const formatDateTime = (iso?: string) => {
-    if (!iso) return '--'
-    const s = String(iso).trim()
-    if (!s) return '--'
-    // Keep original offset semantics; only normalize display format and strip fractional seconds.
-    let normalized = s.replace(' ', 'T').replace(/Z$/, '+00:00')
-    normalized = normalized.replace(/\.\d+(?=[+-]\d{2}:\d{2}$)/, '')
-    if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}[+-]\d{2}:\d{2}$/.test(normalized)) {
-      return normalized
-    }
-    const d = new Date(s)
-    if (isNaN(d.getTime())) return s
-    const pad = (n: number) => String(n).padStart(2, '0')
-    const year = d.getFullYear()
-    const month = pad(d.getMonth() + 1)
-    const day = pad(d.getDate())
-    const hour = pad(d.getHours())
-    const minute = pad(d.getMinutes())
-    const second = pad(d.getSeconds())
-    const tz = -d.getTimezoneOffset()
-    const sign = tz >= 0 ? '+' : '-'
-    const tzHour = pad(Math.floor(Math.abs(tz) / 60))
-    const tzMinute = pad(Math.abs(tz) % 60)
-    return `${year}-${month}-${day}T${hour}:${minute}:${second}${sign}${tzHour}:${tzMinute}`
-  }
-
-  const formatTimeShort = (iso?: string) => {
-    const full = formatDateTime(iso)
-    const m = full.match(/T(\d{2}:\d{2}):\d{2}[+-]\d{2}:\d{2}$/)
-    return m ? m[1] : '--:--'
-  }
+  /** Times in IST, e.g. "26 Sept 2026, 15:30 IST". */
+  const formatDateTime = (iso?: string) => formatIST(iso, 'datetime', { suffix: true })
+  const formatTimeShort = (iso?: string) => formatIST(iso, 'time')
 
   const load = async () => {
     setLoading(true)
+    setLoadError('')
     try {
       const params = new URLSearchParams()
       if (selectedAgent && selectedAgent !== 'all') params.set('agent_name', selectedAgent)
@@ -90,7 +66,7 @@ export default function HistoryPage() {
       const data = await fetchAPI<HistoryRecord[]>(`/history?${params.toString()}`)
       setRecords(data || [])
     } catch (e) {
-      toast(e instanceof Error ? e.message : 'Failed to load', 'error')
+      setLoadError(errorMessage(e, 'Failed to load'))
     } finally {
       setLoading(false)
     }
@@ -160,13 +136,11 @@ export default function HistoryPage() {
   return (
     <div className="w-full space-y-4 md:space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div className="flex items-center gap-2 md:gap-3">
-          <div className="w-9 h-9 md:w-10 md:h-10 rounded-xl bg-gradient-to-br from-amber-500 to-amber-500/70 flex items-center justify-center shadow-sm">
-            <Clock className="w-4 h-4 md:w-5 md:h-5 text-white" />
-          </div>
+        <div className="flex items-end gap-3">
           <div>
-            <h1 className="text-lg md:text-xl font-bold">Analysis history</h1>
-            <p className="text-[12px] md:text-[13px] text-muted-foreground">Read like a report: contents + body</p>
+            <div className="eyebrow">History</div>
+            <h1 className="page-title">Analysis history</h1>
+            <p className="text-[13px] text-muted-foreground">Past reports from your agents, newest first. Times in IST.</p>
           </div>
           <div className="hidden md:flex px-2.5 py-1 rounded-full bg-background/70 border border-border/50 text-[11px] text-muted-foreground">
             <span className="font-mono text-foreground/90">{records.length}</span> records
@@ -199,13 +173,16 @@ export default function HistoryPage() {
       </div>
 
       {loading ? (
-        <div className="card p-12 text-center">
-          <div className="w-6 h-6 border-2 border-primary/30 border-t-primary rounded-full animate-spin mx-auto" />
-        </div>
+        <div className="card"><LoadingState rows={6} label="Loading history…" /></div>
+      ) : loadError ? (
+        <div className="card"><ErrorState title="Couldn't load history" message={loadError} onRetry={load} /></div>
       ) : records.length === 0 ? (
-        <div className="card p-12 text-center">
-          <FileText className="w-12 h-12 text-muted-foreground/30 mx-auto mb-3" />
-          <p className="text-muted-foreground">No analysis records</p>
+        <div className="card">
+          <EmptyState
+            icon={<FileText className="h-5 w-5" />}
+            title="No reports yet"
+            description="Reports appear here after an agent runs. Enable agents on the Agents page, or run deep research on a stock."
+          />
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-12 gap-4">

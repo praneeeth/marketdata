@@ -7,6 +7,8 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { useToast } from '@candlewise/base-ui/components/ui/toast'
 import PriceAlertFormDialog, { type AlertConditionItem, type PriceAlertFormState, type PriceAlertSubmitPayload } from '@candlewise/biz-ui/components/price-alert-form-dialog'
 import { formatIST } from '@/lib/format'
+import { PageHeader } from '@/components/common/Brand'
+import { EmptyState, ErrorState, LoadingState, errorMessage } from '@/components/common/states'
 
 type RuleOp = 'and' | 'or'
 
@@ -86,6 +88,7 @@ export default function PriceAlertsPage() {
   const { toast } = useToast()
   const location = useLocation()
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState('')
   const [rules, setRules] = useState<AlertRule[]>([])
   const [stocks, setStocks] = useState<StockItem[]>([])
   const [channels, setChannels] = useState<NotifyChannel[]>([])
@@ -103,6 +106,7 @@ export default function PriceAlertsPage() {
 
   const load = async () => {
     setLoading(true)
+    setLoadError('')
     try {
       const [ruleData, stockData, channelData] = await Promise.all([
         fetchAPI<AlertRule[]>('/price-alerts'),
@@ -113,7 +117,7 @@ export default function PriceAlertsPage() {
       setStocks(stockData || [])
       setChannels(channelData || [])
     } catch (e) {
-      toast(e instanceof Error ? e.message : 'Failed to load', 'error')
+      setLoadError(errorMessage(e, 'Failed to load'))
     } finally {
       setLoading(false)
     }
@@ -278,10 +282,11 @@ export default function PriceAlertsPage() {
 
   return (
     <div>
-      <div className="mb-4 md:mb-8">
-        <h1 className="text-[20px] md:text-[22px] font-bold text-foreground tracking-tight">Price alerts</h1>
-        <p className="text-[12px] md:text-[13px] text-muted-foreground mt-0.5 md:mt-1">Triggered by price/volume, with cooldowns, daily limits and a market-hours gate</p>
-      </div>
+      <PageHeader
+        eyebrow="Alerts"
+        title="Price alerts"
+        description="Triggered by price or volume, with cooldowns, daily limits and a market-hours gate. Alerts notify; they never place orders."
+      />
 
       <div className="card p-4 mb-4 flex items-center justify-between gap-2">
         <div className="text-[12px] text-muted-foreground">Rules: {rules.length}</div>
@@ -298,12 +303,17 @@ export default function PriceAlertsPage() {
       </div>
 
       {loading ? (
-        <div className="flex items-center justify-center py-20"><span className="w-5 h-5 border-2 border-primary/30 border-t-primary rounded-full animate-spin" /></div>
+        <div className="card"><LoadingState rows={4} label="Loading alert rules…" /></div>
+      ) : loadError ? (
+        <div className="card"><ErrorState title="Couldn't load alerts" message={loadError} onRetry={load} /></div>
       ) : rules.length === 0 ? (
-        <div className="card p-8 text-center">
-          <BellRing className="w-6 h-6 mx-auto text-muted-foreground" />
-          <div className="mt-2 text-[14px] text-foreground">No price alert rules</div>
-          <div className="mt-1 text-[12px] text-muted-foreground">Once you create a rule, the app scans every minute and sends notifications when it triggers</div>
+        <div className="card">
+          <EmptyState
+            icon={<BellRing className="h-5 w-5" />}
+            title="No price alert rules"
+            description="Once you create a rule, the app checks it every minute during market hours and notifies you when it triggers."
+            action={<Button size="sm" onClick={openCreate}><Plus className="w-3.5 h-3.5" /> New rule</Button>}
+          />
         </div>
       ) : (
         <div className="space-y-3">

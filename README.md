@@ -1,15 +1,21 @@
-> **India fork (work in progress).** This repository is a fork of
-> [PanWatch](https://github.com/TNT-Likely/PanWatch) by sunxiao0721, used under the MIT
-> License (see [`LICENSE`](LICENSE)). It is being adapted into a research-only assistant
-> for Indian retail investors (NSE/BSE). See [`docs/india-fork/PLAN.md`](docs/india-fork/PLAN.md)
-> for the plan and [`docs/india-fork/ARCHITECTURE.md`](docs/india-fork/ARCHITECTURE.md)
-> for the architecture map.
+<p align="center">
+  <img src="frontend/public/icon.svg" alt="Candlewise logo: a candlestick whose wick ends in a small flame" width="96" height="96" />
+</p>
+
+<h1 align="center">Candlewise</h1>
+
+<p align="center"><b>Read the market. Decide for yourself.</b></p>
+
+> **Fork notice.** Candlewise is a fork of [PanWatch](https://github.com/TNT-Likely/PanWatch)
+> by TNT-Likely (sunxiao0721), used under the MIT License (see [`LICENSE`](LICENSE)). It is
+> being adapted into a research-only assistant for Indian retail investors (NSE/BSE). See
+> [`docs/india-fork/PLAN.md`](docs/india-fork/PLAN.md) for the plan and
+> [`docs/india-fork/ARCHITECTURE.md`](docs/india-fork/ARCHITECTURE.md) for the architecture
+> map. Work in progress.
 >
 > Nothing in this project is investment advice.
 
 ---
-
-# PanWatch (India fork)
 
 **A self-hosted AI research assistant for Indian stocks (NSE/BSE)**, with multi-agent deep
 research through [TradingAgents](https://github.com/TauricResearch/TradingAgents): live
@@ -88,32 +94,37 @@ Build and run the image:
 ```bash
 make build VERSION=dev
 docker run -d \
-  --name panwatch \
+  --name candlewise \
   -p 8000:8000 \
-  -v panwatch_data:/app/data \
-  panwatch:dev
+  -v candlewise_data:/app/data \
+  candlewise:dev
 ```
 
 Open `http://localhost:8000` and set a username and password on first use.
+
+**Coming from PanWatch?** Mount your existing volume (for example
+`-v panwatch_data:/app/data`). On the first start Candlewise renames `panwatch.db` to
+`candlewise.db` and moves the `panwatch_base_url` setting; `PANWATCH_BASE_URL` still works
+but logs a deprecation warning, so rename it to `CANDLEWISE_BASE_URL`.
 
 <details>
 <summary>Docker Compose</summary>
 
 ```yaml
 services:
-  panwatch:
-    image: panwatch:dev
-    container_name: panwatch
+  candlewise:
+    image: candlewise:dev
+    container_name: candlewise
     ports:
       - "8000:8000"
     volumes:
-      - panwatch_data:/app/data
+      - candlewise_data:/app/data
     environment:
       - TZ=Asia/Kolkata
     restart: unless-stopped
 
 volumes:
-  panwatch_data:
+  candlewise_data:
 ```
 
 ```bash
@@ -139,6 +150,8 @@ market data settings.
 | `HTTP_PROXY` / `HTTPS_PROXY` / `http_proxy` | Outbound HTTP proxy. Set it with `export HTTP_PROXY=...` before starting, `http_proxy=http://host:port` in `.env`, or **Settings → Global HTTP proxy** in the UI. Priority: environment > UI > `.env`. Every httpx client then uses it; `NO_PROXY` includes `localhost,127.0.0.1` by default | not set |
 | `CREDENTIALS_MASTER_KEY` | Encrypts broker API keys and tokens at rest; broker connections stay off until it is set | not set |
 | `ADVISORY_MODE` | `research_only` (default) or `ra_registered` | `research_only` |
+| `CANDLEWISE_BASE_URL` | Public URL used for links in notifications (old name `PANWATCH_BASE_URL` still read) | not set |
+| `UPDATE_CHECK_DOCKER_REPO` | Docker Hub repository to check for new versions; the check is off when unset | not set |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | OpenTelemetry OTLP endpoint (e.g. `http://jaeger:4318`). OTel export is only on when this is set and `requirements-otel.txt` is installed. See "OTel export" below | not set (off) |
 
 </details>
@@ -190,7 +203,7 @@ other local frontends.
 <details>
 <summary><b>OTel export (optional, off by default)</b></summary>
 
-PanWatch has its own observability built in (structured logs with a `trace_id` throughout,
+Candlewise has its own observability built in (structured logs with a `trace_id` throughout,
 the `agent_runs` table, and TradingAgents per-node progress and cost), with no external
 components needed.
 
@@ -215,7 +228,7 @@ pip install -r requirements-otel.txt
 
 # 2. Point it at your OTLP endpoint (collector / APM)
 export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
-export OTEL_SERVICE_NAME=panwatch   # optional; panwatch by default
+export OTEL_SERVICE_NAME=candlewise   # optional; candlewise by default
 
 # 3. Start as usual; "OTel export enabled" in the startup log means it's on
 python server.py
@@ -226,7 +239,7 @@ python server.py
 ```bash
 docker run -d --name jaeger -p 16686:16686 -p 4318:4318 \
   jaegertracing/all-in-one:latest
-# Run any agent, then open http://localhost:16686 and pick service=panwatch
+# Run any agent, then open http://localhost:16686 and pick service=candlewise
 ```
 
 Langfuse and Tempo work the same way: point `OTEL_EXPORTER_OTLP_ENDPOINT` at their OTLP
@@ -241,8 +254,9 @@ custom agents and data sources.
 
 ## Credits
 
-Built on [PanWatch](https://github.com/TNT-Likely/PanWatch) by sunxiao0721 (MIT). If the
-original project helps you, consider starring it.
+Candlewise is built on [PanWatch](https://github.com/TNT-Likely/PanWatch) by TNT-Likely
+(sunxiao0721), released under the MIT License. If the original project helps you, consider
+starring it.
 
 ## License
 

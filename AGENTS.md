@@ -1,7 +1,10 @@
 # Agent and contributor conventions (India fork)
 
-This repository is an India-focused fork of [PanWatch](https://github.com/TNT-Likely/PanWatch)
-(MIT). Read `docs/india-fork/PLAN.md` and `docs/adr.md` before changing behaviour.
+This repository is **Candlewise**, an India-focused fork of
+[PanWatch](https://github.com/TNT-Likely/PanWatch) by TNT-Likely (MIT). Keep that
+attribution in `LICENSE` and the README. Product name, tagline and links live in
+`src/platform/branding.py` and `frontend/src/lib/brand.ts`. Read `docs/india-fork/PLAN.md`
+and `docs/adr.md` before changing behaviour.
 
 ## Non-negotiable rules
 

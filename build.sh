@@ -9,9 +9,9 @@ NC='\033[0m' # No Color
 
 # Defaults
 VERSION=${1:-"latest"}
-IMAGE_NAME="${IMAGE_NAME:-panwatch}"
+IMAGE_NAME="${IMAGE_NAME:-candlewise}"
 
-echo -e "${GREEN}🚀 PanWatch build script${NC}"
+echo -e "${GREEN}🚀 Candlewise build script${NC}"
 echo -e "Version: ${YELLOW}${VERSION}${NC}"
 echo ""
 
@@ -54,7 +54,7 @@ echo ""
 echo -e "${GREEN}🎉 Build complete!${NC}"
 echo ""
 echo "Run the container:"
-echo -e "  ${YELLOW}docker run -d -p 8000:8000 -v panwatch_data:/app/data ${FULL_IMAGE}${NC}"
+echo -e "  ${YELLOW}docker run -d -p 8000:8000 -v candlewise_data:/app/data ${FULL_IMAGE}${NC}"
 echo ""
 echo "Push the image:"
 echo -e "  ${YELLOW}docker push ${FULL_IMAGE}${NC}"

@@ -286,3 +286,37 @@ and open questions live in [`docs/india-fork/PLAN.md`](india-fork/PLAN.md).
     "reconnect".
   - The upstream CN/HK/US vendors stay until the removal step. Host features still read
     from them until they are switched to `IndiaMarketData`.
+
+## ADR-008: Rename the product to Candlewise
+
+- **Status:** accepted (2026-09-26)
+- **Context:** The fork had kept the upstream name, PanWatch, while it became a
+  research-only, India-only product (Q17). The name appeared in code identifiers, UI
+  text, the database file name, one environment variable, a setting key, an AI output tag,
+  browser storage keys and telemetry attributes.
+- **Decision:**
+  - The product is **Candlewise** (slug and package name `candlewise`, environment prefix
+    `CANDLEWISE_`), with the tagline "Read the market. Decide for yourself."
+    `src/platform/branding.py` and `frontend/src/lib/brand.ts` hold the name, tagline and
+    links.
+  - **Existing data carries over.**
+    - `data/panwatch.db` and its `-wal`/`-shm` files are renamed to `candlewise.db` on the
+      first start (`src/platform/persistence/legacy_db.py`). Old backups are left as they
+      are.
+    - Migration 131 moves the `panwatch_base_url` setting to `candlewise_base_url`.
+    - `PANWATCH_BASE_URL` is still read, with a deprecation warning, when
+      `CANDLEWISE_BASE_URL` is unset.
+    - The `<!--PANWATCH_JSON-->` tag is still parsed in stored analyses; prompts now ask
+      for `<!--CANDLEWISE_JSON-->`.
+    - Browser `panwatch*` storage keys are copied to `candlewise*` once, at app start.
+  - The MIT attribution stays: `LICENSE`, the README and the Settings footer name
+    PanWatch by TNT-Likely and link to it.
+  - The update checker no longer polls upstream's Docker Hub. It is off until
+    `UPDATE_CHECK_DOCKER_REPO` is set.
+  - The Python code stays in `src/`; `pyproject.toml` carries `name = "candlewise"` as
+    metadata only.
+  - The `pan-agent-*` packages keep their names: they are a separate, reusable runtime.
+- **Consequences:** OpenTelemetry attributes and the default service name change from
+  `panwatch.*` to `candlewise.*`, so saved trace queries need updating. Docker users can
+  keep mounting their old `panwatch_data` volume; the database file inside it is renamed
+  on start.

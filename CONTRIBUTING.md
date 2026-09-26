@@ -1,9 +1,10 @@
 # Contributing
 
-Thanks for your interest in PanWatch! This guide explains how to contribute, in particular
+Thanks for your interest in Candlewise! This guide explains how to contribute, in particular
 how to write agents and market data providers.
 
-This is the India fork: the app is research-only by default (see `ADVISORY_MODE` in
+Candlewise is a fork of [PanWatch](https://github.com/TNT-Likely/PanWatch) (MIT) for Indian
+markets. The app is research-only by default (see `ADVISORY_MODE` in
 [`.env.example`](.env.example) and `docs/adr.md`). New features must not produce buy/sell/hold
 calls, price targets, entry levels, stop-losses or position sizes in research-only mode; the
 compliance guard in `src/platform/compliance/` enforces this, and new user-facing text should
@@ -61,7 +62,7 @@ Or use `make dev-api` and `make dev-web`.
 
 ## Writing an agent
 
-An agent is PanWatch's core analysis unit: it collects data, calls the AI and sends
+An agent is Candlewise's core analysis unit: it collects data, calls the AI and sends
 notifications.
 
 ### 1. Create the agent file

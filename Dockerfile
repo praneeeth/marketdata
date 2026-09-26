@@ -1,4 +1,4 @@
-# PanWatch Dockerfile
+# Candlewise Dockerfile
 # Multi-stage build to keep the final image small
 
 # ===== Stage 1: frontend build =====

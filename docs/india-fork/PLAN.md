@@ -931,7 +931,7 @@ Branch `phase-2/india-market-data`, stacked on the Phase 1 branch.
   - Chinese UI and agent text. The English translation is next (Phase 4, decided).
   - Indian news, filings, fundamentals and FII/DII flows (Q8).
   - The NSE holiday calendar (Phase 3, Q11).
-  - The product name (Q17).
+  - ~~The product name (Q17).~~ Decided on 2026-09-26: Candlewise (ADR-008).
   - The CI workflow still sets two unused `PLAYWRIGHT_*` variables. They're left as
     they are because CI changes need approval.
 - **Not verified:**
@@ -966,7 +966,7 @@ the owner to decide, the question stays open.
 | Q14 | TradingAgents: GraphSetup override if feasible, else discard trader/risk/PM output; keep-vs-replace evaluated in Phase 4 | decided |
 | Q15 | Keep Telegram, add WhatsApp + email, drop CN channels; Telegram platform bot with account linking | decided (Phase 6) |
 | Q16 | Dev dependencies `ruff`, `mypy`, `pytest-cov`, `hypothesis` approved; PR CI workflow added; upstream `release.yml` and `pullfrog.yml` removed | decided |
-| Q17 | Product name | **open** (needed for Phase 4) |
+| Q17 | Product name: **Candlewise**, tagline "Read the market. Decide for yourself." (2026-09-26) | decided (ADR-008) |
 | Q18 | `ADVISORY_MODE` is environment-only | decided |
 | Q19 | Retention: logs 30 d, agent runs 180 d, compliance events 180 d, chats until deletion | decided |
 | Q20 | Phase 4 split into 4a/4b, Phase 5 into 5a/5b | decided |

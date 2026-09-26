@@ -22,12 +22,12 @@ foreach ($command in "node", "pnpm", "docker") {
 
 $projectRoot = Split-Path -Parent $PSScriptRoot
 $staticDirectory = Join-Path $projectRoot "static"
-$imageName = if ($env:IMAGE_NAME) { $env:IMAGE_NAME } else { "panwatch" }
+$imageName = if ($env:IMAGE_NAME) { $env:IMAGE_NAME } else { "candlewise" }
 $fullImage = "${imageName}:$Version"
 
 Push-Location $projectRoot
 try {
-    Write-Host "🚀 PanWatch build script"
+    Write-Host "🚀 Candlewise build script"
     Write-Host "Version: $Version"
 
     Write-Host "📦 Building the frontend..."

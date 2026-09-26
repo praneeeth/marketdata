@@ -21,7 +21,7 @@ VENV_PYTHON := .venv/bin/python
 endif
 
 help:
-	@echo "PanWatch development commands:"
+	@echo "Candlewise development commands:"
 	@echo "  make setup-backend   create the venv and install backend dependencies"
 	@echo "  make dev-api         start the backend (:8000; runs setup-backend automatically)"
 	@echo "  make dev-web         start the frontend (:5183; runs pnpm install automatically)"

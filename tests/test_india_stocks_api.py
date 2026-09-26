@@ -252,3 +252,27 @@ def test_api_notice(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None
 
     monkeypatch.setattr(brokers_api, "get_india_bridge", lambda: B())
     assert "expired" in _data(client.get("/api/brokers/notice"))["notice"]
+
+
+def test_api_search_offers_the_typed_symbol_without_a_broker(client: TestClient) -> None:
+    """No broker instrument list: offer the typed symbol, clearly marked unverified."""
+    (item,) = _data(client.get("/api/stocks/search", params={"q": "tatamotors"}))
+    assert item["symbol"] == "TATAMOTORS"
+    assert item["unverified"] is True
+    assert "unverified" in item["name"]
+    bse = _data(client.get("/api/stocks/search", params={"q": "bse:500570"}))
+    assert bse[0]["symbol"] == "BSE:500570"
+    assert _data(client.get("/api/stocks/search", params={"q": "MCX:GOLD"})) == []
+    assert _data(client.get("/api/stocks/search", params={"q": "NSE:"})) == []
+
+
+def test_api_create_strips_the_unverified_label(client: TestClient) -> None:
+    resp = client.post(
+        "/api/stocks",
+        json={
+            "symbol": "TATAMOTORS",
+            "name": "TATAMOTORS (unverified: connect a broker to search)",
+            "market": "IN",
+        },
+    )
+    assert _data(resp)["name"] == "TATAMOTORS"

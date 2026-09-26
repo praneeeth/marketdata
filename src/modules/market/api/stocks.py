@@ -189,8 +189,30 @@ def get_market_status():
 def search(
     q: str = Query("", min_length=1), market: str = Query(""), db: Session = Depends(get_db)
 ):
-    """Search NSE/BSE stocks and indices in the user's broker instrument list."""
-    return get_broker_manager().search_instruments(db, q)
+    """Search NSE/BSE stocks and indices in the user's broker instrument list.
+
+    Without a broker instrument list (nothing connected, or only the dev Yahoo source) the
+    typed symbol itself is offered, marked unverified, so stocks can still be added.
+    """
+    results = get_broker_manager().search_instruments(db, q)
+    if results:
+        return results
+    import re
+
+    try:
+        ref = parse_symbol(q)
+    except ValueError:
+        return []
+    symbol = display_symbol(ref)
+    if not re.match(MARKETS[MarketCode.IN].symbol_pattern, symbol):
+        return []
+    return [{
+        "symbol": symbol,
+        "name": f"{ref.tradingsymbol} (unverified: connect a broker to search)",
+        "market": "IN",
+        "exchange": ref.exchange.value,
+        "unverified": True,
+    }]
 
 
 @router.get("", response_model=list[StockResponse])
@@ -249,7 +271,10 @@ def _normalise_india_stock(stock: StockCreate) -> StockCreate:
     symbol = display_symbol(ref)
     if not re.match(MARKETS[MarketCode.IN].symbol_pattern, symbol):
         raise HTTPException(400, f"{stock.symbol!r} is not a valid NSE/BSE symbol")
-    return StockCreate(symbol=symbol, name=stock.name or ref.tradingsymbol, market="IN")
+    name = (stock.name or "").strip()
+    if not name or "(unverified" in name:
+        name = ref.tradingsymbol
+    return StockCreate(symbol=symbol, name=name, market="IN")
 
 
 @router.post("", response_model=StockResponse)

@@ -186,6 +186,8 @@ def test_parse_helpers() -> None:
     assert p.epoch_ms("1697688414180") == datetime.fromtimestamp(1697688414.18, tz=IST)
     assert p.epoch_ms(0) is None
     assert p.iso_date("2026-10-27") == date(2026, 10, 27)
+    assert p.price(735.5999755859375) == Decimal("735.60")
+    assert p.price(None) is None
     assert p.iso_date("27-10-2026") is None
     assert p.iso_date(5) is None
 

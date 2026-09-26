@@ -111,10 +111,10 @@ class YFinanceProvider:
         out: list[Quote] = []
         for ref in refs:
             info = self._fast_info(ticker_for(ref))
-            last = p.dec(_get(info, "last_price"))
+            last = p.price(_get(info, "last_price"))
             if last is None:
                 continue  # Yahoo returned nothing for this symbol
-            prev = p.positive_or_none(p.dec(_get(info, "previous_close")))
+            prev = p.positive_or_none(p.price(_get(info, "previous_close")))
             change = last - prev if prev is not None else None
             out.append(
                 Quote(
@@ -122,9 +122,9 @@ class YFinanceProvider:
                     last_price=last,
                     source=NAME,
                     quality=self.quality,
-                    open=p.positive_or_none(p.dec(_get(info, "open"))),
-                    high=p.positive_or_none(p.dec(_get(info, "day_high"))),
-                    low=p.positive_or_none(p.dec(_get(info, "day_low"))),
+                    open=p.positive_or_none(p.price(_get(info, "open"))),
+                    high=p.positive_or_none(p.price(_get(info, "day_high"))),
+                    low=p.positive_or_none(p.price(_get(info, "day_low"))),
                     prev_close=prev,
                     change=change,
                     change_pct=p.pct_change(change, prev),
@@ -154,7 +154,7 @@ class YFinanceProvider:
         out: dict[datetime, Candle] = {}
         for ts, row in frame.iterrows():
             when = p.aware(ts.to_pydatetime()).astimezone(IST)
-            values = [p.dec(row.get(k)) for k in ("Open", "High", "Low", "Close")]
+            values = [p.price(row.get(k)) for k in ("Open", "High", "Low", "Close")]
             volume = p.integer(row.get("Volume"))
             o, h, low, c = values
             if o is None or h is None or low is None or c is None or volume is None:

@@ -86,8 +86,8 @@ class YahooGlobalCues:
     def _one(self, spec: CueSpec) -> GlobalCue:
         try:
             info = self._ticker(spec.yahoo).fast_info
-            last = p.dec(info["last_price"])
-            prev = p.positive_or_none(p.dec(info["previous_close"]))
+            last = p.price(info["last_price"])
+            prev = p.positive_or_none(p.price(info["previous_close"]))
         # yfinance raises arbitrary types (HTTP, parsing, KeyError on missing fields). A
         # cue is context only, so any failure shows as "no data" for that one cue.
         except Exception:  # noqa: BLE001

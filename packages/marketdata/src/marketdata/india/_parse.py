@@ -34,6 +34,13 @@ def req_dec(provider: str, value: Any, field: str) -> Decimal:
 CENT = Decimal("0.01")
 
 
+def price(value: Any) -> Decimal | None:
+    """A price from a float-based source (Yahoo), rounded to paise to drop float noise
+    such as 735.5999755859375."""
+    d = dec(value)
+    return None if d is None else d.quantize(CENT)
+
+
 def pct_change(change: Decimal | None, base: Decimal | None) -> Decimal | None:
     if change is None or base is None or base == 0:
         return None

@@ -1,4 +1,4 @@
-"""带 TTL 的轻量内存缓存,线程安全,过期 key 在下次 get 时被动剔除。"""
+"""A small thread-safe in-memory TTL cache; expired keys are evicted lazily on ``get``."""
 
 from __future__ import annotations
 

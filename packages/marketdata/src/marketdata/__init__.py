@@ -1,41 +1,13 @@
-"""marketdata —— 多市场行情数据抓取层(可插拔数据源)。"""
+"""marketdata: India market data (NSE/BSE) from the user's own broker, plus global cues.
 
-from marketdata.client import MarketData
-from marketdata.defaults import InMemoryMetricsSink, StaticConfigProvider
-from marketdata.errors import MarketDataError, VendorError
-from marketdata.http import capture_errors, record_error
-from marketdata.ports import ConfigProvider, MetricsSink, SourceConfig
-from marketdata.registry import PACKAGE_VENDORS_BY_TYPE
-from marketdata.symbol import Market, Symbol
-from marketdata.types import (
-    Bar,
-    CapitalFlow,
-    DividendItem,
-    DragonTigerItem,
-    EventItem,
-    FlashNews,
-    Fundamentals,
-    HotBoard,
-    HotStock,
-    MarginItem,
-    NewsArticle,
-    NorthboundItem,
-    Quote,
-    Request,
-    Response,
-    ShareholderItem,
-)
+- ``marketdata.india``: a read-only provider interface with Kite, Upstox and Angel One
+  adapters (bring your own key), a dev-only yfinance adapter and the per-user
+  ``IndiaMarketData`` service.
+- ``marketdata.global_cues``: world indices, crude, gold and USD/INR for context.
+"""
 
-__version__ = "0.1.0"
+from marketdata.errors import MarketDataError
 
-__all__ = [
-    "MarketData", "Symbol", "Market", "Bar", "CapitalFlow", "EventItem", "FlashNews", "Fundamentals",
-    "HotStock", "HotBoard", "NewsArticle",
-    "DragonTigerItem", "MarginItem", "ShareholderItem", "DividendItem", "NorthboundItem",
-    "Quote", "Request", "Response",
-    "SourceConfig", "ConfigProvider", "MetricsSink",
-    "StaticConfigProvider", "InMemoryMetricsSink",
-    "PACKAGE_VENDORS_BY_TYPE",
-    "capture_errors", "record_error",
-    "MarketDataError", "VendorError", "__version__",
-]
+__version__ = "0.2.0"
+
+__all__ = ["MarketDataError", "__version__"]

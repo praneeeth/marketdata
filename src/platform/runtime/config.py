@@ -57,10 +57,10 @@ class Settings(BaseSettings):
     daily_report_cron: str = "30 15 * * 1-5"
 
     # 默认时区（用于调度、时间展示等）。
-    # 统一使用一个环境变量控制：TZ（默认 Asia/Shanghai）。
-    # 建议使用 IANA 时区名，如 Asia/Shanghai, America/New_York。
+    # One variable controls it: TZ (IANA name). Defaults to India time, since NSE/BSE is
+    # the only market and agent schedules such as "15:30" mean IST.
     app_timezone: str = Field(
-        default="Asia/Shanghai",
+        default="Asia/Kolkata",
         validation_alias=AliasChoices("TZ", "APP_TIMEZONE"),
     )
 

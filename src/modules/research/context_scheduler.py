@@ -295,7 +295,7 @@ class ContextMaintenanceScheduler:
             max_instances=1,
         )
         # 机会自动刷新 —— 09:15 盘前 / 13:30 午盘 / 22:00 晚间。
-        # 时间点按调度器时区(app_timezone,默认 Asia/Shanghai)解释,与 Agent cron 语义一致。
+        # 时间点按调度器时区(app_timezone, default Asia/Kolkata)解释,与 Agent cron 语义一致。
         # Research-only: the opportunity (entry-candidate) engine does not run (ADR-004).
         refresh_times = (
             ((9, 15), (13, 30), (22, 0)) if is_feature_enabled(Feature.ENTRY_CANDIDATES) else ()

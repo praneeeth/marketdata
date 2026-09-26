@@ -259,17 +259,6 @@ def _migrate(engine):
             "sort_order",
             "ALTER TABLE positions ADD COLUMN sort_order INTEGER DEFAULT 0",
         ),
-        # 数据源增强
-        (
-            "data_sources",
-            "supports_batch",
-            "ALTER TABLE data_sources ADD COLUMN supports_batch INTEGER DEFAULT 0",
-        ),
-        (
-            "data_sources",
-            "test_symbols",
-            "ALTER TABLE data_sources ADD COLUMN test_symbols TEXT DEFAULT '[]'",
-        ),
         # Phase 5: 建议池元数据
         (
             "stock_suggestions",
@@ -279,7 +268,8 @@ def _migrate(engine):
     ]
     with engine.connect() as conn:
         for table, column, sql in migrations:
-            if not _has_column(conn, table, column):
+            # Skip tables that no longer exist (e.g. data_sources, dropped by migration 129).
+            if _has_table(conn, table) and not _has_column(conn, table, column):
                 conn.execute(text(sql))
                 conn.commit()
 

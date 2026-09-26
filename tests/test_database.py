@@ -54,3 +54,23 @@ def test_init_db_retries_transient_sqlite_lock(monkeypatch):
 
     assert calls == 3
     assert sleeps == [0.5, 1.0]
+
+
+def test_restart_after_india_cleanup_migration_does_not_crash(tmp_path):
+    """Regression: migration 129 drops data_sources; the unversioned column migrations that
+    run on every start must skip it, or the second start of any install crashes."""
+    from sqlalchemy import create_engine, inspect
+
+    import src.platform.persistence.models  # noqa: F401 - registers tables
+    from src.platform.persistence import database
+    from src.platform.persistence.migrations import run_versioned_migrations
+
+    engine = create_engine(f"sqlite:///{tmp_path / 'restart.db'}")
+    for _start in range(2):  # first start, then a restart
+        database.Base.metadata.create_all(bind=engine)
+        database._migrate(engine)
+        run_versioned_migrations(engine)
+    tables = set(inspect(engine).get_table_names())
+    assert "data_sources" not in tables
+    assert "broker_connections" in tables
+    engine.dispose()

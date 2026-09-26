@@ -27,9 +27,9 @@ Results dates, dividend or record dates, index events, derivatives expiries, pol
 Finish the Markdown with a line starting "Sources:" listing the sources used, with dates. Keep the whole note under 800 words.
 
 Structured output (required). After the Markdown, append exactly:
-<!--PANWATCH_JSON-->
+<!--CANDLEWISE_JSON-->
 {"research": [{"symbol": "SYMBOL", "summary": "one-sentence factual summary", "bull_points": ["..."], "bear_points": ["..."], "key_risks": ["..."], "technical_levels": {"support": [0.0], "resistance": [0.0]}, "upcoming_events": ["..."], "sources": [{"title": "...", "url": "...", "published_at": "..."}]}]}
-<!--/PANWATCH_JSON-->
+<!--/CANDLEWISE_JSON-->
 - One entry per security, with the symbol exactly as given in the input.
 - bull_points and bear_points: the strongest factual arguments each side would make, at most 3 each, 30 words or fewer each.
 - Valid JSON with double quotes. Nothing may follow the closing tag.

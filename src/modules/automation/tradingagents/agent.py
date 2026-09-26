@@ -1,9 +1,9 @@
-"""TradingAgentsAgent: PanWatch's BaseAgent subclass wrapping TauricResearch/TradingAgents.
+"""TradingAgentsAgent: Candlewise's BaseAgent subclass wrapping TauricResearch/TradingAgents.
 
 Design:
 1. collect() fetches the quote and daily candles from the user's broker concurrently
 2. analyze() runs TradingAgentsGraph instead of a single ai_client.chat call
-3. route_to_vendor is monkeypatched so TradingAgents reads PanWatch (broker) data
+3. route_to_vendor is monkeypatched so TradingAgents reads Candlewise (broker) data
 4. progress callback, cost tracker, monthly budget and a same-day cache
 """
 
@@ -33,7 +33,7 @@ from src.modules.automation.tradingagents.data_context import (
     patch_instrument_context,
     to_tradingagents_portfolio,
 )
-from src.modules.automation.tradingagents.observability import PanWatchProgressHandler
+from src.modules.automation.tradingagents.observability import CandlewiseProgressHandler
 from src.modules.automation.tradingagents.decision import (
     map_state_to_research_result,
     map_state_to_result,
@@ -41,7 +41,7 @@ from src.modules.automation.tradingagents.decision import (
 from src.modules.automation.tradingagents.research_graph import install_research_only_workflow
 from src.platform.compliance import Feature, is_feature_enabled
 from src.modules.automation.tradingagents.toolkit_adapter import (
-    panwatch_data_context,
+    candlewise_data_context,
     patch_route_to_vendor,
 )
 from src.modules.research.analysis_history import get_analysis, save_analysis
@@ -144,7 +144,7 @@ class TradingAgentsAgent(BaseAgent):
         trace_id = getattr(context, "_trace_id", "")
         if not isinstance(trace_id, str) or not trace_id:
             trace_id = self._make_trace_id(stock.symbol)
-        progress_handler = PanWatchProgressHandler(trace_id, self.name)
+        progress_handler = CandlewiseProgressHandler(trace_id, self.name)
         setattr(context, "_progress_handler", progress_handler)
         progress_handler.emit("data_collection", "stage_start", symbol=stock.symbol)
 
@@ -317,8 +317,8 @@ class TradingAgentsAgent(BaseAgent):
 
         # 3) Progress callback
         progress_handler = getattr(context, "_progress_handler", None)
-        if not isinstance(progress_handler, PanWatchProgressHandler):
-            progress_handler = PanWatchProgressHandler(trace_id, self.name)
+        if not isinstance(progress_handler, CandlewiseProgressHandler):
+            progress_handler = CandlewiseProgressHandler(trace_id, self.name)
         cancel_event = threading.Event()
         progress_handler.cancel_event = cancel_event
 
@@ -344,7 +344,7 @@ class TradingAgentsAgent(BaseAgent):
                     market=stock.market.value,
                     ta_config=ta_config,
                     progress_handler=progress_handler,
-                    panwatch_data=data,
+                    candlewise_data=data,
                     stock_metadata_context=meta_context,
                     portfolio=getattr(context, "portfolio", None),
                     cancel_event=cancel_event,
@@ -504,7 +504,7 @@ class TradingAgentsAgent(BaseAgent):
         market: str,
         ta_config: dict,
         progress_handler,
-        panwatch_data: dict,
+        candlewise_data: dict,
         stock_metadata_context: str = "",
         portfolio: Any | None = None,
         cancel_event: threading.Event | None = None,
@@ -513,7 +513,7 @@ class TradingAgentsAgent(BaseAgent):
 
         Steps:
         1. inject_api_key_env puts the API key into the environment
-        2. patch_route_to_vendor routes data requests to PanWatch (broker) data
+        2. patch_route_to_vendor routes data requests to Candlewise (broker) data
         3. TradingAgentsGraph.propagate runs for 3-5 minutes
         4. returns decision, final_state and cost_usd
         """
@@ -525,10 +525,10 @@ class TradingAgentsAgent(BaseAgent):
         apply_compat_patches()
         inject_api_key_env(ai_client)
 
-        # Patch plus data context so TradingAgents' route_to_vendor calls get PanWatch data
+        # Patch plus data context so TradingAgents' route_to_vendor calls get Candlewise data
         trace_id_for_ctx = getattr(progress_handler, "trace_id", "") if progress_handler else ""
-        with patch_route_to_vendor(), panwatch_data_context(
-            panwatch_data,
+        with patch_route_to_vendor(), candlewise_data_context(
+            candlewise_data,
             trace_id=trace_id_for_ctx,
             cancel_event=cancel_event,
         ):

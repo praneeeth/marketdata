@@ -1,4 +1,4 @@
-"""Shared, provider-neutral instructions for PanWatch's interactive assistant."""
+"""Shared, provider-neutral instructions for Candlewise's interactive assistant."""
 
 from pan_agent import ModelMessage
 

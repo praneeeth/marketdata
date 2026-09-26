@@ -34,7 +34,7 @@ router = APIRouter()
 
 # Protocol version (default when the client doesn't negotiate)
 DEFAULT_PROTOCOL_VERSION = "2024-11-05"
-SERVER_INFO = {"name": "PanWatch", "version": "0.1.0"}
+SERVER_INFO = {"name": "Candlewise", "version": "0.1.0"}
 
 # Read-only tool allowlist (reuses chat's tool definitions; new tools are included automatically)
 READ_TOOL_NAMES = {t["function"]["name"] for t in CHAT_TOOLS}

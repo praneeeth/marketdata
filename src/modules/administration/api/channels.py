@@ -111,7 +111,7 @@ async def test_channel(channel_id: int, db: Session = Depends(get_db)):
 
     result = await notifier.notify_with_result(
         title="Test notification",
-        content="This is a test notification from PanWatch. If you received it, the channel is set up correctly.",
+        content="This is a test notification from Candlewise. If you received it, the channel is set up correctly.",
         bypass_quiet_hours=True,
     )
 

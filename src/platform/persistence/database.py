@@ -9,6 +9,7 @@ from sqlalchemy import create_engine, event, text
 from sqlalchemy.orm import DeclarativeBase, sessionmaker
 from sqlalchemy.pool import NullPool
 
+from src.platform.persistence.legacy_db import DB_FILENAME, adopt_legacy_db
 from src.platform.persistence.migrations import (
     has_pending_migrations,
     run_versioned_migrations,
@@ -16,8 +17,10 @@ from src.platform.persistence.migrations import (
 
 logger = logging.getLogger(__name__)
 
-DB_PATH = os.path.join(os.path.dirname(__file__), "..", "..", "..", "data", "panwatch.db")
-os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
+_DATA_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "..", "data")
+os.makedirs(_DATA_DIR, exist_ok=True)
+adopt_legacy_db(_DATA_DIR)  # data/panwatch.db -> data/candlewise.db, once
+DB_PATH = os.path.join(_DATA_DIR, DB_FILENAME)
 
 # SQLite suits local development and single-instance deployments, but concurrent writes can't wait for locks forever.
 # Waits are capped at a few seconds so the calling transaction can roll back/retry or return a clear error instead of

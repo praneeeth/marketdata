@@ -44,7 +44,7 @@ whether snapshots live in SQL, Redis, object storage, or nowhere at all.
 The runtime keeps its kernel small and composes optional capabilities through
 explicit ports. Token measurement is the first separately installable plugin
 because it has optional tokenizer dependencies and is useful to hosts that do
-not use the PanWatch model adapter:
+not use the Candlewise model adapter:
 
 ```text
 pan-agent-runtime
@@ -66,9 +66,9 @@ release cadence, or cross-project reuse. A host-specific adapter can remain in
 the application until a second project actually needs it; logical plugin
 boundaries and PyPI package boundaries do not have to be identical.
 
-## PanWatch current composition
+## Candlewise current composition
 
-PanWatch supplies the failover model adapter, the configurable context
+Candlewise supplies the failover model adapter, the configurable context
 summarizer, SQLAlchemy snapshots, FastAPI/SSE mapping, and React context/trace
 views. The compression model is selected by the host: an explicit
 `CONTEXT_COMPRESSION_MODEL_ID` uses that persisted model and its existing
@@ -88,7 +88,7 @@ host-side extensions for a future multi-instance or high-traffic deployment.
 
 The runtime package never sees a model ID or a database session.
 
-PanWatch installs `pan-agent-token-meter` and injects its heuristic meter into
+Candlewise installs `pan-agent-token-meter` and injects its heuristic meter into
 `ContextEngine` for preflight context reports. Its model adapter normalizes
 provider-returned usage into `ModelUsage`; the runtime forwards that fact to
 the task/SSE layer without knowing how the provider calculated it. A different

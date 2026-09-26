@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 # Progress and budget share this TradingAgents observation entry point; the DB lifecycle stays in agent_runs.
 __all__ = [
     "STAGES_ORDER",
-    "PanWatchProgressHandler",
+    "CandlewiseProgressHandler",
     "aggregate_progress",
     "check_budget",
     "estimate_cost",
@@ -80,7 +80,7 @@ except ImportError:  # the module still imports without tradingagents; tests don
         pass
 
 
-class PanWatchProgressHandler(_LCBaseCallbackHandler):
+class CandlewiseProgressHandler(_LCBaseCallbackHandler):
     """Progress handler compatible with LangChain's BaseCallbackHandler.
 
     Newer langchain (1.x) validates the callbacks field with pydantic as BaseCallbackHandler instances,

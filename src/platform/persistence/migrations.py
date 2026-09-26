@@ -1,4 +1,4 @@
-"""Versioned database migrations for PanWatch.
+"""Versioned database migrations for Candlewise (formerly PanWatch).
 
 Some older migrations contain Chinese text (seed names, legacy labels). They are left
 unchanged because each migration's source is checksummed (``inspect.getsource``):
@@ -2142,6 +2142,27 @@ def _m130_english_labels(conn: Connection) -> None:
         """))
 
 
+def _m131_candlewise_setting_key(conn: Connection) -> None:
+    """Rename the public-URL setting from ``panwatch_base_url`` to ``candlewise_base_url``,
+    keeping its value. A non-empty new key is never overwritten."""
+    if not _has_table(conn, "app_settings"):
+        return
+    conn.execute(text("""
+        UPDATE app_settings
+        SET value = (SELECT value FROM app_settings WHERE key = 'panwatch_base_url')
+        WHERE key = 'candlewise_base_url' AND COALESCE(value, '') = ''
+          AND EXISTS (SELECT 1 FROM app_settings WHERE key = 'panwatch_base_url')
+    """))
+    conn.execute(text("""
+        INSERT INTO app_settings (key, value, description)
+        SELECT 'candlewise_base_url', value, description
+        FROM app_settings
+        WHERE key = 'panwatch_base_url'
+          AND NOT EXISTS (SELECT 1 FROM app_settings WHERE key = 'candlewise_base_url')
+    """))
+    conn.execute(text("DELETE FROM app_settings WHERE key = 'panwatch_base_url'"))
+
+
 MIGRATIONS: tuple[Migration, ...] = (
     Migration(101, "agent_config_kind_and_visibility", _m101_agent_config_kind),
     Migration(102, "backfill_agent_kind_data", _m102_backfill_agent_kind),
@@ -2173,6 +2194,7 @@ MIGRATIONS: tuple[Migration, ...] = (
     Migration(128, "broker_connections", _m128_broker_connections),
     Migration(129, "india_only_cleanup", _m129_india_only_cleanup),
     Migration(130, "english_labels", _m130_english_labels),
+    Migration(131, "candlewise_setting_key", _m131_candlewise_setting_key),
 )
 
 

@@ -1,9 +1,9 @@
-"""Adapt PanWatch's India data into the TradingAgents data flow.
+"""Adapt Candlewise's India data into the TradingAgents data flow.
 
 TradingAgents routes data requests through ``tradingagents.dataflows.interface.route_to_vendor``
 to vendors such as yfinance and has no public injection point, so we monkeypatch
 ``route_to_vendor`` (and ``load_ohlcv``). Every ticker is an Indian (NSE/BSE) instrument:
-requests are served from the current task's PanWatch snapshot, i.e. the user's own
+requests are served from the current task's Candlewise snapshot, i.e. the user's own
 broker data. Upstream vendors are reachable only in development
 (``ALLOW_UNOFFICIAL_DATA`` + a non-production ``APP_ENV``); production returns an explicit
 "data unavailable" note instead (plan item X8).
@@ -24,12 +24,12 @@ from typing import Any
 logger = logging.getLogger(__name__)
 
 
-# Cache: inside the patch context the data PanWatch fetched lives here and patched calls
+# Cache: inside the patch context the data Candlewise fetched lives here and patched calls
 # return it. A ContextVar rather than a module dict: deep analyses run in asyncio.to_thread
 # workers and to_thread copies the context, so concurrent tasks each get their own copy and
 # two stocks analysed at once never mix data.
-_PANWATCH_DATA: contextvars.ContextVar[dict[str, Any]] = contextvars.ContextVar(
-    "_TA_PANWATCH_DATA", default={}
+_CANDLEWISE_DATA: contextvars.ContextVar[dict[str, Any]] = contextvars.ContextVar(
+    "_TA_CANDLEWISE_DATA", default={}
 )
 
 # The current request's trace_id; toolkit hit/miss logs are attributed to this analysis
@@ -40,11 +40,11 @@ _CANCEL_EVENT: contextvars.ContextVar[threading.Event | None] = contextvars.Cont
     "_TA_CANCEL_EVENT", default=None
 )
 
-# Every upstream monkeypatch and PanWatch data injection lives here; other modules use only these entry points.
+# Every upstream monkeypatch and Candlewise data injection lives here; other modules use only these entry points.
 __all__ = [
     "TradingAgentsCancelled",
-    "is_panwatch_routable",
-    "panwatch_data_context",
+    "is_candlewise_routable",
+    "candlewise_data_context",
     "patch_route_to_vendor",
 ]
 
@@ -60,12 +60,12 @@ def _raise_if_cancelled() -> None:
 
 
 def _cache() -> dict[str, Any]:
-    """The current context's PanWatch data snapshot (isolated per concurrent task)."""
-    return _PANWATCH_DATA.get()
+    """The current context's Candlewise data snapshot (isolated per concurrent task)."""
+    return _CANDLEWISE_DATA.get()
 
 
 @contextmanager
-def panwatch_data_context(
+def candlewise_data_context(
     data: dict[str, Any],
     trace_id: str = "",
     cancel_event: threading.Event | None = None,
@@ -79,14 +79,14 @@ def panwatch_data_context(
     The data is restored on exit. Built on a ContextVar, so concurrent tasks (and their
     to_thread workers) never interfere.
     """
-    token = _PANWATCH_DATA.set(dict(data))
+    token = _CANDLEWISE_DATA.set(dict(data))
     tid_token = _CURRENT_TRACE_ID.set(trace_id or "")
     cancel_token = _CANCEL_EVENT.set(cancel_event)
     try:
         yield
     finally:
         _CANCEL_EVENT.reset(cancel_token)
-        _PANWATCH_DATA.reset(token)
+        _CANDLEWISE_DATA.reset(token)
         _CURRENT_TRACE_ID.reset(tid_token)
 
 
@@ -108,7 +108,7 @@ def _emit_toolkit_log(level: str, action: str, method_name: str, symbol: str, **
         getattr(logger, level)(f"[TA toolkit] {action} method={method_name} symbol={symbol} {extra}")
 
 
-def is_panwatch_routable(symbol: str) -> bool:
+def is_candlewise_routable(symbol: str) -> bool:
     """Every ticker is an Indian (NSE/BSE) instrument served from the user's broker."""
     return bool(symbol and str(symbol).strip())
 
@@ -127,7 +127,7 @@ _ROUTE_TO_VENDOR_IMPORT_SITES = (
 
 # Patch reference count: concurrent deep analyses share one installation. The first to
 # enter saves the real route_to_vendor and installs the patch at every import site; the
-# last to leave restores it. Data isolation comes from _PANWATCH_DATA (a ContextVar), so
+# last to leave restores it. Data isolation comes from _CANDLEWISE_DATA (a ContextVar), so
 # the patch is installed once per process, avoiding the old nested-restore race.
 _patch_lock = threading.Lock()
 _patch_refcount = 0
@@ -193,7 +193,7 @@ def _patched_route_to_vendor(method_name: str, *args, **kwargs):
     call and the data from ``_cache()`` (the current task's context), so concurrent tasks
     never mix.
 
-    Order: PanWatch snapshot (broker data) -> in development only, upstream vendors with the
+    Order: Candlewise snapshot (broker data) -> in development only, upstream vendors with the
     ticker mapped to Yahoo's .NS/.BO -> otherwise an explicit "data unavailable" note.
     Production never falls through to Yahoo (plan item X8).
     """
@@ -216,24 +216,24 @@ def _patched_route_to_vendor(method_name: str, *args, **kwargs):
             return _data_unavailable_message(
                 method_name,
                 symbol,
-                RuntimeError(f"PanWatch snapshot is for {cached_symbol}, not {symbol}"),
+                RuntimeError(f"Candlewise snapshot is for {cached_symbol}, not {symbol}"),
             )
         try:
-            result = _serve_from_panwatch(method_name, symbol, kwargs, args=args)
+            result = _serve_from_candlewise(method_name, symbol, kwargs, args=args)
             _emit_toolkit_log(
                 "info", "HIT", method_name, symbol,
                 chars=len(result), snippet=str(result)[:4000],
-                source="panwatch", extra_args=_args_summary(args),
+                source="candlewise", extra_args=_args_summary(args),
             )
             return result
         except NotImplementedError:
             _emit_toolkit_log(
                 "info", "MISS", method_name, symbol,
-                reason="PanWatch does not implement this method",
+                reason="Candlewise does not implement this method",
             )
         except Exception as e:  # noqa: BLE001 - one tool's failure must not sink the run
             _emit_toolkit_log("warning", "ERROR", method_name, symbol, error=str(e)[:200])
-            return f"[PanWatch error: {e}]"
+            return f"[Candlewise error: {e}]"
 
     if not _upstream_allowed():
         _emit_toolkit_log(
@@ -277,7 +277,7 @@ def _patched_route_to_vendor(method_name: str, *args, **kwargs):
 def patch_route_to_vendor():
     """Monkeypatch tradingagents.dataflows.interface.route_to_vendor and every import site.
 
-    Requests are answered from _PANWATCH_DATA (the current context), i.e. the user's broker
+    Requests are answered from _CANDLEWISE_DATA (the current context), i.e. the user's broker
     data; see _patched_route_to_vendor for the fallthrough policy.
 
     Reference count plus lock: concurrent deep analyses share one installation; the first
@@ -343,7 +343,7 @@ def patch_route_to_vendor():
 # ---------------------------------------------------------------------------
 # load_ohlcv takeover
 # Upstream get_verified_market_snapshot -> market_data_validator.load_ohlcv calls yfinance
-# directly, bypassing route_to_vendor. Here every ticker's load_ohlcv reads PanWatch
+# directly, bypassing route_to_vendor. Here every ticker's load_ohlcv reads Candlewise
 # K-lines (the user's broker), so the patch is safe to install once per process.
 # ---------------------------------------------------------------------------
 _LOAD_OHLCV_PATCHED = False
@@ -362,14 +362,14 @@ _MARKET_SNAPSHOT_IMPORT_SITES = (
 
 
 def _market_for_symbol(symbol: str):
-    """Map a TradingAgents ticker to a PanWatch market: India is the only one."""
+    """Map a TradingAgents ticker to a Candlewise market: India is the only one."""
     from src.platform.marketdata.models import MarketCode
 
     return MarketCode.IN
 
 
-def _build_panwatch_ohlcv_df(symbol: str, curr_date: str):
-    """Build a DataFrame shaped like native load_ohlcv (Date/Open/High/Low/Close/Volume) from PanWatch K-lines."""
+def _build_candlewise_ohlcv_df(symbol: str, curr_date: str):
+    """Build a DataFrame shaped like native load_ohlcv (Date/Open/High/Low/Close/Volume) from Candlewise K-lines."""
     _raise_if_cancelled()
     import pandas as pd
 
@@ -452,11 +452,11 @@ def _data_unavailable_message(method_name: str, symbol: str, error: Exception) -
     )
 
 
-def _load_panwatch_ohlcv_or_raise(symbol: str, curr_date: str, *, fallback: bool = False):
+def _load_candlewise_ohlcv_or_raise(symbol: str, curr_date: str, *, fallback: bool = False):
     """Read K-lines from the broker; raise the standard data error when there is no OHLCV."""
     df = None
     try:
-        df = _build_panwatch_ohlcv_df(symbol, curr_date)
+        df = _build_candlewise_ohlcv_df(symbol, curr_date)
     except Exception as exc:
         logger.warning(f"[TA toolkit] load_ohlcv fetch failed symbol={symbol}: {exc}")
     if df is not None and not df.empty:
@@ -479,11 +479,11 @@ def _load_panwatch_ohlcv_or_raise(symbol: str, curr_date: str, *, fallback: bool
         )
 
 
-def _panwatch_load_ohlcv(symbol: str, curr_date: str, *args, **kwargs):
+def _candlewise_load_ohlcv(symbol: str, curr_date: str, *args, **kwargs):
     """Every ticker reads the user's broker K-lines (India-only)."""
     _raise_if_cancelled()
-    if is_panwatch_routable(symbol):
-        return _load_panwatch_ohlcv_or_raise(symbol, curr_date)
+    if is_candlewise_routable(symbol):
+        return _load_candlewise_ohlcv_or_raise(symbol, curr_date)
 
     try:
         upstream_df = _real_load_ohlcv(symbol, curr_date, *args, **kwargs)
@@ -497,7 +497,7 @@ def _panwatch_load_ohlcv(symbol: str, curr_date: str, *args, **kwargs):
         logger.warning(f"[TA toolkit] Yahoo OHLCV unavailable; falling back to broker data symbol={symbol}: {exc}")
         _emit_toolkit_log("warning", "DEGRADE", "load_ohlcv", symbol, source="yfinance", error=str(exc)[:200])
     _raise_if_cancelled()
-    return _load_panwatch_ohlcv_or_raise(symbol, curr_date, fallback=True)
+    return _load_candlewise_ohlcv_or_raise(symbol, curr_date, fallback=True)
 
 
 def _safe_build_verified_market_snapshot(
@@ -545,14 +545,14 @@ def _ensure_load_ohlcv_patched() -> None:
         if _LOAD_OHLCV_PATCHED:
             return
         _real_load_ohlcv = stockstats_utils.load_ohlcv
-        stockstats_utils.load_ohlcv = _panwatch_load_ohlcv
+        stockstats_utils.load_ohlcv = _candlewise_load_ohlcv
         for module_path in _LOAD_OHLCV_IMPORT_SITES:
             try:
                 mod = importlib.import_module(module_path)
             except ImportError:
                 continue
             if getattr(mod, "load_ohlcv", None) is not None:
-                mod.load_ohlcv = _panwatch_load_ohlcv
+                mod.load_ohlcv = _candlewise_load_ohlcv
                 logger.debug(f"[TA toolkit] patched load_ohlcv in {module_path}")
         _LOAD_OHLCV_PATCHED = True
         logger.info("[TA toolkit] load_ohlcv taken over (reads the user's broker K-lines)")
@@ -651,7 +651,7 @@ def _stock_meta_header(symbol: str) -> str:
     return "\n".join(lines)
 
 
-def _serve_from_panwatch(method_name: str, symbol: str, kwargs: dict, args: tuple = ()) -> str:
+def _serve_from_candlewise(method_name: str, symbol: str, kwargs: dict, args: tuple = ()) -> str:
     """Build the format TradingAgents expects (CSV / JSON strings) from _cache() (this context's data).
 
     Upstream vendor methods return various types, usually a str (formatted CSV, table or JSON).
@@ -683,7 +683,7 @@ def _serve_from_panwatch(method_name: str, symbol: str, kwargs: dict, args: tupl
         klines = _cache().get("klines") or []
         if klines:
             return f"{header}\n\n{_klines_to_csv(klines)}"
-        return f"{header}\n\n[No kline data available from PanWatch for {symbol}]"
+        return f"{header}\n\n[No kline data available from Candlewise for {symbol}]"
 
     # 2) Announcements/events/news: get_finnhub_news / get_news / get_events / get_global_news / get_insider_*
     if any(k in method for k in ("news", "event", "announce", "insider")):
@@ -736,7 +736,7 @@ def _serve_from_panwatch(method_name: str, symbol: str, kwargs: dict, args: tupl
         )
 
     # Unknown: let the router decide
-    raise NotImplementedError(f"no panwatch backing for {method_name}")
+    raise NotImplementedError(f"no candlewise backing for {method_name}")
 
 
 def _render_single_indicator(indicator: str, symbol: str) -> str:
@@ -825,7 +825,7 @@ def _quote_to_lightweight_fundamentals(symbol: str) -> str:
     if not isinstance(quote, dict):
         return f"[No lightweight fundamentals available for {symbol}]"
 
-    lines = ["[Lightweight Fundamentals (from PanWatch real-time quote)]"]
+    lines = ["[Lightweight Fundamentals (from Candlewise real-time quote)]"]
     fields = [
         ("PE ratio", "pe_ratio"),
         ("Total market cap", "total_market_value"),

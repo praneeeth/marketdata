@@ -14,8 +14,8 @@ Write Markdown (600 words or fewer):
 Finish with a line starting "Sources:" listing the sources used, with dates.
 
 Structured output (required). After the Markdown, append exactly:
-<!--PANWATCH_JSON-->
+<!--CANDLEWISE_JSON-->
 {"research": [{"symbol": "SYMBOL", "summary": "one-sentence factual summary", "bull_points": ["..."], "bear_points": ["..."], "key_risks": ["..."], "technical_levels": {"support": [], "resistance": []}, "upcoming_events": ["..."], "sources": [{"title": "...", "url": "...", "published_at": "..."}]}]}
-<!--/PANWATCH_JSON-->
+<!--/CANDLEWISE_JSON-->
 - One entry per security in the watchlist, with the symbol exactly as given in the input.
 - Valid JSON with double quotes. Nothing may follow the closing tag.

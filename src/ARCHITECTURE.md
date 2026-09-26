@@ -1,8 +1,8 @@
-# PanWatch backend architecture
+# Candlewise backend architecture
 
 ## Goal and shape
 
-PanWatch is a **modular monolith**: one FastAPI app and one shared database, with the code
+Candlewise is a **modular monolith**: one FastAPI app and one shared database, with the code
 organised along stable business boundaries. The goal isn't a microservice per domain; it is
 that every piece of business code has a clear owner, dependency direction and test boundary,
 so an unbounded `core` directory never forms again.
@@ -135,7 +135,7 @@ The database, ORM models and migrations all live in `platform/persistence/`. Don
 
 `pan-agent-runtime` is imported as `pan_agent`. It only defines the bounded run loop,
 resource limits and portable events, and must not import FastAPI, SQLAlchemy, `src.*` or
-LangChain. PanWatch's adapters, tools and persistence belong to `modules/assistant`.
+LangChain. Candlewise's adapters, tools and persistence belong to `modules/assistant`.
 
 ### Cross-module calls
 
@@ -170,7 +170,7 @@ never change the schema from a router.
 - letting `platform` import `modules`;
 - importing `models.py` or `repository.py` across modules;
 - putting business rules, SQL or tool loops in HTTP routers;
-- letting `pan_agent` depend on PanWatch, the database or a specific AI SDK;
+- letting `pan_agent` depend on Candlewise, the database or a specific AI SDK;
 - creating ownerless root modules in the name of "general helpers".
 
 These rules aren't about adding layers; they make every piece of code's ownership,

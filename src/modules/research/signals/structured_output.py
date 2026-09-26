@@ -19,8 +19,32 @@ ACTION_ALIASES = {
 }
 
 
-TAG_START = "<!--PANWATCH_JSON-->"
-TAG_END = "<!--/PANWATCH_JSON-->"
+TAG_START = "<!--CANDLEWISE_JSON-->"
+TAG_END = "<!--/CANDLEWISE_JSON-->"
+# Written before the rename (stored analyses, cached model output); still accepted when reading.
+LEGACY_TAG_START = "<!--PANWATCH_JSON-->"
+LEGACY_TAG_END = "<!--/PANWATCH_JSON-->"
+_TAG_PAIRS = ((TAG_START, TAG_END), (LEGACY_TAG_START, LEGACY_TAG_END))
+
+
+def _find_tagged_block(
+    raw: str, start: str | None, end: str | None
+) -> tuple[int, int, int, int] | None:
+    """Locate the last tagged block.
+
+    Returns (block start, payload start, payload end, block end). With no explicit tags the
+    current tags are tried first, then the legacy ones.
+    """
+    pairs = ((start, end),) if start is not None and end is not None else _TAG_PAIRS
+    for tag_start, tag_end in pairs:
+        i = raw.rfind(tag_start)
+        if i < 0:
+            continue
+        j = raw.rfind(tag_end)
+        if j < 0 or j <= i:
+            continue
+        return i, i + len(tag_start), j, j + len(tag_end)
+    return None
 
 
 def try_parse_action_json(text: str) -> dict | None:
@@ -60,24 +84,22 @@ def try_parse_action_json(text: str) -> dict | None:
 
 
 def try_extract_tagged_json(
-    text: str, *, start: str = TAG_START, end: str = TAG_END
+    text: str, *, start: str | None = None, end: str | None = None
 ) -> dict | None:
     """Extract a tagged JSON object from a larger text.
 
     Expected format at the end of the response:
-    <!--PANWATCH_JSON-->
+    <!--CANDLEWISE_JSON-->
     { ... }
-    <!--/PANWATCH_JSON-->
+    <!--/CANDLEWISE_JSON-->
     """
 
     raw = text or ""
-    i = raw.rfind(start)
-    if i < 0:
+    found = _find_tagged_block(raw, start, end)
+    if found is None:
         return None
-    j = raw.rfind(end)
-    if j < 0 or j <= i:
-        return None
-    payload = raw[i + len(start) : j].strip()
+    _, payload_start, payload_end, _ = found
+    payload = raw[payload_start:payload_end].strip()
     if not payload:
         return None
     try:
@@ -87,13 +109,11 @@ def try_extract_tagged_json(
     return obj if isinstance(obj, dict) else None
 
 
-def strip_tagged_json(text: str, *, start: str = TAG_START, end: str = TAG_END) -> str:
+def strip_tagged_json(text: str, *, start: str | None = None, end: str | None = None) -> str:
     """Remove tagged JSON block from text (if present)."""
     raw = text or ""
-    i = raw.rfind(start)
-    if i < 0:
+    found = _find_tagged_block(raw, start, end)
+    if found is None:
         return raw
-    j = raw.rfind(end)
-    if j < 0 or j <= i:
-        return raw
-    return (raw[:i] + raw[j + len(end) :]).strip()
+    block_start, _, _, block_end = found
+    return (raw[:block_start] + raw[block_end:]).strip()

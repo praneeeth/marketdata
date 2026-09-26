@@ -7,6 +7,15 @@
 # India fork: lint, type and coverage checks apply to new code only (see
 # docs/india-fork/PLAN.md §4.1). Add new modules to the lists below as they are written.
 
+[project]
+# Metadata only: the app is not installed as a package; the backend lives in src/.
+name = "candlewise"
+version = "0.0.0"
+description = "Candlewise: a self-hosted, research-only AI assistant for Indian stocks. Read the market. Decide for yourself."
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.10"
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 python_files = ["test_*.py"]
@@ -19,6 +28,9 @@ line-length = 100
 include = [
     "src/platform/compliance/**/*.py",
     "src/platform/security/**/*.py",
+    "src/platform/branding.py",
+    "src/platform/persistence/legacy_db.py",
+    "tests/test_candlewise_rename.py",
     "src/modules/administration/api/compliance.py",
     "src/modules/automation/research_output.py",
     "src/modules/automation/tradingagents/research_graph.py",
@@ -54,6 +66,8 @@ strict = true
 files = [
     "src/platform/compliance",
     "src/platform/security",
+    "src/platform/branding.py",
+    "src/platform/persistence/legacy_db.py",
     "src/modules/administration/api/compliance.py",
     "src/modules/automation/research_output.py",
     "src/modules/automation/tradingagents/research_graph.py",
@@ -76,6 +90,8 @@ branch = true
 include = [
     "src/platform/compliance/*.py",
     "src/platform/security/*.py",
+    "src/platform/branding.py",
+    "src/platform/persistence/legacy_db.py",
     "src/modules/administration/api/compliance.py",
     "src/modules/automation/research_output.py",
     "src/modules/automation/tradingagents/research_graph.py",

@@ -3,7 +3,7 @@
 <code>pan-agent-runtime</code> is a lightweight, business-agnostic Python agent execution core. It
 safely turns "the model asked for a tool call" into "an observable task that can pause and
 resume". It isn't tied to FastAPI, a database, a model provider or any business domain, so
-PanWatch, BeeCount-Cloud and other projects can reuse it as a dependency.
+Candlewise, BeeCount-Cloud and other projects can reuse it as a dependency.
 
 > Current version: <code>0.1.0</code><br>
 > Python: <code>>=3.10</code><br>
@@ -55,7 +55,7 @@ effects need a policy the host injects explicitly.
 host can map these objects onto a relational database, object storage or another task system,
 and decide whether cross-process execution is needed.
 
-PanWatch's host adapter stores task snapshots, events and approval checkpoints in SQLite; a
+Candlewise's host adapter stores task snapshots, events and approval checkpoints in SQLite; a
 browser refresh restores the view by replaying/tailing database events. That doesn't mean the
 runtime owns any persistence itself.
 
@@ -226,7 +226,7 @@ runtime = AgentRuntime(
 Extensions send generic `extension_event`s through `emit_event()`; the event data holds the
 extension name, event name and payload. When an extension fails, the runtime emits a
 fallback event and carries on with the default tool set. Tool Research is a separate optional
-package that PanWatch wires in explicitly; without it, `pan-agent-runtime` still runs on its
+package that Candlewise wires in explicitly; without it, `pan-agent-runtime` still runs on its
 own.
 
 When the model returns several tool calls, the runtime handles them in order. If any call
@@ -297,7 +297,7 @@ never consumed twice.
 ### Context engineering
 
 Context control for long conversations is provided generically in `pan_agent.context`,
-independent of PanWatch's database, FastAPI or model vendors. It includes:
+independent of Candlewise's database, FastAPI or model vendors. It includes:
 
 - `ContextBudget`: maximum tokens, soft/hard thresholds and the recent-message window;
 - `ContextUsage`: usage broken down into system instructions, history, recent messages, page context and summary;

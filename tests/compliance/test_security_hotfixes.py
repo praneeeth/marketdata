@@ -27,13 +27,13 @@ def static_tree(tmp_path: Path) -> Path:
     (static / "assets").mkdir(parents=True)
     (static / "index.html").write_text("index")
     (static / "assets" / "app.js").write_text("js")
-    (tmp_path / "panwatch.db").write_text("SECRET-DB")
+    (tmp_path / "candlewise.db").write_text("SECRET-DB")
     return static
 
 
 @pytest.mark.parametrize(
     "request_path",
-    ["../panwatch.db", "..\\panwatch.db", "/../panwatch.db", "assets/../../panwatch.db"],
+    ["../candlewise.db", "..\\candlewise.db", "/../candlewise.db", "assets/../../candlewise.db"],
 )
 def test_static_resolution_never_escapes_root(static_tree: Path, request_path: str) -> None:
     resolved = Path(resolve_static_file(str(static_tree), request_path))
@@ -53,7 +53,11 @@ def test_static_route_blocks_percent_encoded_traversal(static_tree: Path) -> Non
         return FileResponse(resolve_static_file(str(static_tree), path))
 
     client = TestClient(app)
-    for url in ("/%2e%2e/panwatch.db", "/..%2fpanwatch.db", "/assets/%2e%2e/%2e%2e/panwatch.db"):
+    for url in (
+        "/%2e%2e/candlewise.db",
+        "/..%2fcandlewise.db",
+        "/assets/%2e%2e/%2e%2e/candlewise.db",
+    ):
         response = client.get(url)
         assert response.status_code == 200
         assert "SECRET-DB" not in response.text

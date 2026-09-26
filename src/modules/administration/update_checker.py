@@ -11,6 +11,8 @@ from threading import Lock
 import requests
 from requests import exceptions as req_exc
 
+from src.platform.branding import RELEASES_URL
+
 _CACHE_LOCK = Lock()
 _CACHE: dict[str, object] = {
     "ts": 0.0,
@@ -152,6 +154,7 @@ def _human_error(err: str | None) -> str | None:
         return None
     mapping = {
         "disabled": "Update check disabled",
+        "not_configured": "Update check not configured (set UPDATE_CHECK_DOCKER_REPO)",
         "invalid_repo": "Invalid update check config",
         "no_semver_tag": "No usable version tag found",
         "hub_timeout": "Timed out connecting to Docker Hub",
@@ -175,18 +178,19 @@ def _human_error(err: str | None) -> str | None:
 
 
 def check_update(current_version: str, proxy: str | None = None) -> dict[str, object]:
-    repo = os.getenv("UPDATE_CHECK_DOCKER_REPO", "sunxiao0721/panwatch")
+    # Off until Candlewise publishes images: set UPDATE_CHECK_DOCKER_REPO (e.g. "owner/candlewise").
+    repo = os.getenv("UPDATE_CHECK_DOCKER_REPO", "").strip()
     force_disable = os.getenv("UPDATE_CHECK_DISABLE", "").strip() in {"1", "true", "True"}
-    if force_disable:
+    if force_disable or not repo:
         return {
             "enabled": False,
             "source": "docker",
             "current_version": _normalize(current_version),
             "latest_version": None,
             "update_available": False,
-            "release_url": f"https://hub.docker.com/r/{repo}/tags",
+            "release_url": f"https://hub.docker.com/r/{repo}/tags" if repo else RELEASES_URL,
             "checked_at": datetime.now(timezone.utc).isoformat(),
-            "error": _human_error("disabled"),
+            "error": _human_error("disabled" if force_disable else "not_configured"),
         }
 
     now = time.monotonic()

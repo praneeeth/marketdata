@@ -5,8 +5,8 @@ from __future__ import annotations
 from src.modules.automation.tradingagents.data_context import build_stock_metadata_context
 from src.modules.automation.tradingagents.toolkit_adapter import (
     _stock_meta_header,
-    _serve_from_panwatch,
-    panwatch_data_context,
+    _serve_from_candlewise,
+    candlewise_data_context,
 )
 
 
@@ -55,10 +55,10 @@ def test_metadata_context_unknown_market_label_passes_through():
 
 
 def test_stock_meta_header_from_cache():
-    """The tool result prefix includes the company name (from data injected by panwatch_data_context)."""
+    """The tool result prefix includes the company name (from data injected by candlewise_data_context)."""
     stock = _FakeStock("Tata Motors", "TATAMOTORS", "IN")
     quote = {"current_price": 83.26, "change_pct": -2.5, "industry": "Automobiles"}
-    with panwatch_data_context({"stock": stock, "quote": quote}):
+    with candlewise_data_context({"stock": stock, "quote": quote}):
         header = _stock_meta_header("TATAMOTORS")
     assert "Tata Motors" in header
     assert "TATAMOTORS" in header
@@ -71,8 +71,8 @@ def test_stock_meta_header_from_cache():
 def test_serve_fundamentals_includes_company_name():
     """The fundamentals tool result must carry the company name, so the LLM can't mistake TATAMOTORS for another company."""
     stock = _FakeStock("Tata Motors", "TATAMOTORS", "IN")
-    with panwatch_data_context({"stock": stock, "quote": {"current_price": 83.26}}):
-        result = _serve_from_panwatch("get_fundamentals_openai", "TATAMOTORS", {})
+    with candlewise_data_context({"stock": stock, "quote": {"current_price": 83.26}}):
+        result = _serve_from_candlewise("get_fundamentals_openai", "TATAMOTORS", {})
     assert "Tata Motors" in result
     assert "TATAMOTORS" in result
 
@@ -80,8 +80,8 @@ def test_serve_fundamentals_includes_company_name():
 def test_serve_news_empty_does_not_leak_global_news():
     """With no news, the tool says plainly there is no stock news, stopping the LLM from pulling unrelated global news."""
     stock = _FakeStock("Tata Motors", "TATAMOTORS", "IN")
-    with panwatch_data_context({"stock": stock, "events": []}):
-        result = _serve_from_panwatch("get_news", "601238", {})
+    with candlewise_data_context({"stock": stock, "events": []}):
+        result = _serve_from_candlewise("get_news", "601238", {})
     assert "Tata Motors" in result
     assert "DO NOT pull unrelated global news" in result
 
@@ -89,8 +89,8 @@ def test_serve_news_empty_does_not_leak_global_news():
 def test_serve_klines_empty_returns_company_aware_message():
     """With no K-lines, a clear empty message with the company name is returned."""
     stock = _FakeStock("Tata Motors", "TATAMOTORS", "IN")
-    with panwatch_data_context({"stock": stock, "klines": []}):
-        result = _serve_from_panwatch("get_stockstats_indicators", "TATAMOTORS", {})
+    with candlewise_data_context({"stock": stock, "klines": []}):
+        result = _serve_from_candlewise("get_stockstats_indicators", "TATAMOTORS", {})
     assert "Tata Motors" in result
     assert "TATAMOTORS" in result
 
@@ -98,8 +98,8 @@ def test_serve_klines_empty_returns_company_aware_message():
 def test_serve_get_balance_sheet_hits_with_balance_keyword():
     """get_balance_sheet must match (there used to be no balance keyword, so it MISSED)."""
     stock = _FakeStock("Tata Motors", "TATAMOTORS", "IN")
-    with panwatch_data_context({"stock": stock, "quote": {"current_price": 83.26}}):
-        result = _serve_from_panwatch("get_balance_sheet", "TATAMOTORS", {})
+    with candlewise_data_context({"stock": stock, "quote": {"current_price": 83.26}}):
+        result = _serve_from_candlewise("get_balance_sheet", "TATAMOTORS", {})
     assert "TATAMOTORS" in result
     assert "Balance sheet" in result
     assert "Avoid invented" in result
@@ -108,9 +108,9 @@ def test_serve_get_balance_sheet_hits_with_balance_keyword():
 def test_serve_get_cashflow_distinct_from_balance_sheet():
     """get_cashflow returns its own content instead of reusing the balance sheet text."""
     stock = _FakeStock("Tata Motors", "TATAMOTORS", "IN")
-    with panwatch_data_context({"stock": stock, "quote": {"current_price": 83.26}}):
-        bs = _serve_from_panwatch("get_balance_sheet", "TATAMOTORS", {})
-        cf = _serve_from_panwatch("get_cashflow", "TATAMOTORS", {})
+    with candlewise_data_context({"stock": stock, "quote": {"current_price": 83.26}}):
+        bs = _serve_from_candlewise("get_balance_sheet", "TATAMOTORS", {})
+        cf = _serve_from_candlewise("get_cashflow", "TATAMOTORS", {})
     assert "Cash flow" in cf
     assert bs != cf  # must not be identical
 
@@ -119,8 +119,8 @@ def test_serve_get_stock_data_hits():
     """get_stock_data must match (the method keywords used to lack stock_data)."""
     stock = _FakeStock("Tata Motors", "TATAMOTORS", "IN")
     klines = [type("K", (), {"date": "2026-05-15", "open": 80, "high": 85, "low": 79, "close": 83, "volume": 1000})()]
-    with panwatch_data_context({"stock": stock, "klines": klines, "quote": {}}):
-        result = _serve_from_panwatch("get_stock_data", "TATAMOTORS", {})
+    with candlewise_data_context({"stock": stock, "klines": klines, "quote": {}}):
+        result = _serve_from_candlewise("get_stock_data", "TATAMOTORS", {})
     assert "2026-05-15" in result  # CSV matched
 
 
@@ -129,8 +129,8 @@ def test_serve_get_indicators_without_args_fallback_to_kline_csv():
     stock = _FakeStock("Tata Motors", "TATAMOTORS", "IN")
     klines = [type("K", (), {"date": "2026-05-15", "open": 80, "high": 85, "low": 79, "close": 83, "volume": 1000})()]
     # Empty args -> the single-indicator branch doesn't match, so the stockstats/yfin branch returns the full CSV
-    with panwatch_data_context({"stock": stock, "klines": klines, "quote": {}}):
-        result = _serve_from_panwatch("get_indicators", "TATAMOTORS", {}, args=())
+    with candlewise_data_context({"stock": stock, "klines": klines, "quote": {}}):
+        result = _serve_from_candlewise("get_indicators", "TATAMOTORS", {}, args=())
     # No single indicator matched, so it falls back to the stockstats branch -> the full K-line CSV
     assert "2026-05-15" in result
 
@@ -144,8 +144,8 @@ def test_serve_fundamentals_uses_real_quote_data():
         "total_market_value": 125_000_000_000,
         "turnover_rate": 3.2,
     }
-    with panwatch_data_context({"stock": stock, "quote": quote}):
-        result = _serve_from_panwatch("get_fundamentals", "TATAMOTORS", {})
+    with candlewise_data_context({"stock": stock, "quote": quote}):
+        result = _serve_from_candlewise("get_fundamentals", "TATAMOTORS", {})
     assert "25.5" in result  # PE
     assert "125000000000" in result or "1.25e" in result.lower()  # market cap
     assert "3.2" in result  # turnover rate
@@ -156,8 +156,8 @@ def test_serve_klines_with_data_returns_csv():
     """With K-line data, a CSV is returned, prefixed with the company name."""
     stock = _FakeStock("Tata Motors", "TATAMOTORS", "IN")
     klines = [type("K", (), {"date": "2026-05-15", "open": 80, "high": 85, "low": 79, "close": 83.26, "volume": 1000})()]
-    with panwatch_data_context({"stock": stock, "klines": klines}):
-        result = _serve_from_panwatch("get_stockstats_indicators", "TATAMOTORS", {})
+    with candlewise_data_context({"stock": stock, "klines": klines}):
+        result = _serve_from_candlewise("get_stockstats_indicators", "TATAMOTORS", {})
     assert "Tata Motors" in result
     assert "2026-05-15,80,85,79,83.26,1000" in result
 
@@ -189,7 +189,7 @@ def test_patch_route_to_vendor_handles_positional_args():
 
     try:
         stock = _FakeStock("Tata Motors", "TATAMOTORS", "IN")
-        with panwatch_data_context({"stock": stock, "klines": [], "quote": {}}):
+        with candlewise_data_context({"stock": stock, "klines": [], "quote": {}}):
             with patch_route_to_vendor():
                 # Simulate the upstream positional call: route_to_vendor("get_fundamentals", "TATAMOTORS", "2026-05-17")
                 result = fake_module.route_to_vendor("get_fundamentals", "TATAMOTORS", "2026-05-17")
@@ -222,7 +222,7 @@ def test_patch_route_to_vendor_intercepts_global_news_with_cache():
 
     try:
         stock = _FakeStock("Tata Motors", "TATAMOTORS", "IN")
-        with panwatch_data_context({"stock": stock, "events": [], "quote": {}}):
+        with candlewise_data_context({"stock": stock, "events": [], "quote": {}}):
             with patch_route_to_vendor():
                 # get_global_news's first argument is a date, not a ticker
                 result = fake_module.route_to_vendor(

@@ -1,4 +1,4 @@
-"""PanWatch business adapters for the framework-free PanAgent runtime."""
+"""Candlewise business adapters for the framework-free PanAgent runtime."""
 
 from __future__ import annotations
 
@@ -143,7 +143,7 @@ def _compact_research_candidate(item: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def build_panwatch_tool_registry(session: Session) -> ToolRegistry:
+def build_candlewise_tool_registry(session: Session) -> ToolRegistry:
     """Register the host-owned market and portfolio tools for an assistant run."""
     registry = ToolRegistry()
     portfolio_service = build_portfolio_service(session)
@@ -153,7 +153,7 @@ def build_panwatch_tool_registry(session: Session) -> ToolRegistry:
         return ToolResult.success(
             summary=summary,
             data={"has_positions": summary != "The user has no positions."},
-            sources=[{"name": "PanWatch positions"}],
+            sources=[{"name": "Candlewise positions"}],
             observed_at=datetime.now(UTC),
         )
 
@@ -213,7 +213,7 @@ def build_panwatch_tool_registry(session: Session) -> ToolRegistry:
                 "count": len(items),
                 "items": items,
             },
-            sources=[{"name": "PanWatch screening signals"}],
+            sources=[{"name": "Candlewise screening signals"}],
             observed_at=datetime.now(UTC),
         )
 
@@ -264,7 +264,7 @@ def build_panwatch_tool_registry(session: Session) -> ToolRegistry:
                 f"change {data.get('change_pct')}%."
             ),
             data=data,
-            sources=[{"name": "PanWatch quotes"}],
+            sources=[{"name": "Candlewise quotes"}],
             observed_at=datetime.now(UTC),
         )
 
@@ -289,7 +289,7 @@ def build_panwatch_tool_registry(session: Session) -> ToolRegistry:
         return ToolResult.success(
             summary=f"K-line summary for {market.value}:{symbol}: {summary}",
             data=summary,
-            sources=[{"name": "PanWatch K-lines"}],
+            sources=[{"name": "Candlewise K-lines"}],
             observed_at=datetime.now(UTC),
         )
 
@@ -325,7 +325,7 @@ def build_panwatch_tool_registry(session: Session) -> ToolRegistry:
         return ToolResult.success(
             summary=f"{len(items)} news items for {market.value}:{symbol} in the last 7 days.",
             data={"symbol": symbol, "market": market.value, "items": items},
-            sources=[{"name": "PanWatch news"}],
+            sources=[{"name": "Candlewise news"}],
             observed_at=datetime.now(UTC),
         )
 
@@ -410,7 +410,7 @@ def build_panwatch_tool_registry(session: Session) -> ToolRegistry:
                 for item in markets
             ),
             data={"markets": markets},
-            sources=[{"name": "PanWatch market calendar"}],
+            sources=[{"name": "Candlewise market calendar"}],
             observed_at=datetime.now(UTC),
         )
 
@@ -534,7 +534,7 @@ def build_panwatch_tool_registry(session: Session) -> ToolRegistry:
                 "target_price": target_price,
                 "stock_registered": stock_registered,
             },
-            sources=[{"name": "PanWatch price alerts"}],
+            sources=[{"name": "Candlewise price alerts"}],
             observed_at=datetime.now(UTC),
         )
 
@@ -570,7 +570,7 @@ def build_panwatch_tool_registry(session: Session) -> ToolRegistry:
             return ToolResult.success(
                 summary="No matching price alerts found.",
                 data={"count": 0, "items": []},
-                sources=[{"name": "PanWatch price alerts"}],
+                sources=[{"name": "Candlewise price alerts"}],
                 observed_at=datetime.now(UTC),
             )
         summary = "; ".join(
@@ -583,7 +583,7 @@ def build_panwatch_tool_registry(session: Session) -> ToolRegistry:
         return ToolResult.success(
             summary=f"Found {len(items)} price alerts: {summary}",
             data={"count": len(items), "items": items},
-            sources=[{"name": "PanWatch price alerts"}],
+            sources=[{"name": "Candlewise price alerts"}],
             observed_at=datetime.now(UTC),
         )
 
@@ -628,7 +628,7 @@ def build_panwatch_tool_registry(session: Session) -> ToolRegistry:
                 f"{_alert_condition_summary(item)}, {'on' if item['enabled'] else 'off'}."
             ),
             data=item,
-            sources=[{"name": "PanWatch price alerts"}],
+            sources=[{"name": "Candlewise price alerts"}],
             observed_at=datetime.now(UTC),
         )
 
@@ -657,7 +657,7 @@ def build_panwatch_tool_registry(session: Session) -> ToolRegistry:
         return ToolResult.success(
             summary=f"Deleted price alert #{rule_id}: {item['stock_name'] or item['symbol']}.",
             data={"rule_id": rule_id, "deleted": True},
-            sources=[{"name": "PanWatch price alerts"}],
+            sources=[{"name": "Candlewise price alerts"}],
             observed_at=datetime.now(UTC),
         )
 
@@ -701,7 +701,7 @@ def build_panwatch_tool_registry(session: Session) -> ToolRegistry:
             ToolSpec(
                 name="find_research_candidates",
                 title="Find research candidates",
-                description="Latest PanWatch screening signals: candidates worth further research with their scores and risk. Read-only; never refreshes strategies or trades.",
+                description="Latest Candlewise screening signals: candidates worth further research with their scores and risk. Read-only; never refreshes strategies or trades.",
                 risk=ToolRisk.READ,
                 input_schema={
                     "type": "object",

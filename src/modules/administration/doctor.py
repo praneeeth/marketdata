@@ -19,7 +19,7 @@ _ORDER = ["system", "datasource", "ai", "notify"]
 
 def _print_report(res: dict) -> None:
     s = res["summary"]
-    print("\n===== PanWatch system self-check =====")
+    print("\n===== Candlewise system self-check =====")
     print(f"{s['total']} items · ✅ ok {s['ok']} · ⚠️ slow {s['slow']} · ❌ failed {s['fail']}\n")
     items = res.get("items", [])
     for cat in _ORDER:

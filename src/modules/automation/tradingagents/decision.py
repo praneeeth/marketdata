@@ -1,4 +1,4 @@
-"""Map TradingAgents output to a PanWatch AnalysisResult.
+"""Map TradingAgents output to a Candlewise AnalysisResult.
 
 TradingAgents' ``final_state`` is the dict LangGraph accumulates. Key fields (from upstream):
 - market_report / social_report / news_report / fundamentals_report: the four analyst reports
@@ -138,7 +138,7 @@ def map_state_to_result(
     """Entry point: map TradingAgents' final_state to an AnalysisResult.
 
     Args:
-        stock: PanWatch StockConfig(symbol/name/market)
+        stock: Candlewise StockConfig(symbol/name/market)
         ta_result: {"decision": str, "final_state": dict, "cost_usd": float}
         model_label: e.g. "deepseek/deepseek-chat", appended to the markdown
     """
@@ -183,7 +183,7 @@ def map_state_to_result(
     }
 
     content = _render_markdown(state, suggestion, model_label, cost_usd)
-    # Link to the detail page (only with panwatch_base_url set)
+    # Link to the detail page (only with candlewise_base_url set)
     from datetime import date as _date
     from src.modules.research.analysis_link import analysis_detail_markdown
     _link = analysis_detail_markdown(stock.symbol, _date.today().isoformat())

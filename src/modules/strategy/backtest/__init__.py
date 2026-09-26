@@ -1,4 +1,4 @@
-"""PanWatch back-test module (Phase 0 foundation).
+"""Candlewise back-test module (Phase 0 foundation).
 
 A lightweight, pure-Python, dependency-free event-driven back-test core, serving to:
 - validate how existing StrategySignalRun signals really performed

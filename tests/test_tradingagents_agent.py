@@ -28,7 +28,7 @@ from src.modules.automation.tradingagents.runtime_support import (
     inject_api_key_env,
 )
 from src.modules.automation.tradingagents.observability import (
-    PanWatchProgressHandler,
+    CandlewiseProgressHandler,
     aggregate_progress,
     STAGES_ORDER,
 )
@@ -37,8 +37,8 @@ from src.modules.automation.tradingagents.decision import (
     map_state_to_result,
 )
 from src.modules.automation.tradingagents.toolkit_adapter import (
-    is_panwatch_routable,
-    panwatch_data_context,
+    is_candlewise_routable,
+    candlewise_data_context,
     patch_route_to_vendor,
 )
 
@@ -93,7 +93,7 @@ class TestLLMAdapter(unittest.TestCase):
                 ai_client, selected_analysts=["market", "technical"]
             )
 
-    def test_build_ta_llm_config_uses_panwatch_runtime_and_opt_in_sec_edgar(self):
+    def test_build_ta_llm_config_uses_candlewise_runtime_and_opt_in_sec_edgar(self):
         """Statements are routed to SEC EDGAR only for US stocks when enabled explicitly, and upstream run files are isolated."""
         from pathlib import Path
         from tempfile import TemporaryDirectory
@@ -304,18 +304,18 @@ class TestCostTracker(unittest.TestCase):
 
 class TestToolkitAdapter(unittest.TestCase):
     def test_every_ticker_is_served_from_the_broker(self):
-        """India-only: any real ticker routes to PanWatch (the user's broker data)."""
-        self.assertTrue(is_panwatch_routable("INFY"))
-        self.assertTrue(is_panwatch_routable("BSE:500209"))
-        self.assertTrue(is_panwatch_routable("NIFTY 50"))
-        self.assertFalse(is_panwatch_routable(""))
-        self.assertFalse(is_panwatch_routable("   "))
+        """India-only: any real ticker routes to Candlewise (the user's broker data)."""
+        self.assertTrue(is_candlewise_routable("INFY"))
+        self.assertTrue(is_candlewise_routable("BSE:500209"))
+        self.assertTrue(is_candlewise_routable("NIFTY 50"))
+        self.assertFalse(is_candlewise_routable(""))
+        self.assertFalse(is_candlewise_routable("   "))
 
-    def test_panwatch_data_context_isolation(self):
+    def test_candlewise_data_context_isolation(self):
         """Data context: entering/leaving doesn't leak outside (ContextVar based)."""
         from src.modules.automation.tradingagents import toolkit_adapter
         self.assertEqual(toolkit_adapter._cache(), {})
-        with panwatch_data_context({"klines": [1, 2, 3]}):
+        with candlewise_data_context({"klines": [1, 2, 3]}):
             self.assertEqual(toolkit_adapter._cache().get("klines"), [1, 2, 3])
         self.assertEqual(toolkit_adapter._cache(), {})
 
@@ -334,7 +334,7 @@ class TestToolkitAdapter(unittest.TestCase):
 class TestProgress(unittest.TestCase):
     def test_progress_handler_records_cost(self):
         """ProgressHandler: record_cost accumulates total_cost."""
-        handler = PanWatchProgressHandler(trace_id="test-123")
+        handler = CandlewiseProgressHandler(trace_id="test-123")
         handler.record_cost(0.01)
         handler.record_cost(0.02)
         self.assertAlmostEqual(handler._total_cost, 0.03)
@@ -582,7 +582,7 @@ class TestPortfolioContext(unittest.TestCase):
         ])
 
     def test_to_tradingagents_portfolio_preserves_cash_and_positions(self):
-        """PanWatch holdings aggregate into 0.5.0's structured cash, instruments, quantities and average prices."""
+        """Candlewise holdings aggregate into 0.5.0's structured cash, instruments, quantities and average prices."""
         from tradingagents.portfolio import PortfolioContext
         from src.modules.automation.tradingagents.data_context import to_tradingagents_portfolio
 
@@ -717,7 +717,7 @@ class TestPortfolioContext(unittest.TestCase):
             patch.object(agent_module, "apply_compat_patches"),
             patch.object(agent_module, "inject_api_key_env"),
             patch.object(agent_module, "patch_route_to_vendor", lambda: nullcontext()),
-            patch.object(agent_module, "panwatch_data_context", lambda *args, **kwargs: nullcontext()),
+            patch.object(agent_module, "candlewise_data_context", lambda *args, **kwargs: nullcontext()),
             patch.object(agent_module, "install_research_only_workflow", lambda graph, analysts: None),
         ):
             result = agent._run_tradingagents_sync(
@@ -726,7 +726,7 @@ class TestPortfolioContext(unittest.TestCase):
                 market="CN",
                 ta_config=ta_config,
                 progress_handler=None,
-                panwatch_data={},
+                candlewise_data={},
                 stock_metadata_context="",
                 portfolio=self._portfolio(),
             )

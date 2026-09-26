@@ -1,11 +1,11 @@
 """Regression tests for TradingAgents toolkit data isolation under concurrency.
 
-Root-cause bug: _PANWATCH_DATA_CACHE used to be a module-level global dict, so two concurrent deep research runs
+Root-cause bug: _CANDLEWISE_DATA_CACHE used to be a module-level global dict, so two concurrent deep research runs
 (asyncio.to_thread worker threads) overwrote each other: one stock's report picked up the other's
 K-lines/prices. With a ContextVar, each concurrent task (copy_context) gets its own copy and they don't mix.
 
 This test simulates two concurrent tasks with contextvars.copy_context() to reproduce the bug and check the fix.
-Note: it only tests the direct _serve_from_panwatch / _stock_meta_header paths, not
+Note: it only tests the direct _serve_from_candlewise / _stock_meta_header paths, not
 _patched_route_to_vendor (to avoid _emit_toolkit_log -> log_context/DB).
 """
 
@@ -40,7 +40,7 @@ SERES = _data("MARUTI", "Maruti Suzuki", 83.26)
 def test_stock_meta_header_uses_current_context():
     """_stock_meta_header reads the stock from the current context, not a process global."""
     def _run():
-        with ta.panwatch_data_context(GAC):
+        with ta.candlewise_data_context(GAC):
             return ta._stock_meta_header("TATAMOTORS")
     header = contextvars.copy_context().run(_run)
     assert "Tata Motors" in header
@@ -55,13 +55,13 @@ def test_two_concurrent_contexts_do_not_cross_talk():
     ctx_b = contextvars.copy_context()
 
     # A enters its context first (worker A starts; data injected but tools not run yet)
-    ctx_a.run(lambda: ta._PANWATCH_DATA.set(dict(GAC)))
+    ctx_a.run(lambda: ta._CANDLEWISE_DATA.set(dict(GAC)))
     # B enters its context next (concurrent task B starts); the old implementation overwrote the global here
-    ctx_b.run(lambda: ta._PANWATCH_DATA.set(dict(SERES)))
+    ctx_b.run(lambda: ta._CANDLEWISE_DATA.set(dict(SERES)))
 
     # A keeps calling tools: get_stock_data(TATAMOTORS) must return Tata Motors' K-lines/price
-    out_a = ctx_a.run(lambda: ta._serve_from_panwatch("get_stock_data", "TATAMOTORS", {}, args=("TATAMOTORS",)))
-    out_b = ctx_b.run(lambda: ta._serve_from_panwatch("get_stock_data", "MARUTI", {}, args=("MARUTI",)))
+    out_a = ctx_a.run(lambda: ta._serve_from_candlewise("get_stock_data", "TATAMOTORS", {}, args=("TATAMOTORS",)))
+    out_b = ctx_b.run(lambda: ta._serve_from_candlewise("get_stock_data", "MARUTI", {}, args=("MARUTI",)))
 
     assert "Tata Motors" in out_a and "Maruti Suzuki" not in out_a
     assert "9.5" in out_a            # Tata Motors' close
@@ -71,10 +71,10 @@ def test_two_concurrent_contexts_do_not_cross_talk():
 
 
 def test_context_restored_after_exit():
-    """After panwatch_data_context exits, the current context's data is empty again."""
+    """After candlewise_data_context exits, the current context's data is empty again."""
     def _run():
         assert ta._cache() == {}
-        with ta.panwatch_data_context(SERES):
+        with ta.candlewise_data_context(SERES):
             assert ta._cache().get("stock").symbol == "MARUTI"
         # Restored after exit
         return ta._cache()
@@ -84,9 +84,9 @@ def test_context_restored_after_exit():
 def test_nested_contexts_restore_outer():
     """Nested contexts: after the inner one exits, the outer data comes back (token reset semantics)."""
     def _run():
-        with ta.panwatch_data_context(GAC):
+        with ta.candlewise_data_context(GAC):
             assert ta._cache().get("stock").symbol == "TATAMOTORS"
-            with ta.panwatch_data_context(SERES):
+            with ta.candlewise_data_context(SERES):
                 assert ta._cache().get("stock").symbol == "MARUTI"
             # The inner one exited; the outer Tata Motors data is back
             assert ta._cache().get("stock").symbol == "TATAMOTORS"

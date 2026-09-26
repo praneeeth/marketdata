@@ -11,7 +11,7 @@ from tradingagents.graph.propagation import Propagator
 from tradingagents.graph.trading_graph import TradingAgentsGraph
 
 
-def test_v050_exposes_the_panwatch_extension_contract():
+def test_v050_exposes_the_candlewise_extension_contract():
     """On an upgrade or upstream refactor, the public portfolio entry point and existing patch signatures must still work."""
     assert version("tradingagents") == "0.5.0"
     assert "portfolio" in inspect.signature(TradingAgentsGraph.propagate).parameters

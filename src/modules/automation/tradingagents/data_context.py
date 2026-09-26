@@ -1,6 +1,6 @@
 """TradingAgents data context adapters (India-only).
 
-Converts PanWatch data into structures TradingAgents consumes: PortfolioContext, the
+Converts Candlewise data into structures TradingAgents consumes: PortfolioContext, the
 instrument context and stock metadata. The financial-statement renderers take a
 normalised dict; the upstream akshare (A-share) fetcher was removed, and Indian
 fundamentals depend on open question Q8, so the toolkit falls back to quote data.

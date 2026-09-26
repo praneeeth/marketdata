@@ -1,4 +1,4 @@
-"""Regression tests for mapping the upstream 5-level rating to PanWatch's 3 actions.
+"""Regression tests for mapping the upstream 5-level rating to Candlewise's 3 actions.
 
 Root-cause bug: the upstream PM uses Buy/Overweight/Hold/Underweight/Sell, but only 3 levels
 were recognised; Overweight/Underweight fell back to hold, so the header said "Hold" while the

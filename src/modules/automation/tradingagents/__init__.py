@@ -1,9 +1,9 @@
 """TradingAgents integration.
 
-Adapts TauricResearch/TradingAgents (a multi-agent research framework) into PanWatch:
-- bridges PanWatch's AI service to the TradingAgents LLM config
-- injects data from PanWatch's provider layer into TradingAgents' data vendor layer
-- maps TradingAgents' final_state to PanWatch's AnalysisResult
+Adapts TauricResearch/TradingAgents (a multi-agent research framework) into Candlewise:
+- bridges Candlewise's AI service to the TradingAgents LLM config
+- injects data from Candlewise's provider layer into TradingAgents' data vendor layer
+- maps TradingAgents' final_state to Candlewise's AnalysisResult
 - reports progress through LangChain callbacks
 
 Soft dependency: the `tradingagents` library isn't on PyPI; users git clone it and pip install -e.
@@ -20,7 +20,7 @@ from src.modules.automation.tradingagents.data_context import (
 )
 from src.modules.automation.tradingagents.decision import map_state_to_result
 from src.modules.automation.tradingagents.observability import (
-    PanWatchProgressHandler,
+    CandlewiseProgressHandler,
     aggregate_progress,
     check_budget,
     estimate_cost,
@@ -28,7 +28,7 @@ from src.modules.automation.tradingagents.observability import (
 
 __all__ = [
     "TradingAgentsAgent",
-    "PanWatchProgressHandler",
+    "CandlewiseProgressHandler",
     "aggregate_progress",
     "build_stock_metadata_context",
     "check_budget",

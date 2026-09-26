@@ -26,7 +26,7 @@ def test_tradingagents_adapter_has_compact_target_modules():
 
 def test_tradingagents_package_exports_stable_runtime_entries():
     from src.modules.automation.tradingagents import (
-        PanWatchProgressHandler,
+        CandlewiseProgressHandler,
         TradingAgentsAgent,
         aggregate_progress,
         build_stock_metadata_context,
@@ -36,7 +36,7 @@ def test_tradingagents_package_exports_stable_runtime_entries():
     )
 
     assert TradingAgentsAgent is not None
-    assert PanWatchProgressHandler is not None
+    assert CandlewiseProgressHandler is not None
     assert aggregate_progress is not None
     assert build_stock_metadata_context is not None
     assert map_state_to_result is not None

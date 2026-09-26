@@ -1,6 +1,6 @@
 # OpenTelemetry export (optional dependency group)
 #
-# PanWatch's own observability (log_context / agent_runs / progress) doesn't need these packages;
+# Candlewise's own observability (log_context / agent_runs / progress) doesn't need these packages;
 # install them only to export traces to a standard APM (Jaeger / Tempo / Langfuse OTLP, etc.):
 #
 #   pip install -r requirements-otel.txt

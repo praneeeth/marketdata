@@ -1,6 +1,6 @@
 # marketdata
 
-India market data (NSE/BSE) for the PanWatch India fork, fetched with each user's own
+India market data (NSE/BSE) for the Candlewise India fork, fetched with each user's own
 broker credentials, plus a small set of global market cues for context.
 
 ## Layout

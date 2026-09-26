@@ -1,6 +1,6 @@
-"""Links to PanWatch's own pages, such as the deep research detail page.
+"""Links to Candlewise's own pages, such as the deep research detail page.
 
-Global setting key: panwatch_base_url (the public URL, for absolute detail-page links in notifications).
+Global setting key: candlewise_base_url (the public URL, for absolute detail-page links in notifications).
 Read the same way as stock_link.py (AppSettings, falling back to the default on a miss).
 """
 
@@ -13,7 +13,7 @@ from src.platform.persistence.models import AppSettings
 
 logger = logging.getLogger(__name__)
 
-SETTING_KEY = "panwatch_base_url"
+SETTING_KEY = "candlewise_base_url"
 
 
 def get_base_url() -> str:

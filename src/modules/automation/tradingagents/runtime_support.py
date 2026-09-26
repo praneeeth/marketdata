@@ -210,7 +210,7 @@ def _patch_ai_message_init() -> None:
     except ImportError:
         return
 
-    if getattr(AIMessage, "_panwatch_patched", False):
+    if getattr(AIMessage, "_candlewise_patched", False):
         return
 
     original_init = AIMessage.__init__
@@ -221,7 +221,7 @@ def _patch_ai_message_init() -> None:
         return original_init(self, *args, **kwargs)
 
     AIMessage.__init__ = _patched_init  # type: ignore[method-assign]
-    AIMessage._panwatch_patched = True  # type: ignore[attr-defined]
+    AIMessage._candlewise_patched = True  # type: ignore[attr-defined]
     logger.info("[TA compat] Patched AIMessage.__init__ to accept string tool_calls.args")
 
 
@@ -239,7 +239,7 @@ def _patch_tool_call_args_coercion() -> None:
         logger.debug("[TA compat] create_tool_call not found; skipping")
         return
 
-    if getattr(create_func, "_panwatch_patched", False):
+    if getattr(create_func, "_candlewise_patched", False):
         return  # already patched
 
     original = create_func
@@ -274,7 +274,7 @@ def _patch_tool_call_args_coercion() -> None:
 
         return original(*args, **kwargs)
 
-    _patched_create_tool_call._panwatch_patched = True  # type: ignore[attr-defined]
+    _patched_create_tool_call._candlewise_patched = True  # type: ignore[attr-defined]
 
     # Replace the module-level symbol and the internal import
     _tool_module.create_tool_call = _patched_create_tool_call

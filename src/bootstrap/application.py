@@ -55,7 +55,7 @@ from src.web.response import ResponseWrapperMiddleware
 register_broker_manager(get_broker_manager)
 
 app = FastAPI(
-    title="PanWatch API",
+    title="Candlewise API",
     version="0.1.0",
     redirect_slashes=False,  # avoid redirects that drop the Authorization header
 )

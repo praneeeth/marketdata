@@ -250,9 +250,9 @@ def test_progress_keeps_other_parallel_tool_active_after_one_finishes():
 
 def test_progress_handler_uses_run_id_to_close_the_same_langgraph_node():
     """LangChain 1.x's on_chain_end no longer reliably provides name, so it must be linked by run_id."""
-    from src.modules.automation.tradingagents.observability import PanWatchProgressHandler
+    from src.modules.automation.tradingagents.observability import CandlewiseProgressHandler
 
-    handler = PanWatchProgressHandler(trace_id="trace-1")
+    handler = CandlewiseProgressHandler(trace_id="trace-1")
     emitted = []
     handler._emit = lambda stage, action, **extra: emitted.append((stage, action, extra))
 
@@ -276,9 +276,9 @@ def test_progress_handler_uses_run_id_to_close_the_same_langgraph_node():
 
 def test_progress_handler_drops_empty_node_name_instead_of_data_collection():
     """An empty name must not match `n in stage`, or every unknown end event would become 'data collection done'."""
-    from src.modules.automation.tradingagents.observability import PanWatchProgressHandler
+    from src.modules.automation.tradingagents.observability import CandlewiseProgressHandler
 
-    handler = PanWatchProgressHandler(trace_id="trace-2")
+    handler = CandlewiseProgressHandler(trace_id="trace-2")
     emitted = []
     handler._emit = lambda stage, action, **extra: emitted.append((stage, action, extra))
 
@@ -289,9 +289,9 @@ def test_progress_handler_drops_empty_node_name_instead_of_data_collection():
 
 def test_progress_handler_exposes_agent_for_llm_and_tool_operations():
     """The active operation must say which sub-agent started it, so the UI shows more than a generic tool name."""
-    from src.modules.automation.tradingagents.observability import PanWatchProgressHandler
+    from src.modules.automation.tradingagents.observability import CandlewiseProgressHandler
 
-    handler = PanWatchProgressHandler(trace_id="trace-3")
+    handler = CandlewiseProgressHandler(trace_id="trace-3")
     emitted = []
     handler._emit = lambda stage, action, **extra: emitted.append((stage, action, extra))
 
@@ -383,7 +383,7 @@ def test_empty_required_market_source_is_visible_as_error(monkeypatch):
         context.watchlist = [stock]
         context._trace_id = "man-tradingagents-INFY-empty"
 
-        monkeypatch.setattr(agent_module, "PanWatchProgressHandler", _Handler)
+        monkeypatch.setattr(agent_module, "CandlewiseProgressHandler", _Handler)
         monkeypatch.setattr("src.platform.marketdata.marketdata_client.md_quote_rows", lambda *a, **k: [])
         monkeypatch.setattr(
             "src.platform.marketdata.collectors.kline_collector.KlineCollector.get_klines",

@@ -50,8 +50,8 @@ from .schemas import (
     CreateConversationCommand,
     MessageDTO,
 )
-from .tool_descriptors import PANWATCH_TOOL_DESCRIPTORS
-from .tools import build_panwatch_tool_registry
+from .tool_descriptors import CANDLEWISE_TOOL_DESCRIPTORS
+from .tools import build_candlewise_tool_registry
 
 
 class AssistantNotFoundError(LookupError):
@@ -75,8 +75,8 @@ class AssistantApprovalResolution:
     decisions: dict[str, ApprovalDecision]
 
 
-class PanWatchToolPolicy:
-    """A per-run, trusted snapshot of PanWatch's local tool preferences."""
+class CandlewiseToolPolicy:
+    """A per-run, trusted snapshot of Candlewise's local tool preferences."""
 
     def __init__(self, repository: AssistantRepository, permissions: dict) -> None:
         self._repository = repository
@@ -364,7 +364,7 @@ class AssistantService:
 
     def build_runtime(self, failover_client) -> AgentRuntime:
         """Compose host adapters into the business-agnostic PanAgent runtime."""
-        tools = build_panwatch_tool_registry(self._repository.session)
+        tools = build_candlewise_tool_registry(self._repository.session)
         return AgentRuntime(
             FailoverModelAdapter(failover_client),
             tools,
@@ -376,7 +376,7 @@ class AssistantService:
                             tools,
                             descriptors=[
                                 d
-                                for d in PANWATCH_TOOL_DESCRIPTORS
+                                for d in CANDLEWISE_TOOL_DESCRIPTORS
                                 if d.tool_name in {spec.name for spec in tools.registered_tools()}
                             ],
                         ),
@@ -388,9 +388,9 @@ class AssistantService:
             ),
         )
 
-    def build_tool_policy(self) -> PanWatchToolPolicy:
+    def build_tool_policy(self) -> CandlewiseToolPolicy:
         """Freeze a user's preferences for the lifetime of one runtime run."""
-        return PanWatchToolPolicy(
+        return CandlewiseToolPolicy(
             self._repository, self._repository.permission_snapshot()
         )
 
@@ -420,7 +420,7 @@ class AssistantService:
                 ).mode.value,
                 "confirmation_required": tool.confirmation_required,
             }
-            for tool in build_panwatch_tool_registry(
+            for tool in build_candlewise_tool_registry(
                 self._repository.session
             ).registered_tools()
         ]
@@ -452,7 +452,7 @@ class AssistantService:
         elif selector_kind == "tool" and resolved_risk is None:
             registered = {
                 tool.name: tool
-                for tool in build_panwatch_tool_registry(
+                for tool in build_candlewise_tool_registry(
                     self._repository.session
                 ).registered_tools()
             }
@@ -548,7 +548,7 @@ class AssistantService:
         """Estimate the definitions registered for the assistant model input."""
         return [
             tool.openai_schema()
-            for tool in build_panwatch_tool_registry(self._repository.session).registered_tools()
+            for tool in build_candlewise_tool_registry(self._repository.session).registered_tools()
         ]
 
     @staticmethod

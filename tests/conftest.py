@@ -79,7 +79,7 @@ def _ensure_db_schema():
     """Make sure the real DB engine has its tables.
 
     A few cases pass SessionLocal straight to async endpoints (read-only queries); in a fresh CI environment
-    data/panwatch.db has no tables and fails with 'no such table: stocks'. Tables are created idempotently at session start
+    data/candlewise.db has no tables and fails with 'no such table: stocks'. Tables are created idempotently at session start
     (no side effect when they exist locally), independent of the in-memory databases the cases create themselves.
     """
     import src.platform.persistence.models  # noqa: F401  registers every ORM model on Base.metadata

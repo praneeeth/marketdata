@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 
+from src.platform.branding import getenv_compat
 from src.platform.persistence.database import get_db
 from src.platform.persistence.models import AppSettings
 from src.platform.runtime.config import Settings
@@ -55,7 +56,7 @@ SETTING_DESCRIPTIONS = {
     "notify_retry_backoff_seconds": "Notification retry backoff in seconds (base)",
     "notify_dedupe_ttl_overrides": "Notification dedupe window overrides (JSON; empty = defaults)",
     "stock_link_platform": "Stock link platform (quote site opened from a stock symbol): nse, tradingview or google",
-    "panwatch_base_url": "Public URL of the app (for analysis detail links in notifications, e.g. https://marketdata.example.com)",
+    "candlewise_base_url": "Public URL of the app (for analysis detail links in notifications, e.g. https://candlewise.example.com)",
 }
 
 SETTING_KEYS = list(SETTING_DESCRIPTIONS.keys())
@@ -71,7 +72,7 @@ def _get_env_defaults() -> dict[str, str]:
         "notify_retry_backoff_seconds": str(s.notify_retry_backoff_seconds),
         "notify_dedupe_ttl_overrides": s.notify_dedupe_ttl_overrides,
         "stock_link_platform": "nse",
-        "panwatch_base_url": os.getenv("PANWATCH_BASE_URL", ""),
+        "candlewise_base_url": getenv_compat("BASE_URL"),
     }
 
 

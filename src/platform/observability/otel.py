@@ -41,13 +41,13 @@ GEN_AI_USAGE_INPUT_TOKENS = "gen_ai.usage.input_tokens"
 GEN_AI_USAGE_OUTPUT_TOKENS = "gen_ai.usage.output_tokens"
 
 # App-specific attributes (bridge the in-house trace model, so APM data lines up with agent_runs)
-ATTR_AGENT_NAME = "panwatch.agent.name"
-ATTR_TRACE_ID = "panwatch.trace_id"
-ATTR_TRIGGER_SOURCE = "panwatch.trigger_source"
-ATTR_TA_STAGE = "panwatch.tradingagents.stage"
+ATTR_AGENT_NAME = "candlewise.agent.name"
+ATTR_TRACE_ID = "candlewise.trace_id"
+ATTR_TRIGGER_SOURCE = "candlewise.trigger_source"
+ATTR_TA_STAGE = "candlewise.tradingagents.stage"
 
-_SERVICE_NAME = os.getenv("OTEL_SERVICE_NAME", "panwatch")
-_INSTRUMENTATION_SCOPE = "panwatch.otel"
+_SERVICE_NAME = os.getenv("OTEL_SERVICE_NAME", "candlewise")
+_INSTRUMENTATION_SCOPE = "candlewise.otel"
 
 # Module-level state (a singleton within one process)
 _enabled: bool = False

@@ -1,4 +1,4 @@
-"""PanWatch business tool adapters exposed to the generic agent runtime."""
+"""Candlewise business tool adapters exposed to the generic agent runtime."""
 
 import asyncio
 from unittest.mock import MagicMock
@@ -34,9 +34,9 @@ def _request() -> RunRequest:
     )
 
 
-def test_panwatch_registry_keeps_core_tools_direct_and_defers_specialized_tools():
+def test_candlewise_registry_keeps_core_tools_direct_and_defers_specialized_tools():
     engine, session = _session()
-    registry = assistant_tools.build_panwatch_tool_registry(session)
+    registry = assistant_tools.build_candlewise_tool_registry(session)
     visible = {
         tool.name
         for tool in registry.model_tools(_request(), ReadOnlyToolPolicy())
@@ -67,12 +67,12 @@ def test_portfolio_tool_is_read_only_and_includes_provenance():
     )
     session.commit()
 
-    registry = assistant_tools.build_panwatch_tool_registry(session)
+    registry = assistant_tools.build_candlewise_tool_registry(session)
     result = asyncio.run(registry.execute("get_portfolio", _request(), {}))
 
     assert result.ok is True
     assert "Infosys" in result.summary
-    assert result.sources[0].name == "PanWatch positions"
+    assert result.sources[0].name == "Candlewise positions"
     session.close()
     engine.dispose()
 
@@ -101,7 +101,7 @@ def test_quote_tool_returns_compact_fact_summary(monkeypatch):
     )
 
     result = asyncio.run(
-        assistant_tools.build_panwatch_tool_registry(session).execute(
+        assistant_tools.build_candlewise_tool_registry(session).execute(
             "get_stock_quote",
             _request(),
             {"symbol": "INFY", "market": "IN"},
@@ -120,7 +120,7 @@ def test_quote_tool_returns_controlled_failure_without_quote(monkeypatch):
     monkeypatch.setattr(assistant_tools, "md_quote_rows", lambda *_: [], raising=False)
 
     result = asyncio.run(
-        assistant_tools.build_panwatch_tool_registry(session).execute(
+        assistant_tools.build_candlewise_tool_registry(session).execute(
             "get_stock_quote",
             _request(),
             {"symbol": "INFY", "market": "IN"},
@@ -178,7 +178,7 @@ def test_research_candidates_tool_reuses_strategy_signals_and_returns_compact_ca
     monkeypatch.setattr(assistant_tools, "list_strategy_signals", _list_strategy_signals, raising=False)
 
     result = asyncio.run(
-        assistant_tools.build_panwatch_tool_registry(session).execute(
+        assistant_tools.build_candlewise_tool_registry(session).execute(
             "find_research_candidates",
             _request(),
             {"market": "IN", "holding": "unheld", "min_score": 80, "limit": 3},
@@ -228,7 +228,7 @@ def test_research_candidates_tool_rejects_invalid_filters(recommendations_enable
     engine, session = _session()
 
     result = asyncio.run(
-        assistant_tools.build_panwatch_tool_registry(session).execute(
+        assistant_tools.build_candlewise_tool_registry(session).execute(
             "find_research_candidates",
             _request(),
             {"market": "JP", "limit": 0},
@@ -253,7 +253,7 @@ def test_kline_summary_tool_returns_compact_summary(monkeypatch):
     monkeypatch.setattr(assistant_tools, "KlineCollector", _Collector, raising=False)
 
     result = asyncio.run(
-        assistant_tools.build_panwatch_tool_registry(session).execute(
+        assistant_tools.build_candlewise_tool_registry(session).execute(
             "get_kline_summary",
             _request(),
             {"symbol": "INFY", "market": "IN"},
@@ -291,7 +291,7 @@ def test_news_tool_limits_compact_items(monkeypatch):
     )
 
     result = asyncio.run(
-        assistant_tools.build_panwatch_tool_registry(session).execute(
+        assistant_tools.build_candlewise_tool_registry(session).execute(
             "get_stock_news",
             _request(),
             {"symbol": "INFY", "market": "IN", "limit": 1},
@@ -318,7 +318,7 @@ def test_create_price_alert_validates_and_persists_rule():
     session.commit()
 
     result = asyncio.run(
-        assistant_tools.build_panwatch_tool_registry(session).execute(
+        assistant_tools.build_candlewise_tool_registry(session).execute(
             "create_price_alert",
             _request(),
             {
@@ -351,7 +351,7 @@ def test_create_price_alert_registers_a_known_quote_before_writing_rule(monkeypa
     )
 
     result = asyncio.run(
-        assistant_tools.build_panwatch_tool_registry(session).execute(
+        assistant_tools.build_candlewise_tool_registry(session).execute(
             "create_price_alert",
             _request(),
             {
@@ -380,7 +380,7 @@ def test_create_price_alert_does_not_write_for_unknown_stock(monkeypatch):
     monkeypatch.setattr(assistant_tools, "md_quote_rows", lambda *_: [], raising=False)
 
     result = asyncio.run(
-        assistant_tools.build_panwatch_tool_registry(session).execute(
+        assistant_tools.build_candlewise_tool_registry(session).execute(
             "create_price_alert",
             _request(),
             {
@@ -425,7 +425,7 @@ def test_get_price_alerts_returns_compact_rules_and_supports_symbol_filter():
     session.commit()
 
     result = asyncio.run(
-        assistant_tools.build_panwatch_tool_registry(session).execute(
+        assistant_tools.build_candlewise_tool_registry(session).execute(
             "get_price_alerts",
             _request(),
             {"symbol": "INFY", "market": "IN"},
@@ -470,7 +470,7 @@ def test_update_price_alert_changes_rule_and_resets_trigger_state():
     session.commit()
 
     result = asyncio.run(
-        assistant_tools.build_panwatch_tool_registry(session).execute(
+        assistant_tools.build_candlewise_tool_registry(session).execute(
             "update_price_alert",
             _request(),
             {
@@ -503,7 +503,7 @@ def test_update_price_alert_returns_controlled_failure_for_unknown_rule():
     engine, session = _session()
 
     result = asyncio.run(
-        assistant_tools.build_panwatch_tool_registry(session).execute(
+        assistant_tools.build_candlewise_tool_registry(session).execute(
             "update_price_alert", _request(), {"rule_id": 999, "enabled": False}
         )
     )
@@ -533,7 +533,7 @@ def test_delete_price_alert_removes_rule_and_its_hits():
     session.commit()
 
     result = asyncio.run(
-        assistant_tools.build_panwatch_tool_registry(session).execute(
+        assistant_tools.build_candlewise_tool_registry(session).execute(
             "delete_price_alert", _request(), {"rule_id": rule.id}
         )
     )
@@ -547,9 +547,9 @@ def test_delete_price_alert_removes_rule_and_its_hits():
 
 def test_research_candidates_tool_is_not_registered_in_research_only_mode():
     """Research-only: the entry-candidate engine is not exposed to the assistant."""
-    from src.modules.assistant.tools import build_panwatch_tool_registry
+    from src.modules.assistant.tools import build_candlewise_tool_registry
 
-    registry = build_panwatch_tool_registry(MagicMock())
+    registry = build_candlewise_tool_registry(MagicMock())
     names = {spec.name for spec in registry.registered_tools()}
     assert "find_research_candidates" not in names
     assert "get_stock_quote" in names

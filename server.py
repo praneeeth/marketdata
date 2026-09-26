@@ -1,4 +1,4 @@
-"""PanWatch service entry point: web backend + agent scheduling."""
+"""Candlewise service entry point: web backend + agent scheduling."""
 
 import asyncio
 import logging
@@ -152,7 +152,7 @@ def setup_logging():
 
     # Avoid duplicate handlers (and multiplied logs) on reload/server restart.
     for h in list(root.handlers):
-        if isinstance(h, DBLogHandler) or getattr(h, "_panwatch_console", False):
+        if isinstance(h, DBLogHandler) or getattr(h, "_candlewise_console", False):
             root.removeHandler(h)
             try:
                 h.close()
@@ -161,7 +161,7 @@ def setup_logging():
 
     # Console output: filtered by LOG_LEVEL, dropping low-level third-party noise
     console = logging.StreamHandler()
-    console._panwatch_console = True  # type: ignore[attr-defined]
+    console._candlewise_console = True  # type: ignore[attr-defined]
     console.setLevel(console_level)
     console.addFilter(_ConsoleNoiseFilter())
     console.setFormatter(
@@ -1126,7 +1126,7 @@ if os.path.exists(static_dir):
 
 
 if __name__ == "__main__":
-    print("PanWatch running at http://127.0.0.1:8000")
+    print("Candlewise running at http://127.0.0.1:8000")
     print("API docs: http://127.0.0.1:8000/docs")
     # Production (Docker `python server.py`) shouldn't reload: uvicorn's file watcher starts an extra reloader
     # process, wastes resources, and writes under data/ easily trigger restarts. For local hot reload use `make dev-api`

@@ -2,12 +2,12 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Clock, Trash2, FileText, ArrowLeft } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
-import { fetchAPI } from '@panwatch/api'
-import { Button } from '@panwatch/base-ui/components/ui/button'
-import { Badge } from '@panwatch/base-ui/components/ui/badge'
-import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@panwatch/base-ui/components/ui/select'
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@panwatch/base-ui/components/ui/dialog'
-import { useToast } from '@panwatch/base-ui/components/ui/toast'
+import { fetchAPI } from '@candlewise/api'
+import { Button } from '@candlewise/base-ui/components/ui/button'
+import { Badge } from '@candlewise/base-ui/components/ui/badge'
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@candlewise/base-ui/components/ui/select'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@candlewise/base-ui/components/ui/dialog'
+import { useToast } from '@candlewise/base-ui/components/ui/toast'
 
 interface HistoryRecord {
   id: number

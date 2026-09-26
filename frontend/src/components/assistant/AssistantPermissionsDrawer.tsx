@@ -1,13 +1,13 @@
 import { useEffect, useState } from 'react'
 import { SlidersHorizontal } from 'lucide-react'
-import { chatApi, type AgentPermissions } from '@panwatch/api'
+import { chatApi, type AgentPermissions } from '@candlewise/api'
 import {
   Dialog,
   DialogContent,
   DialogDescription,
   DialogHeader,
   DialogTitle,
-} from '@panwatch/base-ui/components/ui/dialog'
+} from '@candlewise/base-ui/components/ui/dialog'
 import { AgentPermissionsPanel } from '@/components/assistant/AgentPermissionsPanel'
 import { AssistantConfigPanel } from '@/components/assistant/AssistantConfigPanel'
 

@@ -1,5 +1,5 @@
-// PanWatch Service Worker
-const CACHE_NAME = 'panwatch-v2';
+// Candlewise Service Worker
+const CACHE_NAME = 'candlewise-v1';
 
 // Static assets to cache
 const STATIC_ASSETS = [

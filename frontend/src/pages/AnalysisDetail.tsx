@@ -23,9 +23,9 @@ import {
   tradingAgentsApi,
   type DeepAnalysisResult,
   type HistoryComparisonResponse,
-} from '@panwatch/api'
-import { Switch } from '@panwatch/base-ui/components/ui/switch'
-import { buildAnalysisSections } from '@panwatch/biz-ui/analysis-sections'
+} from '@candlewise/api'
+import { Switch } from '@candlewise/base-ui/components/ui/switch'
+import { buildAnalysisSections } from '@candlewise/biz-ui/analysis-sections'
 import ShareCardModal from '../components/ShareCardModal'
 import { useCompliance } from '@/hooks/use-compliance'
 
@@ -48,7 +48,7 @@ const SECTION_ICON: Record<string, LucideIcon> = {
 }
 
 /** localStorage key for the sub-heading toggle (remembers the user's choice) */
-const TOC_SUB_KEY = 'panwatch_toc_show_sub'
+const TOC_SUB_KEY = 'candlewise_toc_show_sub'
 
 /** India is the only market. */
 function inferMarket(_symbol: string): string {

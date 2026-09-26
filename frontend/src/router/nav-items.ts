@@ -1,5 +1,5 @@
 import { Bot, Settings, List, Database, Clock, LayoutDashboard, BellRing, Sparkles, Activity, ClipboardCheck, MessageCircle } from 'lucide-react'
-import type { ComplianceFeature } from '@panwatch/api/compliance'
+import type { ComplianceFeature } from '@candlewise/api/compliance'
 
 export interface NavItem {
   to: string

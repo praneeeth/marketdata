@@ -2,7 +2,7 @@ import { render, screen } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const api = vi.hoisted(() => ({ get: vi.fn() }))
-vi.mock('@panwatch/api/global-markets', () => ({ globalMarketsApi: api }))
+vi.mock('@candlewise/api/global-markets', () => ({ globalMarketsApi: api }))
 
 import GlobalMarketsPanel, { formatLevel } from '@/components/GlobalMarketsPanel'
 

@@ -7,8 +7,8 @@ const api = vi.hoisted(() => ({
   acknowledge: vi.fn(),
 }))
 
-vi.mock('@panwatch/api/compliance', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@panwatch/api/compliance')>()
+vi.mock('@candlewise/api/compliance', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@candlewise/api/compliance')>()
   return { ...actual, complianceApi: { ...actual.complianceApi, ...api } }
 })
 

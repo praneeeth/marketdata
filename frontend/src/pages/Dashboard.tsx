@@ -22,10 +22,10 @@ import {
   type AttributionItem,
   type PortfolioAiReview,
   type DashboardBrief,
-} from '@panwatch/api'
-import { Button } from '@panwatch/base-ui/components/ui/button'
-import { Onboarding } from '@panwatch/biz-ui/components/onboarding'
-import StockInsightModal from '@panwatch/biz-ui/components/stock-insight-modal'
+} from '@candlewise/api'
+import { Button } from '@candlewise/base-ui/components/ui/button'
+import { Onboarding } from '@candlewise/biz-ui/components/onboarding'
+import StockInsightModal from '@candlewise/biz-ui/components/stock-insight-modal'
 import Sparkline from '@/components/Sparkline'
 import BenchChart from '@/components/BenchChart'
 import BenchmarkShareCard from '@/components/BenchmarkShareCard'
@@ -201,11 +201,11 @@ export default function DashboardPage() {
 
   // Wait for the disclaimer: both are modal, and the guide would cover the consent checkbox.
   useEffect(() => {
-    if (disclaimerAcknowledged && !localStorage.getItem('panwatch_onboarding_completed')) setShowOnboarding(true)
+    if (disclaimerAcknowledged && !localStorage.getItem('candlewise_onboarding_completed')) setShowOnboarding(true)
   }, [disclaimerAcknowledged])
 
   const handleOnboardingComplete = () => {
-    localStorage.setItem('panwatch_onboarding_completed', 'true')
+    localStorage.setItem('candlewise_onboarding_completed', 'true')
     setShowOnboarding(false)
   }
 

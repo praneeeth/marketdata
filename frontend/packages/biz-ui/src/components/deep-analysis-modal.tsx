@@ -11,11 +11,11 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { buildAnalysisSections, type AnalysisSection } from '../analysis-sections'
 import { useCompliance } from '@/hooks/use-compliance'
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@panwatch/base-ui/components/ui/dialog'
-import { Tabs, TabsList, TabsTrigger, TabsContent } from '@panwatch/base-ui/components/ui/tabs'
-import { Button } from '@panwatch/base-ui/components/ui/button'
-import { useToast } from '@panwatch/base-ui/components/ui/toast'
-import { HoverPopover } from '@panwatch/base-ui/components/ui/hover-popover'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@candlewise/base-ui/components/ui/dialog'
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@candlewise/base-ui/components/ui/tabs'
+import { Button } from '@candlewise/base-ui/components/ui/button'
+import { useToast } from '@candlewise/base-ui/components/ui/toast'
+import { HoverPopover } from '@candlewise/base-ui/components/ui/hover-popover'
 import {
   subscribeSSE,
   tradingAgentsApi,
@@ -24,7 +24,7 @@ import {
   type ProgressResponse,
   type ProgressDataSource,
   type ProgressStage,
-} from '@panwatch/api'
+} from '@candlewise/api'
 import {
   isTerminalProgressStatus,
   shouldContinueProgressWatch,
@@ -52,7 +52,7 @@ const DECISION_COLOR: Record<string, string> = {
 const POLL_INTERVAL_MS = 2000
 
 /** The trace_id of a stock's latest run, kept in localStorage; polling resumes when the dialog is reopened */
-const STORAGE_KEY_PREFIX = 'panwatch:tradingagents:running:'
+const STORAGE_KEY_PREFIX = 'candlewise:tradingagents:running:'
 /** After how long a trace_id may no longer be running (avoids showing an expired trace as idle) */
 const TRACE_MAX_AGE_MS = 60 * 60 * 1000  // matches the backend running lifecycle window, with room for recovery
 
@@ -591,7 +591,7 @@ export function ToolkitDiagnostics({
       <summary className="cursor-pointer flex items-center gap-2 flex-wrap">
         <span className="font-medium">Data injection diagnostics</span>
         <span className="text-[11px] text-muted-foreground">
-          (PanWatch data → TradingAgents tools)
+          (Candlewise data → TradingAgents tools)
         </span>
         <span className="ml-auto text-[11px] whitespace-nowrap">
           <span className={ACTION_CLS.HIT}>HIT {hit}</span>
@@ -602,10 +602,10 @@ export function ToolkitDiagnostics({
         </span>
       </summary>
       <div className="text-[10.5px] text-muted-foreground/80 mt-2 leading-relaxed">
-        <span className={ACTION_CLS.HIT}>HIT</span>: PanWatch data used ·{' '}
-        <span className={ACTION_CLS.MISS}>MISS</span>: matched but not implemented by PanWatch ·{' '}
-        <span className={ACTION_CLS.PASSTHROUGH}>Passthrough</span>: not served by PanWatch; went to the upstream vendor ·{' '}
-        <span className={ACTION_CLS.FALLTHROUGH}>Fallback</span>: PanWatch symbol but empty cache; went upstream
+        <span className={ACTION_CLS.HIT}>HIT</span>: Candlewise data used ·{' '}
+        <span className={ACTION_CLS.MISS}>MISS</span>: matched but not implemented by Candlewise ·{' '}
+        <span className={ACTION_CLS.PASSTHROUGH}>Passthrough</span>: not served by Candlewise; went to the upstream vendor ·{' '}
+        <span className={ACTION_CLS.FALLTHROUGH}>Fallback</span>: Candlewise symbol but empty cache; went upstream
       </div>
       {total === 0 ? (
         <div className="text-[11px] text-muted-foreground mt-2">

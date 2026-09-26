@@ -1,6 +1,6 @@
 import { useState } from 'react'
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@panwatch/base-ui/components/ui/dialog'
-import { Button } from '@panwatch/base-ui/components/ui/button'
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@candlewise/base-ui/components/ui/dialog'
+import { Button } from '@candlewise/base-ui/components/ui/button'
 import { useCompliance } from '@/hooks/use-compliance'
 
 /**

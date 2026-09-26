@@ -7,7 +7,7 @@ const { getAgentPermissions, updateAgentPermission, getAssistantConfig } = vi.ho
   getAssistantConfig: vi.fn(),
 }))
 
-vi.mock('@panwatch/api', () => ({
+vi.mock('@candlewise/api', () => ({
   chatApi: { getAgentPermissions, updateAgentPermission, getAssistantConfig },
 }))
 

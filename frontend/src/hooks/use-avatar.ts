@@ -1,10 +1,10 @@
 import { useState, useEffect } from 'react'
-import { fetchAPI } from '@panwatch/api'
+import { fetchAPI } from '@candlewise/api'
 
-const EVENT = 'panwatch:avatar-changed'
+const EVENT = 'candlewise:avatar-changed'
 
 // In-memory cache for the SPA session only (avoids repeat requests within a session).
-// The real persistence is in the backend DB (ui_avatar in data/panwatch.db); it is fetched again after a refresh.
+// The real persistence is in the backend DB (ui_avatar in data/candlewise.db); it is fetched again after a refresh.
 let cache: string | null = null
 let inflight: Promise<string> | null = null
 

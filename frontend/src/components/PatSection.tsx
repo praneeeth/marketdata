@@ -1,14 +1,14 @@
 import { useEffect, useState } from 'react'
 import { Copy, Plus, Trash2, KeyRound } from 'lucide-react'
-import { patsApi, type PatItem } from '@panwatch/api'
-import { Input } from '@panwatch/base-ui/components/ui/input'
-import { Button } from '@panwatch/base-ui/components/ui/button'
-import { useToast } from '@panwatch/base-ui/components/ui/toast'
+import { patsApi, type PatItem } from '@candlewise/api'
+import { Input } from '@candlewise/base-ui/components/ui/input'
+import { Button } from '@candlewise/base-ui/components/ui/button'
+import { useToast } from '@candlewise/base-ui/components/ui/toast'
 
 /**
  * MCP access token (PAT) management.
  *
- * Tokens let MCP clients such as Claude connect to PanWatch's MCP endpoint (/mcp).
+ * Tokens let MCP clients such as Claude connect to Candlewise's MCP endpoint (/mcp).
  * The plaintext is returned only at creation; the list shows only the prefix.
  */
 export default function PatSection() {

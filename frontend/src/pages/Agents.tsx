@@ -1,13 +1,13 @@
 import { useState, useEffect } from 'react'
 import { Play, Power, Clock, Cpu, Bot, Bell, Settings2 } from 'lucide-react'
-import { fetchAPI, type AIService, type NotifyChannel } from '@panwatch/api'
-import { Button } from '@panwatch/base-ui/components/ui/button'
-import { Badge } from '@panwatch/base-ui/components/ui/badge'
-import { Select, SelectTrigger, SelectValue, SelectContent, SelectGroup, SelectLabel, SelectItem } from '@panwatch/base-ui/components/ui/select'
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@panwatch/base-ui/components/ui/dialog'
-import { Label } from '@panwatch/base-ui/components/ui/label'
-import { Input } from '@panwatch/base-ui/components/ui/input'
-import { useToast } from '@panwatch/base-ui/components/ui/toast'
+import { fetchAPI, type AIService, type NotifyChannel } from '@candlewise/api'
+import { Button } from '@candlewise/base-ui/components/ui/button'
+import { Badge } from '@candlewise/base-ui/components/ui/badge'
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectGroup, SelectLabel, SelectItem } from '@candlewise/base-ui/components/ui/select'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@candlewise/base-ui/components/ui/dialog'
+import { Label } from '@candlewise/base-ui/components/ui/label'
+import { Input } from '@candlewise/base-ui/components/ui/input'
+import { useToast } from '@candlewise/base-ui/components/ui/toast'
 
 interface AgentConfig {
   id: number

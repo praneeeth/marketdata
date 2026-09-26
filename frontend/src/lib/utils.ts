@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-export { cn } from '@panwatch/base-ui'
+export { cn } from '@candlewise/base-ui'
 
 /**
  * useState persisted to localStorage

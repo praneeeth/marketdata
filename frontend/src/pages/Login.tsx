@@ -1,11 +1,13 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { TrendingUp, Lock, Eye, EyeOff, User } from 'lucide-react'
-import { authApi } from '@panwatch/api'
-import { Button } from '@panwatch/base-ui/components/ui/button'
-import { Input } from '@panwatch/base-ui/components/ui/input'
-import { Label } from '@panwatch/base-ui/components/ui/label'
-import { useToast } from '@panwatch/base-ui/components/ui/toast'
+import { Lock, Eye, EyeOff, User } from 'lucide-react'
+import { CandlewiseMark } from '@/components/CandlewiseLogo'
+import { PRODUCT_NAME, TAGLINE } from '@/lib/brand'
+import { authApi } from '@candlewise/api'
+import { Button } from '@candlewise/base-ui/components/ui/button'
+import { Input } from '@candlewise/base-ui/components/ui/input'
+import { Label } from '@candlewise/base-ui/components/ui/label'
+import { useToast } from '@candlewise/base-ui/components/ui/toast'
 
 export default function LoginPage() {
   const navigate = useNavigate()
@@ -75,11 +77,9 @@ export default function LoginPage() {
       <div className="w-full max-w-sm">
         {/* Logo */}
         <div className="flex flex-col items-center mb-8">
-          <div className="w-16 h-16 rounded-2xl bg-primary flex items-center justify-center mb-4">
-            <TrendingUp className="w-8 h-8 text-white" />
-          </div>
-          <h1 className="text-2xl font-bold text-foreground">PanWatch</h1>
-          <p className="text-sm text-muted-foreground mt-1">PanWatch</p>
+          <CandlewiseMark className="w-20 h-20 mb-3 text-slate-600 dark:text-slate-300" title="" />
+          <h1 className="text-2xl font-bold text-foreground">{PRODUCT_NAME}</h1>
+          <p className="text-sm text-muted-foreground mt-1">{TAGLINE}</p>
         </div>
 
         {/* Form */}

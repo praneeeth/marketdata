@@ -1,9 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const fetchAPI = vi.hoisted(() => vi.fn())
-vi.mock('@panwatch/api/client', () => ({ fetchAPI }))
+vi.mock('@candlewise/api/client', () => ({ fetchAPI }))
 
-import { brokersApi } from '@panwatch/api/brokers'
+import { brokersApi } from '@candlewise/api/brokers'
 
 describe('brokersApi.save', () => {
   beforeEach(() => fetchAPI.mockReset().mockResolvedValue({}))

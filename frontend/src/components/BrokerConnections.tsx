@@ -7,11 +7,11 @@ import {
   type BrokerOverview,
   type BrokerProviderInfo,
   type BrokerStatus,
-} from '@panwatch/api/brokers'
-import { Badge } from '@panwatch/base-ui/components/ui/badge'
-import { Button } from '@panwatch/base-ui/components/ui/button'
-import { Input } from '@panwatch/base-ui/components/ui/input'
-import { Label } from '@panwatch/base-ui/components/ui/label'
+} from '@candlewise/api/brokers'
+import { Badge } from '@candlewise/base-ui/components/ui/badge'
+import { Button } from '@candlewise/base-ui/components/ui/button'
+import { Input } from '@candlewise/base-ui/components/ui/input'
+import { Label } from '@candlewise/base-ui/components/ui/label'
 
 const STATUS_TEXT: Record<BrokerStatus, string> = {
   connected: 'Connected',

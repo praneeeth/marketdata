@@ -3,10 +3,10 @@ import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { MemoryRouter, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 
-import { chatApi } from '@panwatch/api'
+import { chatApi } from '@candlewise/api'
 import AssistantPage from '@/pages/Assistant'
 
-vi.mock('@panwatch/api', () => ({
+vi.mock('@candlewise/api', () => ({
   chatApi: {
     listConversations: vi.fn(),
     getConversation: vi.fn(),

@@ -26,13 +26,13 @@ export function AssistantWelcome({ onSubmit, disabled = false }: AssistantWelcom
   return (
     <section className="flex min-h-[calc(100vh-12rem)] flex-1 flex-col items-center justify-center px-5 py-12 text-center md:px-10">
       <p className="mb-4 text-[11px] font-semibold tracking-[0.16em] text-primary sm:text-[12px]">
-        PANWATCH · AI INVESTING RESEARCH
+        CANDLEWISE · AI INVESTING RESEARCH
       </p>
       <h1 className="text-3xl font-bold tracking-tight text-foreground sm:text-4xl md:text-5xl">
         What do you want to research today?
       </h1>
       <p className="mt-5 max-w-2xl text-[15px] leading-7 text-muted-foreground md:text-[17px]">
-        Enter a stock, a market question, or let PanWatch check your holdings. The assistant looks up the available data first, then gives grounded conclusions.
+        Enter a stock, a market question, or let Candlewise check your holdings. The assistant looks up the available data first, then gives grounded conclusions.
       </p>
 
       <form

@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { Plus, Trash2, Pencil, Search, X, TrendingUp, Bot, Play, RefreshCw, Wallet, PiggyBank, ArrowUpRight, ArrowDownRight, Building2, ChevronDown, ChevronRight, Cpu, Bell, Clock, Newspaper, ExternalLink, BarChart3, Brain } from 'lucide-react'
-import { fetchAPI, stocksApi, type AIService, type NotifyChannel } from '@panwatch/api'
-import { klinesApi } from '@panwatch/api/klines'
+import { fetchAPI, stocksApi, type AIService, type NotifyChannel } from '@candlewise/api'
+import { klinesApi } from '@candlewise/api/klines'
 import { useLocalStorage } from '@/lib/utils'
 import {
   buildPortfolioStockKeys,
@@ -9,21 +9,21 @@ import {
   loadPortfolioPageCoreData,
   loadPortfolioPageQuoteData,
 } from '@/lib/portfolio-page-data'
-import { SuggestionBadge, type SuggestionInfo, type KlineSummary } from '@panwatch/biz-ui/components/suggestion-badge'
+import { SuggestionBadge, type SuggestionInfo, type KlineSummary } from '@candlewise/biz-ui/components/suggestion-badge'
 import { buildKlineSuggestion } from '@/lib/kline-scorer'
-import { KlineSummaryDialog } from '@panwatch/biz-ui/components/kline-summary-dialog'
-import { Button } from '@panwatch/base-ui/components/ui/button'
-import { Input } from '@panwatch/base-ui/components/ui/input'
-import { Label } from '@panwatch/base-ui/components/ui/label'
-import { Switch } from '@panwatch/base-ui/components/ui/switch'
-import { Badge } from '@panwatch/base-ui/components/ui/badge'
-import { Skeleton } from '@panwatch/base-ui/components/ui/skeleton'
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@panwatch/base-ui/components/ui/dialog'
-import { Select, SelectTrigger, SelectValue, SelectContent, SelectGroup, SelectLabel, SelectItem } from '@panwatch/base-ui/components/ui/select'
-import { useToast } from '@panwatch/base-ui/components/ui/toast'
-import StockInsightModal from '@panwatch/biz-ui/components/stock-insight-modal'
-import { DeepAnalysisModal } from '@panwatch/biz-ui/components/deep-analysis-modal'
-import StockPriceAlertPanel from '@panwatch/biz-ui/components/stock-price-alert-panel'
+import { KlineSummaryDialog } from '@candlewise/biz-ui/components/kline-summary-dialog'
+import { Button } from '@candlewise/base-ui/components/ui/button'
+import { Input } from '@candlewise/base-ui/components/ui/input'
+import { Label } from '@candlewise/base-ui/components/ui/label'
+import { Switch } from '@candlewise/base-ui/components/ui/switch'
+import { Badge } from '@candlewise/base-ui/components/ui/badge'
+import { Skeleton } from '@candlewise/base-ui/components/ui/skeleton'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@candlewise/base-ui/components/ui/dialog'
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectGroup, SelectLabel, SelectItem } from '@candlewise/base-ui/components/ui/select'
+import { useToast } from '@candlewise/base-ui/components/ui/toast'
+import StockInsightModal from '@candlewise/biz-ui/components/stock-insight-modal'
+import { DeepAnalysisModal } from '@candlewise/biz-ui/components/deep-analysis-modal'
+import StockPriceAlertPanel from '@candlewise/biz-ui/components/stock-price-alert-panel'
 import { useCompliance } from '@/hooks/use-compliance'
 
 interface AgentResult {
@@ -384,8 +384,8 @@ export default function StocksPage() {
   const [klineSummaries, setKlineSummaries] = useState<Record<string, KlineSummary>>({})
 
   // Auto-refresh (persisted in localStorage)
-  const [autoRefresh, setAutoRefresh] = useLocalStorage('panwatch_stocks_autoRefresh', false)
-  const [refreshInterval, setRefreshInterval] = useLocalStorage('panwatch_stocks_refreshInterval', 30)
+  const [autoRefresh, setAutoRefresh] = useLocalStorage('candlewise_stocks_autoRefresh', false)
+  const [refreshInterval, setRefreshInterval] = useLocalStorage('candlewise_stocks_refreshInterval', 30)
   const [lastRefreshTime, setLastRefreshTime] = useState<Date | null>(null)
   const refreshTimerRef = useRef<ReturnType<typeof setInterval>>()
 
@@ -393,7 +393,7 @@ export default function StocksPage() {
   const [scanning, setScanning] = useState(false)
 
   type ViewTab = 'positions' | 'watchlist'
-  const [viewTab, setViewTab] = useLocalStorage<ViewTab>('panwatch_stocks_viewTab', 'positions')
+  const [viewTab, setViewTab] = useLocalStorage<ViewTab>('candlewise_stocks_viewTab', 'positions')
 
   // Per-stock AI items (from the intraday monitor API)
   const [suggestions] = useState<Record<string, StockSuggestionData>>({})
@@ -477,7 +477,7 @@ export default function StocksPage() {
 
   // Stock list filter
   const stockListFilter = ''  // India-only: no market filter
-  const [watchlistOnlyAlerts, setWatchlistOnlyAlerts] = useLocalStorage<boolean>('panwatch_watchlist_only_alerts', false)
+  const [watchlistOnlyAlerts, setWatchlistOnlyAlerts] = useLocalStorage<boolean>('candlewise_watchlist_only_alerts', false)
 
   // Remove watchlist modal
   const [removeWatchStock, setRemoveWatchStock] = useState<Stock | null>(null)
@@ -563,7 +563,7 @@ export default function StocksPage() {
 
   const isSuppressCardClick = () => {
     try {
-      const until = (window as any).__panwatch_suppress_card_click_until
+      const until = (window as any).__candlewise_suppress_card_click_until
       return typeof until === 'number' && Date.now() < until
     } catch {
       return false

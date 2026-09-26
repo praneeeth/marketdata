@@ -5,7 +5,7 @@ import {
   FALLBACK_SHORT_DISCLAIMER,
   type ComplianceFeature,
   type ComplianceStatus,
-} from '@panwatch/api/compliance'
+} from '@candlewise/api/compliance'
 
 interface ComplianceContextValue {
   status: ComplianceStatus | null

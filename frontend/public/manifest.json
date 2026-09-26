@@ -1,11 +1,11 @@
 {
-  "name": "PanWatch",
-  "short_name": "PanWatch",
-  "description": "AI-powered stock research assistant",
+  "name": "Candlewise",
+  "short_name": "Candlewise",
+  "description": "Candlewise: an AI research assistant for Indian stocks. Read the market. Decide for yourself.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#0f1117",
-  "theme_color": "#4f46e5",
+  "theme_color": "#1f2937",
   "orientation": "portrait-primary",
   "icons": [
     {
@@ -22,5 +22,5 @@
     }
   ],
   "categories": ["finance", "productivity"],
-  "lang": "zh-CN"
+  "lang": "en-IN"
 }

@@ -4,8 +4,8 @@ import type { ReactNode } from 'react'
 import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-vi.mock('@panwatch/api/compliance', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@panwatch/api/compliance')>()
+vi.mock('@candlewise/api/compliance', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@candlewise/api/compliance')>()
   return {
     ...actual,
     complianceApi: { status: vi.fn(), getAck: vi.fn(), acknowledge: vi.fn() },
@@ -17,17 +17,17 @@ import {
   FALLBACK_SHORT_DISCLAIMER,
   type ComplianceFeature,
   type ComplianceStatus,
-} from '@panwatch/api/compliance'
+} from '@candlewise/api/compliance'
 import { ComplianceProvider, useCompliance } from '@/hooks/use-compliance'
 import DisclaimerFooter from '@/components/DisclaimerFooter'
 import DisclaimerConsentDialog from '@/components/DisclaimerConsentDialog'
 import ShareCardDialog from '@/components/ShareCardDialog'
 import { navItems, visibleNavItems } from '@/router/nav-items'
-import { SuggestionBadge, type KlineSummary, type SuggestionInfo } from '@panwatch/biz-ui/components/suggestion-badge'
-import { KlineSummaryDialog } from '@panwatch/biz-ui/components/kline-summary-dialog'
-import AddPositionCalculator from '@panwatch/biz-ui/components/add-position-calculator'
-import { Onboarding } from '@panwatch/biz-ui/components/onboarding'
-import { buildAnalysisSections } from '@panwatch/biz-ui/analysis-sections'
+import { SuggestionBadge, type KlineSummary, type SuggestionInfo } from '@candlewise/biz-ui/components/suggestion-badge'
+import { KlineSummaryDialog } from '@candlewise/biz-ui/components/kline-summary-dialog'
+import AddPositionCalculator from '@candlewise/biz-ui/components/add-position-calculator'
+import { Onboarding } from '@candlewise/biz-ui/components/onboarding'
+import { buildAnalysisSections } from '@candlewise/biz-ui/analysis-sections'
 
 const SERVER_SHORT = 'Server short disclaimer: not investment advice.'
 const ALL_FEATURES: ComplianceFeature[] = [

@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Sparkles } from 'lucide-react'
-import { fetchAPI } from '@panwatch/api'
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@panwatch/base-ui/components/ui/dialog'
-import { Button } from '@panwatch/base-ui/components/ui/button'
+import { fetchAPI } from '@candlewise/api'
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@candlewise/base-ui/components/ui/dialog'
+import { Button } from '@candlewise/base-ui/components/ui/button'
 import { buildKlineSuggestion } from '@/lib/kline-scorer'
-import { HoverPopover } from '@panwatch/base-ui/components/ui/hover-popover'
-import { TechnicalBadge, technicalToneFromSuggestionAction } from '@panwatch/biz-ui/components/technical-badge'
+import { HoverPopover } from '@candlewise/base-ui/components/ui/hover-popover'
+import { TechnicalBadge, technicalToneFromSuggestionAction } from '@candlewise/biz-ui/components/technical-badge'
 import { useCompliance } from '@/hooks/use-compliance'
 
 export interface KlineSummaryData {
@@ -181,7 +181,7 @@ export function KlineSummaryDialog({
         parts.push(`Score basis: ${suggestion.items.map(e => `${e.text} (${e.delta > 0 ? '+' : ''}${e.delta})`).join('; ')}`)
       }
     }
-    window.dispatchEvent(new CustomEvent('panwatch-open-chat', {
+    window.dispatchEvent(new CustomEvent('candlewise-open-chat', {
       detail: { symbol, market, stockName: stockName || symbol, pageContext: parts.join('\n') }
     }))
     onOpenChange(false)

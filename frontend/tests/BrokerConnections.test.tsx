@@ -10,8 +10,8 @@ const api = vi.hoisted(() => ({
   loginWithTotp: vi.fn(),
 }))
 
-vi.mock('@panwatch/api/brokers', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@panwatch/api/brokers')>()
+vi.mock('@candlewise/api/brokers', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@candlewise/api/brokers')>()
   return { ...actual, brokersApi: api }
 })
 

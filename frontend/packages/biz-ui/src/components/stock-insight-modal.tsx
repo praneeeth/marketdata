@@ -7,21 +7,21 @@ import {
   tradingAgentsApi,
   type DeepAnalysisResult,
   type HistoryComparisonResponse,
-} from '@panwatch/api'
-import { getMarketBadge } from '@panwatch/biz-ui'
+} from '@candlewise/api'
+import { getMarketBadge } from '@candlewise/biz-ui'
 import { useLocalStorage } from '@/lib/utils'
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@panwatch/base-ui/components/ui/dialog'
-import { Button } from '@panwatch/base-ui/components/ui/button'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@panwatch/base-ui/components/ui/select'
-import { Switch } from '@panwatch/base-ui/components/ui/switch'
-import { SuggestionBadge, type KlineSummary, type SuggestionInfo } from '@panwatch/biz-ui/components/suggestion-badge'
-import { useToast } from '@panwatch/base-ui/components/ui/toast'
-import InteractiveKline from '@panwatch/biz-ui/components/InteractiveKline'
-import { KlineIndicators } from '@panwatch/biz-ui/components/kline-indicators'
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@candlewise/base-ui/components/ui/dialog'
+import { Button } from '@candlewise/base-ui/components/ui/button'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@candlewise/base-ui/components/ui/select'
+import { Switch } from '@candlewise/base-ui/components/ui/switch'
+import { SuggestionBadge, type KlineSummary, type SuggestionInfo } from '@candlewise/biz-ui/components/suggestion-badge'
+import { useToast } from '@candlewise/base-ui/components/ui/toast'
+import InteractiveKline from '@candlewise/biz-ui/components/InteractiveKline'
+import { KlineIndicators } from '@candlewise/biz-ui/components/kline-indicators'
 import { buildKlineSuggestion } from '@/lib/kline-scorer'
-import StockPriceAlertPanel from '@panwatch/biz-ui/components/stock-price-alert-panel'
-import { TechnicalBadge } from '@panwatch/biz-ui/components/technical-badge'
-import AddPositionCalculator from '@panwatch/biz-ui/components/add-position-calculator'
+import StockPriceAlertPanel from '@candlewise/biz-ui/components/stock-price-alert-panel'
+import { TechnicalBadge } from '@candlewise/biz-ui/components/technical-badge'
+import AddPositionCalculator from '@candlewise/biz-ui/components/add-position-calculator'
 import { useCompliance } from '@/hooks/use-compliance'
 
 interface QuoteResponse {
@@ -983,7 +983,7 @@ export default function StockInsightModal(props: {
   const shareText = useMemo(() => {
     const { marketLabel, price, chg, action, signal, reason, risks, trigger, invalidation, technicalBrief, levelsBrief, source, ts } = shareCardPayload
     const lines = [
-      `[PanWatch insight] ${resolvedName} (${symbol} · ${marketLabel})`,
+      `[Candlewise insight] ${resolvedName} (${symbol} · ${marketLabel})`,
       `Time: ${ts}`,
       `Price: ${price} (${chg})`,
       `View: ${action}`,
@@ -1026,7 +1026,7 @@ export default function StockInsightModal(props: {
   </defs>
   <rect x="0" y="0" width="1200" height="630" fill="url(#bg)"/>
   <rect x="40" y="30" width="1120" height="570" rx="22" fill="#0f172a" stroke="#1f2937"/>
-  <text x="76" y="104" fill="#93c5fd" font-size="26" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif">PanWatch insight</text>
+  <text x="76" y="104" fill="#93c5fd" font-size="26" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif">Candlewise insight</text>
   <text x="76" y="150" fill="#f8fafc" font-size="42" font-weight="700" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif">${esc(trim(`${resolvedName} (${symbol} · ${marketLabel})`, 28))}</text>
   <text x="76" y="198" fill="#94a3b8" font-size="22" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,Microsoft YaHei,sans-serif">${esc(ts)}</text>
 
@@ -1071,7 +1071,7 @@ export default function StockInsightModal(props: {
       const png = canvas.toDataURL('image/png')
       const a = document.createElement('a')
       a.href = png
-      a.download = `panwatch-${symbol}-${Date.now()}.png`
+      a.download = `candlewise-${symbol}-${Date.now()}.png`
       a.click()
       toast('Share image generated and downloaded', 'success')
     } catch {
@@ -1328,7 +1328,7 @@ export default function StockInsightModal(props: {
                   size="sm"
                   className="h-8 px-2.5"
                   onClick={() => {
-                    window.dispatchEvent(new CustomEvent('panwatch-open-chat', {
+                    window.dispatchEvent(new CustomEvent('candlewise-open-chat', {
                       detail: { symbol, market, stockName: resolvedName, pageContext: buildPageContext() }
                     }))
                     props.onOpenChange(false)
@@ -1369,7 +1369,7 @@ export default function StockInsightModal(props: {
                 size="sm"
                 className="h-8 px-2.5 shrink-0"
                 onClick={() => {
-                  window.dispatchEvent(new CustomEvent('panwatch-open-chat', {
+                  window.dispatchEvent(new CustomEvent('candlewise-open-chat', {
                     detail: { symbol, market, stockName: resolvedName, pageContext: buildPageContext() }
                   }))
                   props.onOpenChange(false)

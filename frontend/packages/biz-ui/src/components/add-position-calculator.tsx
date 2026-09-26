@@ -1,9 +1,9 @@
 import { useMemo, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
-import { insightApi, type AddPositionEvalResult } from '@panwatch/api'
-import { Button } from '@panwatch/base-ui/components/ui/button'
-import { Input } from '@panwatch/base-ui/components/ui/input'
-import { useToast } from '@panwatch/base-ui/components/ui/toast'
+import { insightApi, type AddPositionEvalResult } from '@candlewise/api'
+import { Button } from '@candlewise/base-ui/components/ui/button'
+import { Input } from '@candlewise/base-ui/components/ui/input'
+import { useToast } from '@candlewise/base-ui/components/ui/toast'
 import { useCompliance } from '@/hooks/use-compliance'
 
 export interface AddPositionCalc {

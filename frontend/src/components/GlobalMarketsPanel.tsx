@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Globe } from 'lucide-react'
-import { globalMarketsApi, type GlobalCue, type GlobalMarkets } from '@panwatch/api/global-markets'
+import { globalMarketsApi, type GlobalCue, type GlobalMarkets } from '@candlewise/api/global-markets'
 
 const GROUP_ORDER: GlobalCue['group'][] = ['US', 'Asia', 'Europe', 'Commodities', 'Currency']
 const REFRESH_MS = 60_000

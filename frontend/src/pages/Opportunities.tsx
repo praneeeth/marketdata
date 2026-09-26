@@ -7,11 +7,11 @@ import {
   type StrategyCatalogItem,
   type StrategySignalItem,
   type StrategyStatsResponse,
-} from '@panwatch/api'
-import { Button } from '@panwatch/base-ui/components/ui/button'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@panwatch/base-ui/components/ui/select'
+} from '@candlewise/api'
+import { Button } from '@candlewise/base-ui/components/ui/button'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@candlewise/base-ui/components/ui/select'
 import { useLocalStorage } from '@/lib/utils'
-import StockInsightModal from '@panwatch/biz-ui/components/stock-insight-modal'
+import StockInsightModal from '@candlewise/biz-ui/components/stock-insight-modal'
 import FactorWeightsPanel from '@/components/FactorWeightsPanel'
 import SignalScoreShareCard from '@/components/SignalScoreShareCard'
 
@@ -226,12 +226,12 @@ export default function OpportunitiesPage() {
   const [strategyCatalog, setStrategyCatalog] = useState<StrategyCatalogItem[]>([])
   const [watchlist, setWatchlist] = useState<Set<string>>(new Set())
 
-  const [market, setMarket] = useLocalStorage<'ALL' | 'IN'>('panwatch_opportunities_market_v3', DEFAULT_FILTERS.market)
-  const [source, setSource] = useLocalStorage<SourceFilter>('panwatch_opportunities_source_v3', DEFAULT_FILTERS.source)
-  const [holding, setHolding] = useLocalStorage<HoldingFilter>('panwatch_opportunities_holding_v3', DEFAULT_FILTERS.holding)
-  const [strategy, setStrategy] = useLocalStorage('panwatch_opportunities_strategy_v3', DEFAULT_FILTERS.strategy)
-  const [risk, setRisk] = useLocalStorage<RiskFilter>('panwatch_opportunities_risk_v3', DEFAULT_FILTERS.risk)
-  const [minScore, setMinScore] = useLocalStorage('panwatch_opportunities_min_score_v3', DEFAULT_FILTERS.minScore)
+  const [market, setMarket] = useLocalStorage<'ALL' | 'IN'>('candlewise_opportunities_market_v3', DEFAULT_FILTERS.market)
+  const [source, setSource] = useLocalStorage<SourceFilter>('candlewise_opportunities_source_v3', DEFAULT_FILTERS.source)
+  const [holding, setHolding] = useLocalStorage<HoldingFilter>('candlewise_opportunities_holding_v3', DEFAULT_FILTERS.holding)
+  const [strategy, setStrategy] = useLocalStorage('candlewise_opportunities_strategy_v3', DEFAULT_FILTERS.strategy)
+  const [risk, setRisk] = useLocalStorage<RiskFilter>('candlewise_opportunities_risk_v3', DEFAULT_FILTERS.risk)
+  const [minScore, setMinScore] = useLocalStorage('candlewise_opportunities_min_score_v3', DEFAULT_FILTERS.minScore)
   const [snapshotDate, setSnapshotDate] = useState('')
 
   const [insightOpen, setInsightOpen] = useState(false)

@@ -1,15 +1,16 @@
 import { useState, useEffect, useRef } from 'react'
 import { Check, Eye, EyeOff, Plus, Pencil, Trash2, Star, Send, Cpu, Play, Download, Upload, FileJson, BarChart3, User, Radar } from 'lucide-react'
-import { fetchAPI, type AIService, type AIModel, type NotifyChannel } from '@panwatch/api'
+import { fetchAPI, type AIService, type AIModel, type NotifyChannel } from '@candlewise/api'
 import { useAvatar, saveAvatar, fileToAvatarDataUrl } from '@/hooks/use-avatar'
 import PatSection from '@/components/PatSection'
-import { Input } from '@panwatch/base-ui/components/ui/input'
-import { Label } from '@panwatch/base-ui/components/ui/label'
-import { Button } from '@panwatch/base-ui/components/ui/button'
-import { Switch } from '@panwatch/base-ui/components/ui/switch'
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@panwatch/base-ui/components/ui/dialog'
-import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@panwatch/base-ui/components/ui/select'
-import { useToast } from '@panwatch/base-ui/components/ui/toast'
+import { Input } from '@candlewise/base-ui/components/ui/input'
+import { Label } from '@candlewise/base-ui/components/ui/label'
+import { Button } from '@candlewise/base-ui/components/ui/button'
+import { Switch } from '@candlewise/base-ui/components/ui/switch'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@candlewise/base-ui/components/ui/dialog'
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@candlewise/base-ui/components/ui/select'
+import { useToast } from '@candlewise/base-ui/components/ui/toast'
+import { PRODUCT_NAME, UPSTREAM_NAME, UPSTREAM_URL } from '@/lib/brand'
 
 interface Setting {
   key: string
@@ -251,7 +252,7 @@ export default function SettingsPage() {
     try {
       const data = await fetchAPI<TemplatePayload>('/templates/export')
       const date = new Date().toISOString().slice(0, 10)
-      downloadJson(`panwatch-config-${date}.json`, data)
+      downloadJson(`candlewise-config-${date}.json`, data)
       toast('Config pack exported', 'success')
     } catch (e) {
       toast(e instanceof Error ? e.message : 'Export failed', 'error')
@@ -1310,11 +1311,16 @@ export default function SettingsPage() {
       </Dialog>
 
       {/* Version Footer */}
-      {version && (
-        <div className="mt-8 text-center text-[11px] text-muted-foreground/60">
-          PanWatch v{version}
+      <div className="mt-8 text-center text-[11px] text-muted-foreground/60 space-y-0.5">
+        {version && <div>{PRODUCT_NAME} v{version}</div>}
+        <div>
+          Based on{' '}
+          <a href={UPSTREAM_URL} target="_blank" rel="noopener noreferrer" className="underline hover:text-foreground">
+            {UPSTREAM_NAME}
+          </a>{' '}
+          by TNT-Likely (MIT)
         </div>
-      )}
+      </div>
     </div>
   )
 }

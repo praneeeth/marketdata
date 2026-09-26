@@ -18,7 +18,7 @@ describe('AssistantOpenBridge', () => {
       </MemoryRouter>,
     )
 
-    window.dispatchEvent(new CustomEvent('panwatch-open-chat', {
+    window.dispatchEvent(new CustomEvent('candlewise-open-chat', {
       detail: { symbol: 'INFY', market: 'IN', stockName: 'Infosys', pageContext: 'quote context' },
     }))
 

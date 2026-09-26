@@ -5,7 +5,7 @@ export type ThemeMode = 'light' | 'dark' | 'system'
 /** The theme actually in effect (after resolving system). */
 export type Theme = 'light' | 'dark'
 
-const STORAGE_KEY = 'panwatch-theme'
+const STORAGE_KEY = 'candlewise-theme'
 
 function readMode(): ThemeMode {
   const stored = localStorage.getItem(STORAGE_KEY)

@@ -1,18 +1,20 @@
 import { Suspense, useState, useEffect, useRef } from 'react'
 import { Routes, Route, NavLink, useLocation, Navigate } from 'react-router-dom'
-import { TrendingUp, ScrollText, Github } from 'lucide-react'
+import { ScrollText, Github } from 'lucide-react'
 import { useTheme } from '@/hooks/use-theme'
-import { appApi } from '@panwatch/api/app'
-import { fetchAPI, isAuthenticated } from '@panwatch/api/client'
-import LogsModal from '@panwatch/biz-ui/components/logs-modal'
-import AmbientBackground from '@panwatch/biz-ui/components/AmbientBackground'
+import { CandlewiseLogo } from '@/components/CandlewiseLogo'
+import { RELEASES_URL, REPO_URL } from '@/lib/brand'
+import { appApi } from '@candlewise/api/app'
+import { fetchAPI, isAuthenticated } from '@candlewise/api/client'
+import LogsModal from '@candlewise/biz-ui/components/logs-modal'
+import AmbientBackground from '@candlewise/biz-ui/components/AmbientBackground'
 import AccountMenu from '@/components/AccountMenu'
 import AssistantOpenBridge from '@/components/AssistantOpenBridge'
 import SelfCheckModal from '@/components/SelfCheckModal'
 import { RouteErrorBoundary, RouteLoadingFallback } from '@/components/RouteBoundary'
 import { preloadRoute, routePages } from '@/router/page-loaders'
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@panwatch/base-ui/components/ui/dialog'
-import { Button } from '@panwatch/base-ui/components/ui/button'
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@candlewise/base-ui/components/ui/dialog'
+import { Button } from '@candlewise/base-ui/components/ui/button'
 import DisclaimerFooter from '@/components/DisclaimerFooter'
 import DisclaimerConsentDialog from '@/components/DisclaimerConsentDialog'
 import { useCompliance } from '@/hooks/use-compliance'
@@ -81,7 +83,7 @@ function App() {
   const [upgradeOpen, setUpgradeOpen] = useState(false)
   const [upgradeInfo, setUpgradeInfo] = useState<{ latest: string; url: string } | null>(null)
   const checkedUpdateRef = useRef(false)
-  const repoUrl = 'https://github.com/TNT-Likely/PanWatch'
+  const repoUrl = REPO_URL
 
   useEffect(() => {
     appApi.version()
@@ -101,9 +103,9 @@ function App() {
         const latest = String(res?.latest_version || '').trim()
         const shouldOpen = !!res?.update_available && !!latest
         if (!shouldOpen) return
-        const dismissed = localStorage.getItem('panwatch_upgrade_dismissed_version') || ''
+        const dismissed = localStorage.getItem('candlewise_upgrade_dismissed_version') || ''
         if (dismissed === latest) return
-        setUpgradeInfo({ latest, url: String(res?.release_url || 'https://github.com/sunxiao0721/PanWatch/releases') })
+        setUpgradeInfo({ latest, url: String(res?.release_url || RELEASES_URL) })
         setUpgradeOpen(true)
       })
       .catch(() => {})
@@ -137,10 +139,7 @@ function App() {
           <div className="h-14 flex items-center justify-between">
             {/* Logo */}
             <NavLink to="/" className="flex items-center gap-2.5 group">
-              <div className="w-8 h-8 rounded-2xl bg-gradient-to-br from-primary to-primary/70 flex items-center justify-center shadow-sm">
-                <TrendingUp className="w-4 h-4 text-white" />
-              </div>
-              <span className="text-[15px] font-bold text-foreground">PanWatch</span>
+              <CandlewiseLogo markClassName="w-8 h-8" wordmarkClassName="text-[15px] font-bold" />
               {version && <span className="text-[11px] text-muted-foreground/60 font-normal">v{version}</span>}
             </NavLink>
 
@@ -210,10 +209,7 @@ function App() {
         <header className="card px-4">
           <div className="h-12 flex items-center justify-between">
             <NavLink to="/" className="flex items-center gap-2 group">
-              <div className="w-7 h-7 rounded-xl bg-gradient-to-br from-primary to-primary/70 flex items-center justify-center shadow-sm">
-                <TrendingUp className="w-3.5 h-3.5 text-white" />
-              </div>
-              <span className="text-[14px] font-bold text-foreground">PanWatch</span>
+              <CandlewiseLogo markClassName="w-7 h-7" wordmarkClassName="text-[14px] font-bold" />
               {version && <span className="text-[10px] text-muted-foreground/60 font-normal">v{version}</span>}
             </NavLink>
             <div className="flex items-center gap-1.5 px-1.5 py-1 rounded-2xl bg-accent/20 border border-border/40">
@@ -319,7 +315,7 @@ function App() {
             <Button
               variant="secondary"
               onClick={() => {
-                if (upgradeInfo?.latest) localStorage.setItem('panwatch_upgrade_dismissed_version', upgradeInfo.latest)
+                if (upgradeInfo?.latest) localStorage.setItem('candlewise_upgrade_dismissed_version', upgradeInfo.latest)
                 setUpgradeOpen(false)
               }}
             >
@@ -327,7 +323,7 @@ function App() {
             </Button>
             <Button
               onClick={() => {
-                const url = upgradeInfo?.url || 'https://github.com/sunxiao0721/PanWatch/releases'
+                const url = upgradeInfo?.url || RELEASES_URL
                 window.open(url, '_blank', 'noopener,noreferrer')
               }}
             >

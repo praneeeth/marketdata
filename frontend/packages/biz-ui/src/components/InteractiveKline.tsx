@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { RefreshCw } from 'lucide-react'
-import { fetchAPI } from '@panwatch/api'
-import { Button } from '@panwatch/base-ui/components/ui/button'
+import { fetchAPI } from '@candlewise/api'
+import { Button } from '@candlewise/base-ui/components/ui/button'
 
 type BusinessDay = { year: number; month: number; day: number }
 

@@ -9,11 +9,11 @@ import {
   type StrategyPerformanceItem,
   type NotifyChannelItem,
   type MarketView,
-} from '@panwatch/api'
-import { Button } from '@panwatch/base-ui/components/ui/button'
-import { Switch } from '@panwatch/base-ui/components/ui/switch'
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@panwatch/base-ui/components/ui/dialog'
-import { useToast } from '@panwatch/base-ui/components/ui/toast'
+} from '@candlewise/api'
+import { Button } from '@candlewise/base-ui/components/ui/button'
+import { Switch } from '@candlewise/base-ui/components/ui/switch'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@candlewise/base-ui/components/ui/dialog'
+import { useToast } from '@candlewise/base-ui/components/ui/toast'
 import { useCompliance } from '@/hooks/use-compliance'
 
 const EXIT_REASON_MAP: Record<string, string> = {

@@ -7,8 +7,10 @@ import {
   DialogHeader,
   DialogTitle,
   DialogDescription,
-} from '@panwatch/base-ui/components/ui/dialog'
-import { Button } from '@panwatch/base-ui/components/ui/button'
+} from '@candlewise/base-ui/components/ui/dialog'
+import { Button } from '@candlewise/base-ui/components/ui/button'
+import { CandlewiseMark } from '@/components/CandlewiseLogo'
+import { PRODUCT_NAME, TAGLINE } from '@/lib/brand'
 import { useCompliance } from '@/hooks/use-compliance'
 
 interface ShareCardDialogProps {
@@ -28,7 +30,7 @@ interface ShareCardDialogProps {
  * Design notes:
  * - The card container has a fixed width (640px by default), its own white -> #f8fafc gradient, rounded corners, padding, system font and explicit dark text,
  *   so the exported PNG looks the same in any theme (light/dark). Each card only supplies its face as children.
- * - The footer (disclaimer + PanWatch · GitHub line) is rendered by the shell, as the consistent anchor for every share card.
+ * - The footer (disclaimer + Candlewise · tagline line) is rendered by the shell, as the consistent anchor for every share card.
  * - "Download image" exports ${filename}.png with html-to-image's toPng (pixelRatio: 2, cacheBust: true).
  */
 function ShareCardDialogInner({
@@ -103,27 +105,11 @@ function ShareCardDialogInner({
                 color: '#0f172a',
               }}
             >
-              <span
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  width: 22,
-                  height: 22,
-                  borderRadius: 6,
-                  background: '#0f172a',
-                  color: '#ffffff',
-                  fontSize: 13,
-                  fontWeight: 900,
-                  flexShrink: 0,
-                }}
-              >
-                P
-              </span>
-              <span>PanWatch</span>
+              <CandlewiseMark className="w-[22px] h-[22px] shrink-0 text-[#334155]" title="" />
+              <span>{PRODUCT_NAME}</span>
               <span style={{ color: '#cbd5e1', fontWeight: 400 }}>·</span>
               <span style={{ color: '#64748b', fontWeight: 500, fontSize: 12.5 }}>
-                github.com/TNT-Likely/PanWatch
+                {TAGLINE}
               </span>
             </div>
           </div>

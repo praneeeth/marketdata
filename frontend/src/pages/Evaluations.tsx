@@ -9,14 +9,14 @@ import {
   type AgentPredictionOutcomeItem,
   type AgentPredictionSummary,
   type EvaluationHorizonUnit,
-} from '@panwatch/api'
-import { Badge } from '@panwatch/base-ui/components/ui/badge'
-import { Button } from '@panwatch/base-ui/components/ui/button'
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@panwatch/base-ui/components/ui/dialog'
-import { Input } from '@panwatch/base-ui/components/ui/input'
-import { Label } from '@panwatch/base-ui/components/ui/label'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@panwatch/base-ui/components/ui/select'
-import { useToast } from '@panwatch/base-ui/components/ui/toast'
+} from '@candlewise/api'
+import { Badge } from '@candlewise/base-ui/components/ui/badge'
+import { Button } from '@candlewise/base-ui/components/ui/button'
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@candlewise/base-ui/components/ui/dialog'
+import { Input } from '@candlewise/base-ui/components/ui/input'
+import { Label } from '@candlewise/base-ui/components/ui/label'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@candlewise/base-ui/components/ui/select'
+import { useToast } from '@candlewise/base-ui/components/ui/toast'
 
 type FilterState = {
   agentName: string

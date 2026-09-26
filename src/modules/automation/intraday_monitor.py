@@ -38,13 +38,7 @@ def is_market_trading(market: MarketCode) -> bool:
 
 
 def market_label(market: MarketCode) -> str:
-    if market == MarketCode.CN:
-        return "A股"
-    if market == MarketCode.HK:
-        return "港股"
-    if market == MarketCode.US:
-        return "美股"
-    return market.value
+    return "India (NSE/BSE)" if market == MarketCode.IN else market.value
 
 
 # 标准化操作建议
@@ -113,7 +107,7 @@ class IntradayMonitorAgent(BaseAgent):
 
         # SignalPack: 统一结构化输入（quote/technical/position）
         stock_config = context.watchlist[0] if context.watchlist else None
-        market = stock_config.market if stock_config else MarketCode.CN
+        market = stock_config.market if stock_config else MarketCode.IN
         symbol = stock_config.symbol if stock_config else ""
         name = stock_config.name if stock_config else symbol
 

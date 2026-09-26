@@ -3,7 +3,6 @@ from __future__ import annotations
 import logging
 from datetime import date, datetime, timedelta
 
-from src.platform.marketdata.collectors.events_collector import fetch_announcement_fulltext
 from src.modules.research.analysis_history import get_latest_ta_verdict
 from src.modules.research.context_store import (
     get_recent_stock_context_snapshots,
@@ -24,15 +23,10 @@ from src.platform.persistence.json_safe import to_jsonable
 
 logger = logging.getLogger(__name__)
 
-# 各市场用于相对强度对比的大盘指数(代码 + 中文标签)。
-# A股优先沪深300(000300);港股恒生指数;美股标普500(efinance 用 .INX)。
+# Benchmark index for relative strength: NIFTY 50 (India is the only market).
 _INDEX_BY_MARKET: dict[str, tuple[str, str]] = {
-    "CN": ("000300", "沪深300"),
-    "HK": ("HSI", "恒生指数"),
-    "US": (".INX", "标普500"),
+    "IN": ("NIFTY 50", "NIFTY 50"),
 }
-# A股若 000300 取数失败时的兜底指数(上证指数)。
-_CN_INDEX_FALLBACK: tuple[str, str] = ("000001", "上证指数")
 
 
 def _iso_today() -> str:
@@ -219,9 +213,8 @@ class ContextBuilder:
 
     @staticmethod
     def _index_for_market(market) -> tuple[str, str]:
-        """市场 -> (指数代码, 中文标签)。未知市场回退到沪深300。"""
-        mkt = market.value if isinstance(market, MarketCode) else str(market or "")
-        return _INDEX_BY_MARKET.get(mkt, _INDEX_BY_MARKET["CN"])
+        """Market -> (index symbol, label). India-only: always NIFTY 50."""
+        return _INDEX_BY_MARKET["IN"]
 
     def _fetch_index_context(self, symbol: str, market) -> dict:
         """取指数多周期收益。指数 secid 规则与个股不同,用 get_index_klines 显式映射直取;
@@ -252,9 +245,6 @@ class ContextBuilder:
 
         sym, _label = self._index_for_market(market)
         ctx = self._fetch_index_context(sym, market)
-        # A股 000300 取不到时兜底上证指数
-        if (not ctx or not ctx.get("available")) and mkt == "CN":
-            ctx = self._fetch_index_context(_CN_INDEX_FALLBACK[0], market)
         self._index_cache[mkt] = ctx
         return ctx
 
@@ -288,9 +278,8 @@ class ContextBuilder:
                 return None
 
             _sym, label = self._index_for_market(market)
-            # 兜底场景下标签可能是上证,这里用实际命中的标签做近似(沪深300/上证差异不影响语义)
             return {
-                "index_label": label if market != MarketCode.CN else label,
+                "index_label": label,
                 "stock_5d": stock_5d,
                 "index_5d": index_5d,
                 "excess_5d": excess_5d,
@@ -305,38 +294,9 @@ class ContextBuilder:
     # ----- ① 公告全文 + 头部新闻正文保留 --------------------------------- #
 
     @staticmethod
-    def _enrich_events_fulltext(
-        events: list[dict],
-        *,
-        top_k: int = 3,
-        importance_min: int = 2,
-        max_chars: int = 1000,
-    ) -> list[dict]:
-        """给最重要的 top_k 条公告(importance>=importance_min)附加 content_fulltext。
-
-        逐条 fail-soft:抓取失败/空 → 只保留标题(不加字段),绝不抛异常。
-        """
-        if not events:
-            return events
-        # 按重要性降序挑候选,保留原顺序输出
-        important_idx = [
-            i
-            for i, ev in enumerate(events)
-            if isinstance(ev, dict) and int(ev.get("importance") or 0) >= importance_min
-        ]
-        important_idx = important_idx[: max(0, int(top_k))]
-        for i in important_idx:
-            ev = events[i]
-            art_code = str(ev.get("external_id") or "")
-            if not art_code:
-                continue
-            try:
-                text = fetch_announcement_fulltext(art_code)
-            except Exception as e:
-                logger.debug(f"公告全文注入失败 {art_code}: {e}")
-                continue
-            if text:
-                ev["content_fulltext"] = text[:max_chars]
+    def _enrich_events_fulltext(events: list[dict], **_kwargs: object) -> list[dict]:
+        """Pass-through. Full-text enrichment used Chinese (Eastmoney) announcements;
+        Indian filings arrive in Phase 4a."""
         return events
 
     @staticmethod

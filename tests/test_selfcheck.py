@@ -1,4 +1,4 @@
-"""系统自检:classify_hint(中文修复提示库)+ run_selfcheck(并发聚合)。"""
+"""Self-check: classify_hint repair hints, broker probes and run_selfcheck aggregation."""
 
 from __future__ import annotations
 
@@ -19,20 +19,52 @@ def _mem_db():
 
 # --------------------------- classify_hint(纯函数)---------------------------
 
-def test_hint_datasource_proxy():
-    """CN 数据源连接类错误 → 提示代理 / trust_env。"""
+def test_hint_broker_session_expired():
+    """Expired broker session -> tell the user to log in again."""
     from src.modules.administration.selfcheck import classify_hint
 
-    h = classify_hint("datasource", "Server disconnected without sending a response")
-    assert "代理" in h or "trust_env" in h
+    assert "log in again" in classify_hint("datasource", "session expired")
+    assert "log in again" in classify_hint("datasource", "not logged in")
 
 
-def test_hint_db_locked():
-    """database is locked → 提示并发 / 锁。"""
+def test_hint_broker_keys_unreadable():
     from src.modules.administration.selfcheck import classify_hint
 
-    h = classify_hint("datasource", "sqlite3.OperationalError: database is locked")
-    assert "锁" in h or "并发" in h
+    assert "CREDENTIALS_MASTER_KEY" in classify_hint("datasource", "Stored credentials could not be read.")
+    assert "Data sources" in classify_hint("datasource", "login failed")
+
+
+def test_probe_broker_reads_stored_status():
+    """No network call: the stored connection status decides the result."""
+    from src.modules.administration.selfcheck import probe_broker
+
+    ok = asyncio.run(probe_broker({"provider": "kite", "label": "Kite", "status": "connected"}))
+    assert (ok["status"], ok["key"], ok["error"]) == ("ok", "broker:kite", None)
+    exp = asyncio.run(probe_broker({"provider": "kite", "label": "Kite", "status": "expired"}))
+    assert (exp["status"], exp["error"]) == ("fail", "session expired")
+    err = asyncio.run(probe_broker({"provider": "angel", "status": "error", "last_error": "bad totp"}))
+    assert err["error"] == "bad totp"
+    assert err["name"] == "angel"
+    off = asyncio.run(probe_broker({"provider": "upstox", "label": "Upstox", "status": "disconnected"}))
+    assert off["error"] == "not logged in"
+
+
+class _FakeBrokers:
+    def __init__(self, conns):
+        self._conns = conns
+
+    def connections(self, db):
+        return self._conns
+
+
+def _patch_brokers(monkeypatch, conns):
+    import src.modules.market.brokers as brokers
+
+    monkeypatch.setattr(brokers, "get_broker_manager", lambda: _FakeBrokers(conns))
+
+
+KITE = {"provider": "kite", "label": "Zerodha Kite Connect", "enabled": True, "status": "connected"}
+DISABLED = {"provider": "angel", "label": "Angel One", "enabled": False, "status": "connected"}
 
 
 def test_hint_ai_auth():
@@ -148,11 +180,11 @@ def test_run_selfcheck_always_includes_system_items():
 def test_run_selfcheck_aggregates(monkeypatch):
     """枚举启用项 → 并发 probe → 聚合 summary(total/ok/slow/fail)。"""
     from src.modules.administration import selfcheck
-    from src.platform.persistence.models import AIModel, AIService, DataSource, NotifyChannel
+    from src.platform.persistence.models import AIModel, AIService, NotifyChannel
 
+    _patch_brokers(monkeypatch, [KITE, DISABLED])
     db = _mem_db()
     try:
-        db.add(DataSource(name="东财", type="quote", provider="eastmoney", config={}, enabled=True))
         db.add(NotifyChannel(name="TG", type="telegram", config={}, enabled=True))
         svc = AIService(name="deepseek", base_url="https://x", api_key="k")
         db.add(svc)
@@ -160,8 +192,8 @@ def test_run_selfcheck_aggregates(monkeypatch):
         db.add(AIModel(name="ds-chat", model="deepseek-chat", service_id=svc.id))
         db.commit()
 
-        async def fake_ds(source):
-            return {"category": "datasource", "key": f"ds:{source.id}", "name": source.name,
+        async def fake_ds(conn):
+            return {"category": "datasource", "key": f"broker:{conn['provider']}", "name": conn["label"],
                     "status": "ok", "latency_ms": 10, "error": None, "hint": ""}
 
         async def fake_ai(model, service):
@@ -172,7 +204,7 @@ def test_run_selfcheck_aggregates(monkeypatch):
             return {"category": "notify", "key": f"nc:{channel.id}", "name": channel.name,
                     "status": "ok", "latency_ms": 5, "error": None, "hint": ""}
 
-        monkeypatch.setattr(selfcheck, "probe_datasource", fake_ds)
+        monkeypatch.setattr(selfcheck, "probe_broker", fake_ds)
         monkeypatch.setattr(selfcheck, "probe_ai_model", fake_ai)
         monkeypatch.setattr(selfcheck, "probe_notify_channel", fake_nc)
 
@@ -199,11 +231,11 @@ def test_run_selfcheck_empty_db():
 def test_list_selfcheck_items_no_probe(monkeypatch):
     """list 模式只枚举待检身份(category/key/name),不跑探测。"""
     from src.modules.administration import selfcheck
-    from src.platform.persistence.models import DataSource, NotifyChannel
+    from src.platform.persistence.models import NotifyChannel
 
+    _patch_brokers(monkeypatch, [KITE, DISABLED])
     db = _mem_db()
     try:
-        db.add(DataSource(name="东财", type="quote", provider="eastmoney", config={}, enabled=True))
         db.add(NotifyChannel(name="TG", type="telegram", config={}, enabled=True))
         db.commit()
 
@@ -213,11 +245,11 @@ def test_list_selfcheck_items_no_probe(monkeypatch):
             called["n"] += 1
             return {}
 
-        monkeypatch.setattr(selfcheck, "probe_datasource", boom)
+        monkeypatch.setattr(selfcheck, "probe_broker", boom)
         monkeypatch.setattr(selfcheck, "probe_notify_channel", boom)
 
         items = selfcheck.list_selfcheck_items(db=db, include_system=False)
-        assert {i["key"] for i in items} == {"ds:1", "nc:1"}
+        assert {i["key"] for i in items} == {"broker:kite", "nc:1"}  # disabled Angel is skipped
         assert all({"category", "key", "name", "group"} <= set(i) for i in items)
         assert called["n"] == 0  # 没触发任何探测
     finally:
@@ -248,28 +280,28 @@ def test_list_items_ai_has_service_group():
 def test_run_selfcheck_keys_filter(monkeypatch):
     """keys 过滤:只探测指定 key 的项(供前端逐项更新进度)。"""
     from src.modules.administration import selfcheck
-    from src.platform.persistence.models import DataSource, NotifyChannel
+    from src.platform.persistence.models import NotifyChannel
 
+    _patch_brokers(monkeypatch, [KITE, DISABLED])
     db = _mem_db()
     try:
-        db.add(DataSource(name="东财", type="quote", provider="eastmoney", config={}, enabled=True))
         db.add(NotifyChannel(name="TG", type="telegram", config={}, enabled=True))
         db.commit()
 
-        async def fake_ds(s):
-            return {"category": "datasource", "key": f"ds:{s.id}", "name": s.name,
+        async def fake_ds(conn):
+            return {"category": "datasource", "key": f"broker:{conn['provider']}", "name": conn["label"],
                     "status": "ok", "latency_ms": 1, "error": None, "hint": ""}
 
         async def fake_nc(c, send=False):
             return {"category": "notify", "key": f"nc:{c.id}", "name": c.name,
                     "status": "ok", "latency_ms": 1, "error": None, "hint": ""}
 
-        monkeypatch.setattr(selfcheck, "probe_datasource", fake_ds)
+        monkeypatch.setattr(selfcheck, "probe_broker", fake_ds)
         monkeypatch.setattr(selfcheck, "probe_notify_channel", fake_nc)
 
-        res = asyncio.run(selfcheck.run_selfcheck(db=db, keys=["ds:1"]))
+        res = asyncio.run(selfcheck.run_selfcheck(db=db, keys=["broker:kite"]))
         assert res["summary"]["total"] == 1
-        assert res["items"][0]["key"] == "ds:1"
+        assert res["items"][0]["key"] == "broker:kite"
     finally:
         db.close()
 
@@ -309,7 +341,7 @@ def test_doctor_print_report(capsys):
         "items": [
             {"category": "system", "key": "sys:db", "name": "数据库", "group": None,
              "status": "ok", "latency_ms": 5, "error": None, "hint": "", "note": None},
-            {"category": "datasource", "key": "ds:1", "name": "东财", "group": None,
+            {"category": "datasource", "key": "broker:kite", "name": "Zerodha Kite Connect", "group": None,
              "status": "fail", "latency_ms": 0, "error": "timeout", "hint": "检查代理设置", "note": None},
         ],
     }
@@ -317,7 +349,7 @@ def test_doctor_print_report(capsys):
     out = capsys.readouterr().out
     assert "系统自检" in out
     assert "【系统】" in out and "【数据源】" in out
-    assert "数据库" in out and "东财" in out
+    assert "数据库" in out and "Zerodha Kite Connect" in out
     assert "检查代理设置" in out and "❌" in out
 
 

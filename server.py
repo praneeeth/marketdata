@@ -17,7 +17,6 @@ from src.platform.persistence.models import (
     AIModel,
     NotifyChannel,
     AppSettings,
-    DataSource,
 )
 from src.platform.observability.log_handler import DBLogHandler
 from src.platform.runtime.config import Settings, AppConfig, StockConfig
@@ -39,11 +38,9 @@ from src.modules.strategy.strategy_catalog import ensure_strategy_catalog
 from src.modules.automation.base import AgentContext, PortfolioInfo, AccountInfo, PositionInfo
 from src.modules.automation.daily_report import DailyReportAgent
 from src.modules.automation.news_digest import NewsDigestAgent
-from src.modules.automation.chart_analyst import ChartAnalystAgent
 from src.modules.automation.intraday_monitor import IntradayMonitorAgent
 from src.modules.automation.premarket_outlook import PremarketOutlookAgent
 from src.modules.automation.tradingagents import TradingAgentsAgent
-from src.modules.market.data_collector import DEFAULT_TEST_SYMBOLS
 
 logger = logging.getLogger(__name__)
 
@@ -208,76 +205,8 @@ class _ConsoleNoiseFilter(logging.Filter):
         return True
 
 
-def setup_playwright():
-    """检查并安装 Playwright 浏览器
-
-    本地开发时使用系统安装的 Playwright，Docker 环境下安装到 data 目录。
-    通过 DOCKER 环境变量或显式设置的 PLAYWRIGHT_BROWSERS_PATH 来判断。
-    """
-    import subprocess
-
-    # 允许通过环境变量跳过首次安装（例如不需要截图功能时）
-    if os.environ.get("PLAYWRIGHT_SKIP_BROWSER_INSTALL") == "1":
-        logger.info(
-            "已设置 PLAYWRIGHT_SKIP_BROWSER_INSTALL=1，跳过 Playwright 浏览器安装"
-        )
-        return
-
-    # 如果用户已显式设置 PLAYWRIGHT_BROWSERS_PATH，尊重该设置
-    if "PLAYWRIGHT_BROWSERS_PATH" in os.environ:
-        browser_dir = os.environ["PLAYWRIGHT_BROWSERS_PATH"]
-        logger.info(f"使用自定义 Playwright 路径: {browser_dir}")
-    # Docker 环境下安装到 data 目录
-    elif os.environ.get("DOCKER") == "1":
-        data_dir = os.environ.get("DATA_DIR", "./data")
-        browser_dir = os.path.join(data_dir, "playwright")
-        os.environ["PLAYWRIGHT_BROWSERS_PATH"] = browser_dir
-        logger.info(f"Docker 环境，Playwright 路径: {browser_dir}")
-    else:
-        # 本地开发，使用系统默认路径，不做任何安装
-        logger.info("本地开发环境，使用系统 Playwright")
-        return
-
-    # 检查是否已安装
-    if os.path.exists(browser_dir):
-        try:
-            dirs = os.listdir(browser_dir)
-            if any(
-                d.startswith("chromium")
-                for d in dirs
-                if os.path.isdir(os.path.join(browser_dir, d))
-            ):
-                logger.info(f"Playwright 浏览器已就绪: {browser_dir}")
-                return
-        except Exception:
-            pass
-
-    # 首次安装
-    logger.info("首次启动，正在安装 Playwright 浏览器（可能需要几分钟）...")
-    os.makedirs(browser_dir, exist_ok=True)
-
-    try:
-        result = subprocess.run(
-            ["playwright", "install", "chromium"],
-            env={**os.environ, "PLAYWRIGHT_BROWSERS_PATH": browser_dir},
-            capture_output=True,
-            text=True,
-            timeout=600,  # 10 分钟超时
-        )
-        if result.returncode == 0:
-            logger.info("Playwright 浏览器安装完成")
-        else:
-            logger.error(f"Playwright 安装失败: {result.stderr}")
-    except subprocess.TimeoutExpired:
-        logger.error("Playwright 安装超时（网络问题？）")
-    except FileNotFoundError:
-        logger.warning("Playwright 命令不可用，K线截图功能不可用")
-    except Exception as e:
-        logger.error(f"Playwright 安装失败: {e}")
-
-
 def seed_sample_stocks():
-    """首次启动时添加示例股票"""
+    """Add a few NSE large caps on first start so the watchlist isn't empty."""
     db = SessionLocal()
     try:
         # 只在没有任何股票时才添加示例
@@ -285,16 +214,16 @@ def seed_sample_stocks():
             return
 
         samples = [
-            {"symbol": "600519", "name": "贵州茅台", "market": "CN"},
-            {"symbol": "002594", "name": "比亚迪", "market": "CN"},
-            {"symbol": "300750", "name": "宁德时代", "market": "CN"},
-            {"symbol": "00700", "name": "腾讯控股", "market": "HK"},
-            {"symbol": "AAPL", "name": "苹果", "market": "US"},
+            {"symbol": "RELIANCE", "name": "Reliance Industries", "market": "IN"},
+            {"symbol": "TCS", "name": "Tata Consultancy Services", "market": "IN"},
+            {"symbol": "HDFCBANK", "name": "HDFC Bank", "market": "IN"},
+            {"symbol": "INFY", "name": "Infosys", "market": "IN"},
+            {"symbol": "ICICIBANK", "name": "ICICI Bank", "market": "IN"},
         ]
         for s in samples:
             db.add(Stock(**s))
         db.commit()
-        logger.info("已添加 5 只示例股票（首次启动）")
+        logger.info("Added 5 sample NSE stocks (first start)")
     finally:
         db.close()
 
@@ -352,395 +281,6 @@ def seed_agents():
     db.close()
 
 
-# 预置数据源种子(供 seed_data_sources / reconcile_data_sources 复用)。
-# 只增不删的 upsert 目标;删孤儿的对账逻辑见 reconcile_data_sources。
-DATA_SOURCE_SEEDS: list[dict] = [
-        # 新闻类数据源
-        {
-            "name": "雪球资讯",
-            "type": "news",
-            "provider": "xueqiu",
-            "config": {
-                "cookies": "",
-                "description": "雪球个股新闻聚合，需要登录 cookie",
-            },
-            "enabled": False,
-            "priority": 0,
-            "supports_batch": True,
-            "test_symbols": list(DEFAULT_TEST_SYMBOLS),
-        },
-        {
-            "name": "东方财富资讯",
-            "type": "news",
-            "provider": "eastmoney_news",
-            "config": {},
-            "enabled": True,
-            "priority": 1,
-            "supports_batch": False,  # 每只股票单独请求
-            "test_symbols": list(DEFAULT_TEST_SYMBOLS),
-        },
-        {
-            "name": "东方财富公告",
-            "type": "news",
-            "provider": "eastmoney",
-            "config": {},
-            "enabled": True,
-            "priority": 2,
-            "supports_batch": True,  # 支持批量查询
-            "test_symbols": list(DEFAULT_TEST_SYMBOLS),
-        },
-        # K线数据源
-        {
-            "name": "腾讯K线",
-            "type": "kline",
-            "provider": "tencent",
-            "config": {},
-            "enabled": True,
-            "priority": 0,
-            "supports_batch": False,
-            "test_symbols": list(DEFAULT_TEST_SYMBOLS),
-        },
-        {
-            "name": "东方财富 K线",
-            "type": "kline",
-            "provider": "eastmoney",
-            "config": {"description": "东方财富日线,A股/港股长历史兜底(免 key)。"},
-            "enabled": True,
-            "priority": 5,   # 腾讯(0)之后、Tushare(10)之前 → CN/HK 兜底
-            "supports_batch": False,
-            "test_symbols": list(DEFAULT_TEST_SYMBOLS),
-        },
-        {
-            "name": "Stooq K线",
-            "type": "kline",
-            "provider": "stooq",
-            "config": {"description": "Stooq 美股日线兜底(免 key)。"},
-            "enabled": True,
-            "priority": 15,  # US 兜底(腾讯 0 之后)
-            "supports_batch": False,
-            "test_symbols": list(DEFAULT_TEST_SYMBOLS),
-        },
-        {
-            "name": "Yahoo K线",
-            "type": "kline",
-            "provider": "yahoo",
-            "config": {
-                "description": "Yahoo chart v8 日线(US/HK,免 key 免 crumb)。国内访问通常需代理,"
-                "在 config.proxy 填写代理地址后启用,作港股 K线第二源/美股更稳兜底。",
-                "proxy": "",
-            },
-            "enabled": False,  # 需代理,默认关(同 YFinance 口径),用户配好 proxy 再开
-            "priority": 20,  # US/HK 最后兜底
-            "supports_batch": False,
-            "test_symbols": list(DEFAULT_TEST_SYMBOLS),
-        },
-        # 资金流向数据源
-        {
-            "name": "东方财富资金流",
-            "type": "capital_flow",
-            "provider": "eastmoney",
-            "config": {},
-            "enabled": True,
-            "priority": 0,
-            "supports_batch": False,
-            "test_symbols": list(DEFAULT_TEST_SYMBOLS),
-        },
-        {
-            "name": "新浪资金流",
-            "type": "capital_flow",
-            "provider": "sina",
-            "config": {
-                "description": "新浪资金流入趋势(CN,免 key)。作东财之后的第二源,"
-                "仅含主力/超大单净额(无大/中/小单细分)。",
-            },
-            "enabled": True,
-            "priority": 5,  # 东财(0)之后的 CN 第二源
-            "supports_batch": False,
-            "test_symbols": list(DEFAULT_TEST_SYMBOLS),
-        },
-        # 实时行情数据源
-        {
-            "name": "腾讯行情",
-            "type": "quote",
-            "provider": "tencent",
-            "config": {},
-            "enabled": True,
-            "priority": 0,
-            "supports_batch": True,
-            "test_symbols": list(DEFAULT_TEST_SYMBOLS),
-        },
-        {
-            "name": "东方财富行情",
-            "type": "quote",
-            "provider": "eastmoney",
-            "config": {"description": "东方财富 push2 实时行情(CN,免 key)。作腾讯之后的 A 股第二源。"},
-            "enabled": True,
-            "priority": 3,  # 腾讯(0)之后的 CN 第二源(sina/yfinance 不支持 CN)
-            "supports_batch": False,  # push2 stock/get 单只查询,逐只
-            "test_symbols": list(DEFAULT_TEST_SYMBOLS),
-        },
-        {
-            "name": "Sina 行情",
-            "type": "quote",
-            "provider": "sina",
-            "config": {"description": "新浪美股/港股实时行情,免 key 免代理,作腾讯之后的 US/HK 备源。"},
-            "enabled": True,
-            "priority": 5,   # 腾讯(0)之后
-            "supports_batch": True,
-            "test_symbols": list(DEFAULT_TEST_SYMBOLS),
-        },
-        {
-            "name": "YFinance 行情",
-            "type": "quote",
-            "provider": "yfinance",
-            "config": {
-                "description": "Yahoo Finance,需 pip install yfinance。适用 HK/US,A 股不可用。",
-            },
-            "enabled": False,
-            "priority": 10,
-            "supports_batch": True,
-            "test_symbols": list(DEFAULT_TEST_SYMBOLS),
-        },
-        # 事件日历数据源（基于公告结构化）
-        {
-            "name": "东方财富事件日历",
-            "type": "events",
-            "provider": "eastmoney",
-            "config": {},
-            "enabled": True,
-            "priority": 0,
-            "supports_batch": True,
-            "test_symbols": list(DEFAULT_TEST_SYMBOLS),
-        },
-        # 快讯数据源（7×24 电报，市场级，不按 symbols 过滤）
-        {
-            "name": "财联社快讯",
-            "type": "flash_news",
-            "provider": "cls",
-            "config": {"description": "财联社 7×24 电报(免 key,本地签名)。"},
-            "enabled": True,
-            "priority": 0,
-            "supports_batch": False,
-            "test_symbols": [],
-        },
-        {
-            "name": "新浪7x24快讯",
-            "type": "flash_news",
-            "provider": "sina",
-            "config": {"description": "新浪财经 7×24 直播,带关联个股。"},
-            "enabled": True,
-            "priority": 5,
-            "supports_batch": False,
-            "test_symbols": [],
-        },
-        {
-            "name": "东方财富7x24快讯",
-            "type": "flash_news",
-            "provider": "eastmoney",
-            "config": {"description": "东财 np-weblist 7×24 资讯,与财联社互备。"},
-            "enabled": True,
-            "priority": 10,
-            "supports_batch": False,
-            "test_symbols": [],
-        },
-        # 基本面数据源（按 symbol，估值/股本/财报指标）
-        {
-            "name": "腾讯基本面",
-            "type": "fundamentals",
-            "provider": "tencent",
-            "config": {"description": "腾讯 qt.gtimg 估值快照(CN,免 key):PE/PB/市值。"},
-            "enabled": True,
-            "priority": 0,
-            "supports_batch": True,
-            "test_symbols": list(DEFAULT_TEST_SYMBOLS),
-        },
-        {
-            "name": "东方财富基本面",
-            "type": "fundamentals",
-            "provider": "eastmoney",
-            "config": {
-                "description": "东财基本面:CN 股本/市值(push2),US/HK 财报指标(GMAININDICATOR)。"
-            },
-            "enabled": True,
-            "priority": 5,
-            "supports_batch": True,
-            "test_symbols": list(DEFAULT_TEST_SYMBOLS),
-        },
-        # 市场资金面数据源（龙虎榜/融资融券/股东户数/分红/北向资金）
-        {
-            "name": "东财龙虎榜",
-            "type": "dragon_tiger",
-            "provider": "eastmoney",
-            "config": {
-                "description": "东财每日龙虎榜(市场级,需配 test_date 测试)。",
-                "test_date": "",
-            },
-            "enabled": True,
-            "priority": 0,
-            "supports_batch": False,
-            "test_symbols": [],
-        },
-        {
-            "name": "东财融资融券",
-            "type": "margin",
-            "provider": "eastmoney",
-            "config": {"description": "东财个股融资融券明细(按 symbol)。"},
-            "enabled": True,
-            "priority": 0,
-            "supports_batch": True,
-            "test_symbols": list(DEFAULT_TEST_SYMBOLS),
-        },
-        {
-            "name": "东财股东户数",
-            "type": "shareholders",
-            "provider": "eastmoney",
-            "config": {"description": "东财股东户数变化(按 symbol,季度)。"},
-            "enabled": True,
-            "priority": 0,
-            "supports_batch": True,
-            "test_symbols": list(DEFAULT_TEST_SYMBOLS),
-        },
-        {
-            "name": "东财分红",
-            "type": "dividend",
-            "provider": "eastmoney",
-            "config": {"description": "东财分红送转历史(按 symbol)。"},
-            "enabled": True,
-            "priority": 0,
-            "supports_batch": True,
-            "test_symbols": list(DEFAULT_TEST_SYMBOLS),
-        },
-        {
-            "name": "同花顺北向资金",
-            "type": "northbound",
-            "provider": "ths",
-            "config": {
-                "description": "同花顺北向资金实时(东财已断供;深股通近期不可靠)。"
-            },
-            "enabled": True,
-            "priority": 0,
-            "supports_batch": False,
-            "test_symbols": [],
-        },
-        # K线截图数据源
-        {
-            "name": "雪球K线截图",
-            "type": "chart",
-            "provider": "xueqiu",
-            "config": {
-                "viewport": {"width": 1280, "height": 900},
-                "extra_wait_ms": 3000,
-            },
-            "enabled": True,
-            "priority": 0,
-            "supports_batch": False,
-            "test_symbols": list(DEFAULT_TEST_SYMBOLS),
-        },
-        {
-            "name": "东方财富K线截图",
-            "type": "chart",
-            "provider": "eastmoney",
-            "config": {
-                "viewport": {"width": 1280, "height": 900},
-                "extra_wait_ms": 2000,
-            },
-            "enabled": False,
-            "priority": 1,
-            "supports_batch": False,
-            "test_symbols": list(DEFAULT_TEST_SYMBOLS),
-        },
-]
-
-
-def seed_data_sources(db=None, *, reset_test_symbols: bool = False) -> list[dict]:
-    """初始化预置数据源(按 name+provider 只增不删的 upsert)。
-
-    db 为 None 时自建独立 session 并自行 commit/close(兼容旧调用方式);
-    传入 db 时复用调用方 session,不 commit/close,交由调用方统一处理
-    (供 reconcile_data_sources 在同一事务里接着做删孤儿)。
-
-    reset_test_symbols 仅由“恢复默认”入口传入,用于重置内置源测试股票；普通启动对账不覆盖用户配置。
-    返回本次新增(缺失被补齐)的种子记录摘要列表 [{"name","type","provider"}, ...]。
-    """
-    owns_session = db is None
-    if owns_session:
-        db = SessionLocal()
-
-    seeded_missing: list[dict] = []
-    for source_data in DATA_SOURCE_SEEDS:
-        existing = (
-            db.query(DataSource)
-            .filter(
-                DataSource.name == source_data["name"],
-                DataSource.provider == source_data["provider"],
-            )
-            .first()
-        )
-        if existing:
-            # 恢复默认时只重置测试代码；配置、启用状态、优先级等用户设置仍保留。
-            if existing.supports_batch != source_data.get("supports_batch", False):
-                existing.supports_batch = source_data.get("supports_batch", False)
-            if reset_test_symbols:
-                existing.test_symbols = list(source_data.get("test_symbols", []))
-            elif not existing.test_symbols:  # 启动对账只补空值,不覆盖用户配置
-                existing.test_symbols = source_data.get("test_symbols", [])
-        else:
-            db.add(DataSource(**source_data))
-            seeded_missing.append(
-                {
-                    "name": source_data["name"],
-                    "type": source_data["type"],
-                    "provider": source_data["provider"],
-                }
-            )
-
-    if owns_session:
-        db.commit()
-        db.close()
-
-    return seeded_missing
-
-
-def _seed_providers_by_type() -> dict[str, set[str]]:
-    """从 DATA_SOURCE_SEEDS 推导每个 type 当前合法的 provider 集合。"""
-    result: dict[str, set[str]] = {}
-    for source_data in DATA_SOURCE_SEEDS:
-        result.setdefault(source_data["type"], set()).add(source_data["provider"])
-    return result
-
-
-def reconcile_data_sources(db, *, reset_test_symbols: bool = False) -> dict:
-    """数据源表温和对账:补缺失默认 + 删孤儿,保留用户有效自定义/凭证。
-
-    孤儿判定: legal(type) = PACKAGE_VENDORS_BY_TYPE.get(type, frozenset()) | seed 内该 type 的 provider 集合;
-    DB 行 (type, provider) 不在 legal(type) 内即孤儿。news/chart 等非引擎类型(包内集合为空)的合法性完全由 seed 决定。
-
-    只删孤儿行,其余行(含用户改过 config/priority/enabled 的自定义行)原样保留。
-    reset_test_symbols=True 时,仅覆盖内置种子的 test_symbols,供“恢复默认”使用。
-    """
-    from marketdata import PACKAGE_VENDORS_BY_TYPE
-
-    seeded_missing = seed_data_sources(db, reset_test_symbols=reset_test_symbols)
-    seed_providers_by_type = _seed_providers_by_type()
-
-    deleted: list[dict] = []
-    for row in db.query(DataSource).all():
-        legal = PACKAGE_VENDORS_BY_TYPE.get(row.type, frozenset()) | seed_providers_by_type.get(row.type, set())
-        if row.provider not in legal:
-            deleted.append(
-                {"id": row.id, "type": row.type, "provider": row.provider, "name": row.name}
-            )
-            db.delete(row)
-
-    if seeded_missing:
-        logger.info(f"数据源对账: 补齐缺失默认 {len(seeded_missing)} 条: {seeded_missing}")
-    if deleted:
-        logger.info(f"数据源对账: 删除孤儿数据源 {len(deleted)} 条: {deleted}")
-
-    db.commit()
-    return {"deleted": deleted, "seeded_missing": seeded_missing}
-
-
 def seed_strategies():
     """初始化策略目录。"""
     ensure_strategy_catalog()
@@ -765,7 +305,7 @@ def load_watchlist_for_agent(agent_name: str) -> list[StockConfig]:
             try:
                 market = MarketCode(s.market)
             except ValueError:
-                market = MarketCode.CN
+                market = MarketCode.IN
             result.append(
                 StockConfig(
                     symbol=s.symbol,
@@ -815,7 +355,7 @@ def load_portfolio_for_agent(agent_name: str) -> PortfolioInfo:
                 try:
                     market = MarketCode(stock.market)
                 except ValueError:
-                    market = MarketCode.CN
+                    market = MarketCode.IN
 
                 position_infos.append(
                     PositionInfo(
@@ -859,7 +399,7 @@ def load_portfolio_for_stock(stock_id: int) -> PortfolioInfo:
         try:
             market = MarketCode(stock.market)
         except ValueError:
-            market = MarketCode.CN
+            market = MarketCode.IN
 
         accounts = db.query(Account).filter(Account.enabled == True).all()
 
@@ -1103,7 +643,6 @@ AGENT_REGISTRY: dict[str, type] = {
     "daily_report": DailyReportAgent,
     "premarket_outlook": PremarketOutlookAgent,
     "news_digest": NewsDigestAgent,
-    "chart_analyst": ChartAnalystAgent,
     "intraday_monitor": IntradayMonitorAgent,
     "tradingagents": TradingAgentsAgent,
 }
@@ -1353,7 +892,7 @@ async def trigger_agent_for_stock(
     try:
         market = MarketCode(stock.market)
     except ValueError:
-        market = MarketCode.CN
+        market = MarketCode.IN
 
     stock_config = StockConfig(
         symbol=stock.symbol,
@@ -1478,7 +1017,6 @@ async def lifespan(app):
         logger.warning(f"OTel 初始化跳过: {e}")
     setup_proxy()  # 设置进程 env 代理(HTTP_PROXY/NO_PROXY);所有 httpx(trust_env=True)据此走代理
     setup_ssl()
-    setup_playwright()
 
     # 从环境变量初始化认证（Docker 部署用）
     from src.modules.administration.api.auth import init_auth_from_env
@@ -1491,14 +1029,6 @@ async def lifespan(app):
         db.close()
 
     seed_agents()
-    try:
-        db = SessionLocal()
-        try:
-            reconcile_data_sources(db)
-        finally:
-            db.close()
-    except Exception as e:
-        logger.warning(f"数据源对账失败,跳过(不阻断启动): {e}")
     seed_strategies()
     seed_sample_stocks()
 
@@ -1514,26 +1044,6 @@ async def lifespan(app):
         except Exception as e:
             logger.warning(f"TradingAgents 建议回填失败,跳过: {e}")
 
-    # 后台刷新股票列表缓存
-    import threading
-    from src.platform.marketdata.stock_list import get_stock_list, refresh_stock_list
-
-    def refresh_stock_cache():
-        stocks = get_stock_list()
-        if not stocks or len([s for s in stocks if s["market"] == "CN"]) == 0:
-            logger.info("股票列表缓存为空或缺少 A 股，后台刷新中...")
-            refresh_stock_list()
-
-    threading.Thread(target=refresh_stock_cache, daemon=True).start()
-
-    # 交易日历预热(判断周末/法定节假日是否开市)。拉取失败会自动降级为只判周末,
-    # 因此这里不阻塞启动,交给后台任务;之后每日 03:00 由上下文维护调度器刷新。
-    try:
-        from src.platform.scheduling.trading_calendar import refresh as refresh_trading_calendar
-
-        asyncio.create_task(refresh_trading_calendar())
-    except Exception as e:
-        logger.warning(f"交易日历预热调度失败(降级为只判周末): {e}")
 
     global scheduler, price_alert_scheduler, paper_trading_scheduler, context_maintenance_scheduler
     scheduler = build_scheduler()

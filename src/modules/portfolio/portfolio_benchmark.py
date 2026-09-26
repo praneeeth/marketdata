@@ -1,76 +1,37 @@
-"""组合 vs 基准对比(M2):超额收益 / 信息比率 / 相对回撤 + 归一化净值曲线。
+"""Portfolio vs benchmark (M2): excess return, information ratio, relative drawdown and
+normalised value curves.
 
-净值序列由各持仓的日K(KlineCollector,带缓存)按**当前持仓量**重构 —— 近似假设
-区间内持仓不变(忽略区间内加减仓),用于"当前这篮子相对大盘"的对比视角。
-基准默认沪深300;指数需显式腾讯前缀(cn_symbol 会把 000300 误判成 sz)。
+The portfolio series is rebuilt from each holding's daily K-lines at the *current*
+quantities (an approximation that ignores trades within the window). The benchmark
+defaults to NIFTY 50; its K-lines come from the user's broker like everything else.
 """
 
 from __future__ import annotations
 
-import json
 import logging
 
-from src.platform.marketdata.collectors.kline_collector import KlineCollector, KlineData
-from src.platform.marketdata.collectors.market_http import market_get
+from src.platform.marketdata.collectors.kline_collector import (
+    KlineCollector,
+    KlineData,
+    get_index_klines,
+)
 from src.platform.marketdata.models import MarketCode
 
 logger = logging.getLogger(__name__)
 
-# 腾讯日K接口(与 kline_collector.TENCENT_KLINE_URL 同源,本地化以解除对其内部符号的依赖)
-_TENCENT_KLINE_URL = "https://web.ifzq.gtimg.cn/appstock/app/fqkline/get"
-
-
-def _parse_tencent_kline(text: str, tencent_sym: str) -> list[KlineData]:
-    """解析腾讯 K 线 JS 变量响应(kline_dayqfq={...})为 KlineData;空/异常返回 []。"""
-    if not text or "=" not in text:
-        return []
-    json_str = text.split("=", 1)[1].strip()
-    if json_str.endswith(";"):
-        json_str = json_str[:-1]
-    try:
-        data = json.loads(json_str)
-    except Exception:
-        return []
-    raw_data = data.get("data", {}) if isinstance(data, dict) else {}
-    day_data = []
-    if isinstance(raw_data, dict):
-        stock_data = raw_data.get(tencent_sym, {})
-        if isinstance(stock_data, dict):
-            day_data = stock_data.get("day") or stock_data.get("qfqday") or []
-    elif isinstance(raw_data, list):
-        day_data = raw_data
-    out: list[KlineData] = []
-    for item in day_data or []:
-        if len(item) >= 5:
-            try:
-                out.append(
-                    KlineData(
-                        date=item[0],
-                        open=float(item[1]),
-                        close=float(item[2]),
-                        high=float(item[3]),
-                        low=float(item[4]),
-                        volume=float(item[5]) if len(item) > 5 else 0,
-                    )
-                )
-            except Exception:
-                continue
-    return out
-
-# 常见指数 → (腾讯行情符号, 中文名);指数前缀特殊,不能走 cn_symbol 自动判断
-INDEX_TENCENT: dict[str, tuple[str, str]] = {
-    "000300": ("sh000300", "沪深300"),
-    "000905": ("sh000905", "中证500"),
-    "000016": ("sh000016", "上证50"),
-    "399006": ("sz399006", "创业板指"),
-    "000001": ("sh000001", "上证指数"),
+# Benchmark symbol (as the India bridge understands it) -> label.
+BENCHMARKS: dict[str, str] = {
+    "NIFTY 50": "NIFTY 50",
+    "NIFTY BANK": "NIFTY BANK",
+    "NIFTY NEXT 50": "NIFTY NEXT 50",
+    "BSE:SENSEX": "SENSEX",
 }
-DEFAULT_BENCHMARK = "000300"
-_ANNUALIZE = 242  # A股年化交易日数
+DEFAULT_BENCHMARK = "NIFTY 50"
+_ANNUALIZE = 248  # approximate NSE trading days per year
 
 
 def benchmark_label(code: str) -> str:
-    return INDEX_TENCENT.get(code, (code, code))[1]
+    return BENCHMARKS.get(code, code)
 
 
 def compute_benchmark_metrics(
@@ -127,23 +88,8 @@ def compute_benchmark_metrics(
 
 
 def _fetch_benchmark_series(code: str, days: int) -> tuple[list[str], list[float]]:
-    """取基准指数日K → (dates, closes);失败返回 ([], [])。"""
-    tsym = INDEX_TENCENT.get(
-        code, (code if code.startswith(("sh", "sz")) else f"sh{code}", code)
-    )[0]
-    text = market_get(
-        _TENCENT_KLINE_URL,
-        host_key="web.ifzq.gtimg.cn",
-        params={"param": f"{tsym},day,,,{int(days)},qfq", "_var": "kline_dayqfq"},
-        min_interval_s=0.15,
-        parse="text",
-        raise_for_status=False,
-        log_label="基准指数",
-        symbol=tsym,
-    )
-    if not text:
-        return [], []
-    bars = _parse_tencent_kline(text, tsym)
+    """Benchmark index daily closes -> (dates, closes); ([], []) on failure."""
+    bars = get_index_klines(code, MarketCode.IN, days=int(days))
     return [b.date for b in bars], [b.close for b in bars]
 
 

@@ -42,7 +42,7 @@ _PLAN_SYSTEM = (
     "You plan a portfolio research review. Based on the user's holdings, output a "
     "structured plan as JSON only, for example: "
     '{"steps":[{"title":"Review Infosys (INFY)","action":"analyze_stock",'
-    '"params":{"symbol":"INFY","market":"CN"}},'
+    '"params":{"symbol":"INFY","market":"IN"}},'
     '{"title":"Portfolio-level risk","action":"portfolio_risk"}]}. '
     "action is one of: analyze_stock (one per holding, params with symbol/market) or "
     "portfolio_risk. Do not include a summary step; the system adds it."
@@ -169,7 +169,7 @@ async def _execute_step(db, ai_client, execute_tool, step: dict, portfolio_text:
     if action == "analyze_stock":
         p = step.get("params") or {}
         symbol = p.get("symbol", "")
-        market = p.get("market", "CN")
+        market = p.get("market", "IN")
         tech = await execute_tool(db, "get_technical_analysis", {"symbol": symbol, "market": market})
         msgs = [
             {"role": "system", "content": _STEP_SYSTEM},

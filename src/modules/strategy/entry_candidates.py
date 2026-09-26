@@ -7,7 +7,6 @@ from datetime import date, datetime, timedelta
 from sqlalchemy import and_, case, func, or_
 
 from src.platform.runtime.config import Settings
-from src.platform.marketdata.collectors.discovery_collector import EastMoneyDiscoveryCollector
 from src.platform.marketdata.collectors.kline_collector import KlineCollector
 from src.platform.persistence.json_safe import to_jsonable
 from src.platform.marketdata.marketdata_client import md_stock_data
@@ -66,53 +65,19 @@ STRATEGY_LABELS: dict[str, str] = {
 }
 
 MARKET_SCAN_SEED_SYMBOLS: dict[str, list[str]] = {
-    "CN": [
-        "600519",
-        "601318",
-        "601127",
-        "300750",
-        "300308",
-        "000333",
-        "002594",
-        "601899",
-        "600036",
-        "600900",
-        "000858",
-        "601288",
-        "600276",
-        "601888",
-        "000651",
-    ],
-    "HK": [
-        "00700",
-        "09988",
-        "03690",
-        "01810",
-        "02318",
-        "01299",
-        "00941",
-        "00388",
-        "00883",
-        "09999",
-        "01398",
-        "02628",
-    ],
-    "US": [
-        "AAPL",
-        "MSFT",
-        "NVDA",
-        "AMZN",
-        "GOOGL",
-        "META",
-        "TSLA",
-        "AMD",
-        "NFLX",
-        "INTC",
-        "BABA",
-        "PDD",
-        "NIO",
-        "TSM",
-        "QQQ",
+    "IN": [
+        "RELIANCE",
+        "TCS",
+        "HDFCBANK",
+        "ICICIBANK",
+        "INFY",
+        "BHARTIARTL",
+        "SBIN",
+        "ITC",
+        "LT",
+        "HINDUNILVR",
+        "KOTAKBANK",
+        "AXISBANK",
     ],
 }
 
@@ -132,25 +97,9 @@ def _safe_float(value) -> float | None:
 
 def _to_market(value: str | None) -> MarketCode:
     try:
-        return MarketCode((value or "CN").strip().upper())
+        return MarketCode((value or "IN").strip().upper())
     except Exception:
-        return MarketCode.CN
-
-
-def _resolve_market_scan_proxy() -> str | None:
-    try:
-        proxy = (get_global_proxy() or "").strip()
-        if proxy:
-            return proxy
-    except Exception:
-        pass
-    try:
-        proxy = (Settings().http_proxy or "").strip()
-        if proxy:
-            return proxy
-    except Exception:
-        pass
-    return None
+        return MarketCode.IN
 
 
 def _run_async(coro):
@@ -580,7 +529,7 @@ def _load_holding_keys() -> set[str]:
             .all()
         )
         return {
-            f"{(m or 'CN').strip().upper()}:{(s or '').strip()}"
+            f"{(m or 'IN').strip().upper()}:{(s or '').strip()}"
             for m, s in rows
             if s
         }
@@ -749,7 +698,7 @@ def _load_market_scan_history_inputs(
     if limit <= 0:
         return {}
 
-    mkt = (market or "CN").strip().upper()
+    mkt = (market or "IN").strip().upper()
     cutoff = (date.today() - timedelta(days=max(1, int(max_days)))).strftime("%Y-%m-%d")
     db = SessionLocal()
     try:
@@ -831,7 +780,7 @@ def _load_market_scan_snapshot_inputs(
     if limit <= 0:
         return {}
 
-    mkt = (market or "CN").strip().upper()
+    mkt = (market or "IN").strip().upper()
     cutoff = (date.today() - timedelta(days=max(1, int(max_days)))).strftime("%Y-%m-%d")
     db = SessionLocal()
     try:
@@ -886,7 +835,7 @@ def _load_market_scan_snapshot_inputs(
 def _load_market_scan_seed_inputs(*, market: str, limit: int) -> dict[str, dict]:
     if limit <= 0:
         return {}
-    mkt = (market or "CN").strip().upper()
+    mkt = (market or "IN").strip().upper()
     symbols = list(
         dict.fromkeys(
             [str(s).strip() for s in MARKET_SCAN_SEED_SYMBOLS.get(mkt, []) if str(s).strip()]
@@ -941,7 +890,7 @@ def _merge_market_scan_seed(
 ) -> int:
     if not incoming:
         return 0
-    mkt = (market or "CN").strip().upper()
+    mkt = (market or "IN").strip().upper()
     added = 0
     for key, item in incoming.items():
         if not key.startswith(f"{mkt}:"):
@@ -975,145 +924,10 @@ def _merge_market_scan_seed(
 
 
 def _load_market_scan_inputs(limit_per_market: int = 60) -> dict[str, dict]:
-    collector = EastMoneyDiscoveryCollector(
-        proxy=_resolve_market_scan_proxy(),
-    )
-    result: dict[str, dict] = {}
-    safe_limit = max(20, int(limit_per_market))
-    min_required = min(max(12, int(safe_limit * 0.55)), safe_limit)
-
-    for market in ("CN", "HK", "US"):
-        try:
-            turnover = _run_async(
-                collector.fetch_hot_stocks(
-                    market=market,
-                    mode="turnover",
-                    limit=safe_limit,
-                )
-            )
-        except Exception as e:
-            logger.warning(f"市场扫描成交榜失败({market}): {e}")
-            turnover = []
-        try:
-            gainers = _run_async(
-                collector.fetch_hot_stocks(
-                    market=market,
-                    mode="gainers",
-                    limit=safe_limit,
-                )
-            )
-        except Exception as e:
-            logger.warning(f"市场扫描涨幅榜失败({market}): {e}")
-            gainers = []
-
-        merged = list(turnover or []) + list(gainers or [])
-        for row in merged:
-            symbol = (getattr(row, "symbol", "") or "").strip()
-            if not symbol:
-                continue
-            key = f"{market}:{symbol}"
-            quote = {
-                "current_price": _safe_float(getattr(row, "price", None)),
-                "change_pct": _safe_float(getattr(row, "change_pct", None)),
-                "turnover": _safe_float(getattr(row, "turnover", None)),
-                "volume": _safe_float(getattr(row, "volume", None)),
-            }
-            if key in result:
-                exist_quote = result[key].get("quote_seed") or {}
-                if _safe_float(exist_quote.get("turnover")) is None and quote.get("turnover") is not None:
-                    result[key]["quote_seed"] = quote
-                continue
-            result[key] = {
-                "symbol": symbol,
-                "market": market,
-                "stock_name": (getattr(row, "name", "") or symbol).strip(),
-                "candidate_source": "market_scan",
-                "source_agent": "market_scan",
-                "source_suggestion_id": None,
-                "source_trace_id": "",
-                "quote_seed": quote,
-                "meta": {
-                    "source": "market_scan",
-                    "collected_at": to_iso_with_tz(utc_now()),
-                },
-            }
-            if len([k for k in result if k.startswith(f"{market}:")]) >= safe_limit:
-                break
-
-        market_count = len([k for k in result if k.startswith(f"{market}:")])
-        if market_count < min_required:
-            fallback_map = _load_market_scan_history_inputs(
-                market=market,
-                limit=max(0, safe_limit - market_count),
-                max_days=7,
-            )
-            added = _merge_market_scan_seed(
-                result,
-                fallback_map,
-                market=market,
-                limit_per_market=safe_limit,
-            )
-            if added > 0:
-                logger.info(
-                    "市场扫描回退补全: market=%s added=%s current=%s",
-                    market,
-                    added,
-                    len([k for k in result if k.startswith(f"{market}:")]),
-                )
-
-        market_count = len([k for k in result if k.startswith(f"{market}:")])
-        if market_count < min_required:
-            snapshot_map = _load_market_scan_snapshot_inputs(
-                market=market,
-                limit=max(0, safe_limit - market_count),
-                max_days=14,
-            )
-            snap_added = _merge_market_scan_seed(
-                result,
-                snapshot_map,
-                market=market,
-                limit_per_market=safe_limit,
-            )
-            if snap_added > 0:
-                logger.info(
-                    "市场扫描快照补全: market=%s added=%s current=%s",
-                    market,
-                    snap_added,
-                    len([k for k in result if k.startswith(f'{market}:')]),
-                )
-
-        market_count = len([k for k in result if k.startswith(f"{market}:")])
-        if market_count < min_required:
-            seed_map = _load_market_scan_seed_inputs(
-                market=market,
-                limit=max(0, safe_limit - market_count),
-            )
-            seed_added = _merge_market_scan_seed(
-                result,
-                seed_map,
-                market=market,
-                limit_per_market=safe_limit,
-            )
-            if seed_added > 0:
-                logger.info(
-                    "市场扫描种子补全: market=%s added=%s current=%s",
-                    market,
-                    seed_added,
-                    len([k for k in result if k.startswith(f"{market}:")]),
-                )
-
-    # Final per-market cap and stable ordering.
-    for market in ("CN", "HK", "US"):
-        keys = [k for k in result.keys() if k.startswith(f"{market}:")]
-        if len(keys) <= safe_limit:
-            continue
-        keys_sorted = sorted(keys, key=lambda k: _candidate_sort_key(result.get(k) or {}))
-        keep = set(keys_sorted[:safe_limit])
-        for key in keys:
-            if key not in keep:
-                result.pop(key, None)
-
-    return result
+    """Market-wide scan seeds. The upstream scan used China-only hot lists (Eastmoney);
+    India has no licensed market-wide source yet (open question Q8), so candidates come
+    from the watchlist and other in-app sources only."""
+    return {}
 
 
 def _persist_market_scan_snapshot(snapshot: str, market_scan_map: dict[str, dict]) -> None:
@@ -1133,7 +947,7 @@ def _persist_market_scan_snapshot(snapshot: str, market_scan_map: dict[str, dict
         )
         for item in rows:
             symbol = str(item.get("symbol") or "").strip()
-            market = str(item.get("market") or "CN").strip().upper() or "CN"
+            market = str(item.get("market") or "IN").strip().upper() or "IN"
             if not symbol:
                 continue
             quote = item.get("quote_seed") if isinstance(item.get("quote_seed"), dict) else {}
@@ -1635,7 +1449,7 @@ def save_entry_candidate_feedback(
     reason: str = "",
 ) -> bool:
     symbol = (stock_symbol or "").strip().upper()
-    market = (stock_market or "CN").strip().upper() or "CN"
+    market = (stock_market or "IN").strip().upper() or "IN"
     if not symbol:
         return False
     snap = (snapshot_date or "").strip() or date.today().strftime("%Y-%m-%d")
@@ -1713,7 +1527,7 @@ def evaluate_entry_candidate_outcomes(
             if snap_day is None:
                 continue
 
-            key = ((c.stock_symbol or "").strip(), (c.stock_market or "CN").strip().upper())
+            key = ((c.stock_symbol or "").strip(), (c.stock_market or "IN").strip().upper())
             if key not in kline_cache:
                 try:
                     lookback = max(120, (today - snap_day).days + 30)
@@ -2003,7 +1817,7 @@ def get_entry_candidate_stats(*, days: int = 30) -> dict:
             u = int(u or 0)
             by_market.append(
                 {
-                    "market": (m or "CN").strip().upper(),
+                    "market": (m or "IN").strip().upper(),
                     "total": cnt,
                     "useful": u,
                     "useful_rate": round((u / cnt * 100.0), 2) if cnt > 0 else 0.0,

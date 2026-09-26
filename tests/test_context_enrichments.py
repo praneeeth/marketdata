@@ -68,7 +68,6 @@ def test_ta_verdict_recent_row_injected(monkeypatch, recommendations_enabled):
     assert 0 < len(verdict["one_liner"]) <= 130
 
 
-
 def test_ta_verdict_research_only_has_no_rating(monkeypatch):
     """Research-only: the verdict passed to prompts carries a neutral summary, no rating."""
     today = date.today()
@@ -162,7 +161,7 @@ def test_relative_strength_computes_excess():
     index_ctx = {"available": True, "ret_5d": 1.0, "ret_20d": 4.0}
 
     rs = cb._compute_relative_strength(
-        market=MarketCode.CN,
+        market=MarketCode.IN,
         kline_history=kline_history,
         index_ctx=index_ctx,
     )
@@ -178,7 +177,7 @@ def test_relative_strength_missing_index_returns_none():
     """指数数据缺失时返回 None(fail-soft)。"""
     cb = ContextBuilder()
     rs = cb._compute_relative_strength(
-        market=MarketCode.CN,
+        market=MarketCode.IN,
         kline_history={"available": True, "ret_5d": 3.0, "ret_20d": 10.0},
         index_ctx={"available": False},
     )
@@ -189,20 +188,16 @@ def test_relative_strength_missing_stock_returns_none():
     """个股 K线缺失时返回 None。"""
     cb = ContextBuilder()
     rs = cb._compute_relative_strength(
-        market=MarketCode.HK,
+        market=MarketCode.IN,
         kline_history={"available": False},
         index_ctx={"available": True, "ret_5d": 1.0, "ret_20d": 4.0},
     )
     assert rs is None
 
 
-def test_index_symbol_map_covers_markets():
-    """三大市场都映射到一个指数代码 + 中文标签。"""
-    cb = ContextBuilder()
-    for mkt in (MarketCode.CN, MarketCode.HK, MarketCode.US):
-        sym, label = cb._index_for_market(mkt)
-        assert sym
-        assert label
+def test_index_symbol_map_is_nifty_50():
+    """India-only: the relative-strength benchmark is NIFTY 50."""
+    assert ContextBuilder()._index_for_market(MarketCode.IN) == ("NIFTY 50", "NIFTY 50")
 
 
 def test_index_returns_cached_once_per_build(monkeypatch):
@@ -216,8 +211,8 @@ def test_index_returns_cached_once_per_build(monkeypatch):
 
     monkeypatch.setattr(cb, "_fetch_index_context", fake_fetch)
 
-    first = cb._get_index_context(MarketCode.CN)
-    second = cb._get_index_context(MarketCode.CN)
+    first = cb._get_index_context(MarketCode.IN)
+    second = cb._get_index_context(MarketCode.IN)
     assert first is second
     assert calls["n"] == 1
 
@@ -225,105 +220,6 @@ def test_index_returns_cached_once_per_build(monkeypatch):
 # --------------------------------------------------------------------------- #
 # ① 公告全文 + 头部新闻正文保留
 # --------------------------------------------------------------------------- #
-
-
-def test_announcement_fulltext_attached_to_important_events(monkeypatch):
-    """重要公告(importance>=2)被附加 content_fulltext 且截断。"""
-    cb = ContextBuilder()
-    events = [
-        {"title": "重大资产重组", "external_id": "AN001", "importance": 3, "source": "eastmoney"},
-        {"title": "年度报告", "external_id": "AN002", "importance": 3, "source": "eastmoney"},
-        {"title": "日常关联交易", "external_id": "AN003", "importance": 0, "source": "eastmoney"},
-    ]
-
-    def fake_fetch(art_code):
-        return "全文内容" * 600  # 远超 1000 字,需截断
-
-    monkeypatch.setattr(context_builder, "fetch_announcement_fulltext", fake_fetch)
-
-    enriched = cb._enrich_events_fulltext(events, top_k=3)
-    # 重要的两条带全文
-    assert "content_fulltext" in enriched[0]
-    assert "content_fulltext" in enriched[1]
-    assert len(enriched[0]["content_fulltext"]) <= 1100
-    # 不重要的那条不带全文(只剩标题)
-    assert "content_fulltext" not in enriched[2]
-
-
-def test_announcement_fulltext_fetch_failure_keeps_headline(monkeypatch):
-    """全文抓取失败时不崩溃,保留标题(无 content_fulltext)。"""
-    cb = ContextBuilder()
-    events = [
-        {"title": "重大事项", "external_id": "AN009", "importance": 3, "source": "eastmoney"},
-    ]
-
-    def boom(art_code):
-        raise RuntimeError("network down")
-
-    monkeypatch.setattr(context_builder, "fetch_announcement_fulltext", boom)
-
-    enriched = cb._enrich_events_fulltext(events, top_k=3)
-    assert enriched[0]["title"] == "重大事项"
-    assert "content_fulltext" not in enriched[0]
-
-
-def test_announcement_fulltext_empty_result_no_attach(monkeypatch):
-    """全文接口返回空时不附加字段。"""
-    cb = ContextBuilder()
-    events = [{"title": "重组", "external_id": "AN010", "importance": 2}]
-    monkeypatch.setattr(context_builder, "fetch_announcement_fulltext", lambda art_code: "")
-    enriched = cb._enrich_events_fulltext(events, top_k=3)
-    assert "content_fulltext" not in enriched[0]
-
-
-def test_fetch_announcement_fulltext_parses_notice_content(monkeypatch):
-    """东财 content API 返回 data.notice_content 时抽取纯文本。"""
-    from src.platform.marketdata.collectors import events_collector
-
-    class _Resp:
-        def raise_for_status(self):
-            pass
-
-        def json(self):
-            return {"data": {"notice_content": "  这是公告正文  "}}
-
-    class _Client:
-        def __init__(self, *a, **k):
-            pass
-
-        def __enter__(self):
-            return self
-
-        def __exit__(self, *a):
-            return False
-
-        def get(self, url, params=None):
-            return _Resp()
-
-    monkeypatch.setattr(events_collector.httpx, "Client", _Client)
-    text = events_collector.fetch_announcement_fulltext("AN123")
-    assert text == "这是公告正文"
-
-
-def test_fetch_announcement_fulltext_failsoft(monkeypatch):
-    """content API 抛错时返回空串,不抛异常。"""
-    from src.platform.marketdata.collectors import events_collector
-
-    class _Client:
-        def __init__(self, *a, **k):
-            pass
-
-        def __enter__(self):
-            return self
-
-        def __exit__(self, *a):
-            return False
-
-        def get(self, url, params=None):
-            raise RuntimeError("boom")
-
-    monkeypatch.setattr(events_collector.httpx, "Client", _Client)
-    assert events_collector.fetch_announcement_fulltext("AN999") == ""
 
 
 def test_news_top_items_retain_more_content():
@@ -375,7 +271,7 @@ class _FakeContext:
 
 def test_build_symbol_contexts_injects_new_keys(monkeypatch):
     """端到端:payload 同时带 ta_verdict / relative_strength / events.content_fulltext。"""
-    stock = SimpleNamespace(symbol="600519", market=MarketCode.CN, name="贵州茅台")
+    stock = SimpleNamespace(symbol="600519", market=MarketCode.IN, name="贵州茅台")
     context = _FakeContext([stock])
 
     events_snapshot = SimpleNamespace(
@@ -413,9 +309,6 @@ def test_build_symbol_contexts_injects_new_keys(monkeypatch):
         lambda self, symbol, market: {"available": True, "ret_5d": 2.0, "ret_20d": 4.0},
     )
     monkeypatch.setattr(
-        context_builder, "fetch_announcement_fulltext", lambda art_code: "重组全文细节" * 50
-    )
-    monkeypatch.setattr(
         context_builder,
         "get_latest_ta_verdict",
         lambda symbol, within_days=14: {
@@ -449,15 +342,14 @@ def test_build_symbol_contexts_injects_new_keys(monkeypatch):
     assert rs is not None
     assert rs["excess_5d"] == pytest.approx(3.0)
     assert rs["excess_20d"] == pytest.approx(8.0)
-    assert rs["index_label"] == "沪深300"
-    # ① 公告全文
-    assert "content_fulltext" in payload["events"][0]
-    assert len(payload["events"][0]["content_fulltext"]) <= 1000
+    assert rs["index_label"] == "NIFTY 50"
+    # Announcement full text was a Chinese (Eastmoney) source; events pass through as-is.
+    assert "content_fulltext" not in payload["events"][0]
 
 
 def test_build_symbol_contexts_failsoft_when_index_missing(monkeypatch):
     """指数取数失败时 relative_strength=None,且整体不崩溃。"""
-    stock = SimpleNamespace(symbol="00700", market=MarketCode.HK, name="腾讯控股")
+    stock = SimpleNamespace(symbol="00700", market=MarketCode.IN, name="腾讯控股")
     context = _FakeContext([stock])
     pack = SimpleNamespace(
         quote=object(),

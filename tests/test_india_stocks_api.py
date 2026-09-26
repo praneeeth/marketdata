@@ -185,17 +185,14 @@ def test_api_search_india(client: TestClient, manager: BrokerManager, db: Sessio
     assert results[0] == {"symbol": "INFY", "name": "INFOSYS", "market": "IN", "exchange": "NSE"}
 
 
-def test_api_search_all_markets_puts_india_first(
-    client: TestClient, manager: BrokerManager, db: Session, monkeypatch: pytest.MonkeyPatch
+def test_api_search_ignores_the_market_filter(
+    client: TestClient, manager: BrokerManager, db: Session
 ) -> None:
-    from src.modules.market.api import stocks as stocks_api
-
+    """India is the only market, so every search goes to the broker instrument list."""
     connect(manager, db)
-    monkeypatch.setattr(stocks_api, "search_stocks", lambda q, m: [{"symbol": "X", "market": "US"}])
-    results = _data(client.get("/api/stocks/search", params={"q": "infy"}))
-    assert [r["market"] for r in results] == ["IN", "IN", "US"]
-    other = _data(client.get("/api/stocks/search", params={"q": "infy", "market": "US"}))
-    assert [r["market"] for r in other] == ["US"]
+    for params in ({"q": "infy"}, {"q": "infy", "market": "US"}):
+        results = _data(client.get("/api/stocks/search", params=params))
+        assert [r["market"] for r in results] == ["IN", "IN"]
 
 
 @pytest.mark.parametrize(

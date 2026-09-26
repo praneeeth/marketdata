@@ -11,7 +11,7 @@ from fastapi.testclient import TestClient
 from marketdata.global_cues import CueSpec, GlobalCue, GlobalCuesService
 from marketdata.india.types import DataQuality
 
-from src.modules.market.api import global_markets
+from src.platform.marketdata import global_cues_service
 
 
 class FakeSource:
@@ -29,7 +29,8 @@ class FakeSource:
 def client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
     from src.bootstrap.application import app
 
-    monkeypatch.setattr(global_markets, "_service", GlobalCuesService(FakeSource()))
+    monkeypatch.setenv("GLOBAL_CUES_SOURCE", "yahoo")
+    monkeypatch.setattr(global_cues_service, "_service", GlobalCuesService(FakeSource()))
     return TestClient(app)
 
 
@@ -59,8 +60,8 @@ def test_global_cues_can_be_switched_off(
 
 def test_default_service_is_yahoo(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("GLOBAL_CUES_SOURCE", raising=False)
-    monkeypatch.setattr(global_markets, "_service", None)
-    service = global_markets.get_global_cues_service()
+    monkeypatch.setattr(global_cues_service, "_service", None)
+    service = global_cues_service.get_global_cues_service()
     assert service is not None
     assert service.source_name == "yahoo"
-    assert global_markets.get_global_cues_service() is service
+    assert global_cues_service.get_global_cues_service() is service

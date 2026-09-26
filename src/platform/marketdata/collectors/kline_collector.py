@@ -1,103 +1,31 @@
-"""K线和技术指标采集器 - 基于腾讯 API（更稳定）"""
+"""Daily K-lines and technical indicators (India-only).
+
+K-lines come from the current user's broker connections through the India bridge, which
+caches per credential. The indicator maths below (MA, MACD, RSI, KDJ, Bollinger, ATR,
+patterns) is market-neutral and unchanged from upstream.
+"""
 
 from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
-
-import threading
-import time
 
 from src.platform.marketdata.collectors.market_http import fetch_source
-from src.platform.marketdata.models import MARKETS, MarketCode
+from src.platform.marketdata.models import MarketCode
 
 logger = logging.getLogger(__name__)
 
-
-def get_market_data():
-    """惰性 import,避免包未装/循环 import 影响本模块加载。"""
-    from src.platform.marketdata.marketdata_client import get_market_data as _g
-    return _g()
-
-
-# 调用来源标记统一在 market_http(全项目共享一个 contextvar)。
-# 保留 kline_source 名称,兼容已有调用方(schedulers 等)。
+# Log label for who triggered a fetch ("price_alert", "outcome_eval", ...).
 kline_source = fetch_source
 
 
-# ── K线按市场状态缓存 ──────────────────────────────────────────────────────
-# 日K一天只定稿一次(收盘后),但调度任务每轮都逐只重新联网拉 → 批量突发触发限流。
-# 交易时段用短 TTL(末根K线盘中会动),收盘后用长 TTL(数据已定稿,无需重复拉)。
-_KLINE_CACHE: dict[str, tuple[float, int, list["KlineData"]]] = {}
-_KLINE_TTL_TRADING_S = 180
-_KLINE_TTL_CLOSED_S = 1800
-
-# 失败负缓存:源短暂故障(Server disconnected/限流)时,冷却窗口内不再联网。
-# 复活的批量消费者(entry_candidates/strategy_engine/backtest/组合归因)会并发地
-# 对同一批标的取数,空结果若不缓存则每个消费者每轮都重复打爆数据源。
-_FAIL_UNTIL: dict[str, float] = {}
-_FAIL_COOLDOWN_S = 60.0  # 交易时段:短冷却,便于尽快重试
-_FAIL_COOLDOWN_CLOSED_S = 900.0  # 收盘后:数据已定稿,失败/不足时长冷却,避免批量任务反复刷屏
-
-
-def _fail_cooldown(market: MarketCode) -> float:
-    """取数失败/不足时的冷却时长:交易时段短(尽快重试),收盘后长(重试无意义且易刷屏)。"""
-    try:
-        md = MARKETS.get(market)
-        if md and md.is_trading_time():
-            return _FAIL_COOLDOWN_S
-    except Exception:
-        pass
-    return _FAIL_COOLDOWN_CLOSED_S
-
-
-# 同标的并发合并:同一 cache_key 的并发取数串行化,只联网一次,其余复用缓存。
-_FETCH_LOCKS: dict[str, threading.Lock] = {}
-_FETCH_LOCKS_GUARD = threading.Lock()
-
-
-def _get_fetch_lock(cache_key: str) -> threading.Lock:
-    """返回某 cache_key 的取数锁(进程内复用),用于合并同标的并发请求。"""
-    with _FETCH_LOCKS_GUARD:
-        lk = _FETCH_LOCKS.get(cache_key)
-        if lk is None:
-            lk = threading.Lock()
-            _FETCH_LOCKS[cache_key] = lk
-        return lk
-
-
-def _kline_cache_ttl(market: MarketCode) -> float:
-    try:
-        md = MARKETS.get(market)
-        if md and md.is_trading_time():
-            return _KLINE_TTL_TRADING_S
-    except Exception:
-        pass
-    return _KLINE_TTL_CLOSED_S
-
-
 def clear_kline_cache() -> None:
-    """清空 K线内存缓存与失败冷却标记(测试隔离用)。"""
-    _KLINE_CACHE.clear()
-    _FAIL_UNTIL.clear()
+    """Kept for callers and tests. K-lines are cached per credential in the India layer."""
 
 
-def get_index_klines(index_code: str, market: MarketCode, days: int = 120) -> list[KlineData]:
-    """取大盘/指数日K:走 marketdata 包 index_klines(INDEX_SECID 显式映射,未映射如美股指数
-    → 空列表,fail-soft;见 packages/marketdata/src/marketdata/client.py)。
-    """
-    if market == MarketCode.IN:
-        return KlineCollector(MarketCode.IN).get_klines(index_code, days=days)
-    try:
-        bars = get_market_data().index_klines(index_code, market=market.value, days=days)
-    except Exception as e:
-        logger.debug(f"指数K线获取失败 {index_code}: {e}")
-        return []
-    return [
-        KlineData(date=b.date, open=b.open, close=b.close, high=b.high, low=b.low, volume=b.volume)
-        for b in bars
-    ]
+def get_index_klines(index_code: str, market: MarketCode = MarketCode.IN, days: int = 120) -> list[KlineData]:
+    """Daily K-lines of an index such as "NIFTY 50" or "BSE:SENSEX"."""
+    return KlineCollector(MarketCode.IN).get_klines(index_code, days=days)
 
 
 @dataclass
@@ -397,80 +325,16 @@ def _find_cross_days(
 
 
 class KlineCollector:
-    """K线数据采集器（腾讯 API）"""
+    """Daily K-lines from the user's broker (India-only)."""
 
-    def __init__(self, market: MarketCode):
+    def __init__(self, market: MarketCode = MarketCode.IN):
         self.market = market
 
     def get_klines(self, symbol: str, days: int = 60) -> list[KlineData]:
-        """获取日K线数据。
+        """Daily K-lines, oldest first. Empty (with a data notice) when no broker can answer."""
+        from src.platform.marketdata.india_bridge import get_india_bridge
 
-        正缓存(按市场状态 TTL)+ 同标的并发合并(只联网一次)+ 失败负缓存
-        (源短暂故障时冷却窗口内不再联网),避免多消费者并发把数据源打爆。
-        """
-        if self.market == MarketCode.IN:
-            # Per-user broker data: skip the process-wide cache below (it is keyed by
-            # symbol only). The India layer caches per credential instead.
-            from src.platform.marketdata.india_bridge import get_india_bridge
-
-            bars = get_india_bridge().daily_bars(symbol, max(1, int(days or 1)))
-            return [KlineData(date=b.date, open=b.open, close=b.close, high=b.high,
-                              low=b.low, volume=b.volume) for b in bars]
-        cache_key = f"{self.market.value}:{symbol}"
-        need = max(1, int(days or 1))
-
-        # 1) 快路径:命中新鲜正缓存,无需加锁
-        hit = self._cache_hit(cache_key, need)
-        if hit is not None:
-            return hit
-
-        # 2) 同标的并发合并:仅一个线程实际联网,其余等待后复用结果
-        with _get_fetch_lock(cache_key):
-            hit = self._cache_hit(cache_key, need)
-            if hit is not None:
-                return hit
-
-            now = time.time()
-            # 3) 负缓存:刚失败过的标的,冷却窗口内返回陈旧/空,不再联网
-            if now < _FAIL_UNTIL.get(cache_key, 0.0):
-                stale = _KLINE_CACHE.get(cache_key)
-                bars = stale[2] if stale else []
-                return bars[-need:] if len(bars) > need else bars
-
-            klines = self._fetch_all_sources(symbol, days)
-            if klines and len(klines) >= need:
-                # 成功且条数足够:固化正缓存并清除冷却标记
-                _KLINE_CACHE[cache_key] = (now, len(klines), list(klines))
-                _FAIL_UNTIL.pop(cache_key, None)
-            else:
-                # 空 或 拿到部分但不足 need(常见:HK 腾讯不足 + eastmoney 补全失败,
-                # 正缓存因 count<need 永不命中 → 每轮重打补全源刷屏)→ 固化冷却。
-                # 部分结果仍缓存下来,冷却窗口内直接服务,避免反复联网。
-                if klines:
-                    _KLINE_CACHE[cache_key] = (now, len(klines), list(klines))
-                _FAIL_UNTIL[cache_key] = now + _fail_cooldown(self.market)
-            return klines[-need:] if len(klines) > need else klines
-
-    def _cache_hit(self, cache_key: str, need: int) -> list[KlineData] | None:
-        """命中新鲜正缓存(TTL 内且条数足够)则返回切片,否则 None。"""
-        cached = _KLINE_CACHE.get(cache_key)
-        if (
-            cached
-            and (time.time() - cached[0]) < _kline_cache_ttl(self.market)
-            and cached[1] >= need
-        ):
-            bars = cached[2]
-            return bars[-need:] if len(bars) > need else bars
-        return None
-
-    def _fetch_all_sources(self, symbol: str, days: int) -> list[KlineData]:
-        """走 marketdata 包取数(不含缓存/合并逻辑):Engine 按 DataSource 优先级 +
-        min_count 取数(条数不足则换源/取最长,tencent → stooq(US) / eastmoney(CN/HK))。
-        """
-        need = (max(10, min(days, 30)) if self.market == MarketCode.US
-                else (max(120, int(days * 0.6)) if self.market in (MarketCode.CN, MarketCode.HK) else 1))
-        want = min(max(days, 3000), 20000) if self.market in (MarketCode.CN, MarketCode.HK) else days
-        bars = get_market_data().klines(symbol, market=self.market.value, days=want, min_count=need)
+        bars = get_india_bridge().daily_bars(symbol, max(1, int(days or 1)))
         return [KlineData(date=b.date, open=b.open, close=b.close, high=b.high,
                           low=b.low, volume=b.volume) for b in bars]
 

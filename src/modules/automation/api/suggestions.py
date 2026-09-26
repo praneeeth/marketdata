@@ -17,7 +17,7 @@ router = APIRouter()
 @router.get("/{symbol}")
 def get_stock_suggestions(
     symbol: str,
-    market: str = Query("", description="市场代码: CN/HK/US"),
+    market: str = Query("", description="Market: IN (NSE/BSE)"),
     include_expired: bool = Query(False, description="是否包含已过期建议"),
     limit: int = Query(10, description="返回数量限制"),
     db: Session = Depends(get_db),
@@ -64,10 +64,10 @@ def get_all_latest_suggestions(
             if not text:
                 continue
             if ":" not in text:
-                parsed.append((text.strip().upper(), "CN"))
+                parsed.append((text.strip().upper(), "IN"))
                 continue
             market, symbol = text.split(":", 1)
-            mkt = (market or "CN").strip().upper() or "CN"
+            mkt = (market or "IN").strip().upper() or "IN"
             sym = (symbol or "").strip().upper()
             if sym:
                 parsed.append((sym, mkt))

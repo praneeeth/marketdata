@@ -47,23 +47,27 @@ def _mock_stock_link_platform(monkeypatch):
     """避免 stock_link 模块访问数据库读取平台设置。"""
     monkeypatch.setattr(
         "src.modules.administration.stock_link.get_platform",
-        lambda: "xueqiu",
+        lambda: "nse",
     )
 
 
 @pytest.fixture(autouse=True)
+def _no_live_global_cues(monkeypatch):
+    """Global cues would call Yahoo over the network; tests opt in explicitly."""
+    monkeypatch.setenv("GLOBAL_CUES_SOURCE", "off")
+
+
+@pytest.fixture(autouse=True)
 def _clear_market_caches():
-    """清空采集层内存缓存,避免用例间互相污染(K线/报价/资金流等现按 TTL 缓存)。"""
-    from src.platform.marketdata.collectors import (
-        capital_flow_collector,
-        kline_collector,
-    )
-    from src.modules.market.api import market as market_api
+    """Reset process-wide market data singletons so tests don't leak state into each other."""
+    from src.modules.market import brokers
+    from src.platform.marketdata import india_bridge
+    from src.platform.marketdata.global_cues_service import reset_global_cues_service
 
     def _clear():
-        kline_collector.clear_kline_cache()
-        capital_flow_collector._FLOW_CACHE.clear()
-        market_api.clear_indices_cache()
+        india_bridge._bridge = None
+        brokers._manager = None
+        reset_global_cues_service()
 
     _clear()
     yield

@@ -1,8 +1,6 @@
 # -*- coding: utf-8 -*-
 apprise>=1.6.0
 openai>=1.0.0
-efinance>=0.4.0
-akshare>=1.10.0
 apscheduler>=3.10.0
 httpx>=0.25.0
 pydantic>=2.0.0
@@ -14,7 +12,6 @@ tenacity>=8.2.0
 fastapi>=0.104.0
 uvicorn>=0.24.0
 sqlalchemy>=2.0.0
-playwright==1.57.0
 PyJWT>=2.8.0
 # AES-GCM encryption of users' broker credentials (India fork, Phase 2).
 cryptography>=42.0.0

@@ -12,22 +12,22 @@ def test_summary_batch_preserves_input_order_across_markets(monkeypatch):
 
     payload = klines.KlineSummaryBatchRequest(
         items=[
-            klines.KlineSummaryItem(symbol="600519", market="CN"),
-            klines.KlineSummaryItem(symbol="00700", market="HK"),
-            klines.KlineSummaryItem(symbol="AAPL", market="US"),
+            klines.KlineSummaryItem(symbol="INFY", market="IN"),
+            klines.KlineSummaryItem(symbol="TCS", market="IN"),
+            klines.KlineSummaryItem(symbol="RELIANCE", market="IN"),
         ]
     )
 
     result = klines.get_kline_summary_batch(payload)
 
-    assert [item["symbol"] for item in result] == ["600519", "00700", "AAPL"]
-    assert [item["market"] for item in result] == ["CN", "HK", "US"]
+    assert [item["symbol"] for item in result] == ["INFY", "TCS", "RELIANCE"]
+    assert [item["market"] for item in result] == ["IN", "IN", "IN"]
     assert [item["summary"]["trend"] for item in result] == [
-        "trend-600519",
-        "trend-00700",
-        "trend-AAPL",
+        "trend-INFY",
+        "trend-TCS",
+        "trend-RELIANCE",
     ]
-    assert sorted(calls) == sorted([("CN", "600519"), ("HK", "00700"), ("US", "AAPL")])
+    assert sorted(calls) == sorted([("IN", "INFY"), ("IN", "TCS"), ("IN", "RELIANCE")])
 
 
 def test_summary_batch_keeps_other_items_when_one_summary_fails(monkeypatch):
@@ -40,8 +40,8 @@ def test_summary_batch_keeps_other_items_when_one_summary_fails(monkeypatch):
 
     payload = klines.KlineSummaryBatchRequest(
         items=[
-            klines.KlineSummaryItem(symbol="GOOD", market="CN"),
-            klines.KlineSummaryItem(symbol="BAD", market="CN"),
+            klines.KlineSummaryItem(symbol="GOOD", market="IN"),
+            klines.KlineSummaryItem(symbol="BAD", market="IN"),
         ]
     )
 

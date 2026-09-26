@@ -234,8 +234,6 @@ class BaseAgent(ABC):
             default = 12 * 60
         elif self.name == "news_digest":
             default = 60
-        elif self.name == "chart_analyst":
-            default = 6 * 60
         # Intraday uses its own per-stock throttle.
         elif self.name == "intraday_monitor":
             default = 30

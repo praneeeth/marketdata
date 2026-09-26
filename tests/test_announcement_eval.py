@@ -41,7 +41,7 @@ def test_announcement_eval_maps_tone_per_item(monkeypatch):
         lambda db, mid=None: _FakeAIClient("1|利好|中标利好业绩\n2|利空|减持承压"),
     )
 
-    req = insights.AnnouncementEvalRequest(symbol="600519", market="CN")
+    req = insights.AnnouncementEvalRequest(symbol="600519", market="IN")
     db = SessionLocal()
     try:
         res = asyncio.run(insights.announcement_eval(req, db))
@@ -69,7 +69,7 @@ def test_announcement_eval_empty(monkeypatch):
     monkeypatch.setattr(insights, "_fetch_recent_announcements", fake_fetch)
     monkeypatch.setattr(insights, "get_configured_failover_client", fake_ai)
 
-    req = insights.AnnouncementEvalRequest(symbol="000001", market="CN")
+    req = insights.AnnouncementEvalRequest(symbol="000001", market="IN")
     db = SessionLocal()
     try:
         res = asyncio.run(insights.announcement_eval(req, db))

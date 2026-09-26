@@ -54,7 +54,7 @@ SETTING_DESCRIPTIONS = {
     "notify_retry_attempts": "通知失败重试次数（不含首次）",
     "notify_retry_backoff_seconds": "通知重试退避秒数（基数）",
     "notify_dedupe_ttl_overrides": "通知幂等窗口覆盖（JSON，空为默认）",
-    "stock_link_platform": "股票链接平台（点击股票代码跳转的行情网站）",
+    "stock_link_platform": "Stock link platform (quote site opened from a stock symbol): nse, tradingview or google",
     "panwatch_base_url": "PanWatch 公开访问地址（用于通知里的分析详情页链接，如 https://panwatch.example.com）",
 }
 
@@ -70,7 +70,7 @@ def _get_env_defaults() -> dict[str, str]:
         "notify_retry_attempts": str(s.notify_retry_attempts),
         "notify_retry_backoff_seconds": str(s.notify_retry_backoff_seconds),
         "notify_dedupe_ttl_overrides": s.notify_dedupe_ttl_overrides,
-        "stock_link_platform": "xueqiu",
+        "stock_link_platform": "nse",
         "panwatch_base_url": os.getenv("PANWATCH_BASE_URL", ""),
     }
 

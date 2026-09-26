@@ -51,12 +51,6 @@ logger = logging.getLogger(__name__)
 __all__ = ["TradingAgentsAgent", "TradingAgentsUnavailable"]
 
 
-def get_market_data():
-    """lazy import,便于测试 monkeypatch(module 级)。"""
-    from src.platform.marketdata.marketdata_client import get_market_data as _g
-
-    return _g()
-
 
 class TradingAgentsUnavailable(RuntimeError):
     """tradingagents 库未安装或上游 API 变更导致不可用。"""
@@ -147,8 +141,6 @@ class TradingAgentsAgent(BaseAgent):
         # 单只标的为粒度;若 watchlist 多只,取第一只
         stock = context.watchlist[0]
 
-        from src.platform.marketdata.marketdata_client import _quote_to_row
-
         trace_id = getattr(context, "_trace_id", "")
         if not isinstance(trace_id, str) or not trace_id:
             trace_id = self._make_trace_id(stock.symbol)
@@ -185,41 +177,33 @@ class TradingAgentsAgent(BaseAgent):
                 return fallback
 
         try:
-            md = get_market_data()
-            sym, mkt = stock.symbol, stock.market.value
-            from src.platform.marketdata.collectors.kline_collector import kline_source
+            sym = stock.symbol
+            from src.platform.marketdata.collectors.kline_collector import (
+                KlineCollector,
+                kline_source,
+            )
+            from src.platform.marketdata.marketdata_client import md_quote_rows
 
+            # Quotes and daily candles come from the user's broker (India-only). Capital
+            # flow and announcements were China-only sources; Indian equivalents depend
+            # on open question Q8 / Phase 4a.
             with kline_source(f"tradingagents:{trace_id}"):
-                quotes, klines_list, cf, events_list = await asyncio.gather(
-                    _source("quote", lambda: md.quotes([sym], market=mkt), []),
-                    # 一次准备足够验证快照和 200 日均线使用的历史，后续 analyst
-                    # 直接复用这份缓存，不再重复请求 750 日 K 线。
-                    _source("klines", lambda: md.klines(sym, market=mkt, days=750), []),
-                    _source("capital_flow", lambda: md.capital_flow(sym, market=mkt), None),
-                    _source("events", lambda: md.events([sym], market=mkt, since_days=30), []),
+                quote_rows, klines_list = await asyncio.gather(
+                    _source("quote", lambda: md_quote_rows([sym]), []),
+                    # Enough history for the verified snapshot and the 200-day average;
+                    # analysts reuse this instead of fetching 750 days again.
+                    _source("klines", lambda: KlineCollector().get_klines(sym, days=750), []),
                 )
+            cf, events_list = None, []
         except Exception as e:
             logger.warning(f"[TA] 初始化数据源失败,使用空结果: {e}")
-            quotes, klines_list, cf, events_list = [], [], None, []
-        try:
-            quote_dict = _quote_to_row(quotes[0]) if quotes else {}
-        except Exception as e:
-            logger.warning(f"[TA] 行情结果解析失败,使用空结果: {e}")
-            quote_dict = {}
+            quote_rows, klines_list, cf, events_list = [], [], None, []
+        quote_dict = dict(quote_rows[0]) if quote_rows else {}
         capital_list = [cf] if cf else []
 
-        # A 股 fetch 真实财报(akshare),非 A 股留空
+        # Financial statements came from akshare for A-shares only; Indian fundamentals
+        # depend on open question Q8.
         financial: dict | None = None
-        if stock.market.value == "CN" and stock.symbol.isdigit() and len(stock.symbol) == 6:
-            try:
-                from src.modules.automation.tradingagents.data_context import fetch_financial_abstract
-                financial = await _source(
-                    "financial",
-                    lambda: fetch_financial_abstract(stock.symbol),
-                    None,
-                )
-            except Exception as e:
-                logger.debug(f"[TA] 财报模块不可用,跳过: {e}")
 
         # 预算技术指标(MA/MACD/RSI/KDJ/BOLL),给 get_indicators 工具用
         technical = None

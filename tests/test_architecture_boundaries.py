@@ -88,14 +88,16 @@ def test_cross_cutting_runtime_support_is_not_owned_by_web_or_src_root():
     assert not (SOURCE_ROOT / "web" / "stock_list.py").exists()
     assert (SOURCE_ROOT / "platform" / "runtime" / "config.py").is_file()
     assert (SOURCE_ROOT / "platform" / "observability" / "log_handler.py").is_file()
-    assert (SOURCE_ROOT / "platform" / "marketdata" / "stock_list.py").is_file()
+    assert (SOURCE_ROOT / "platform" / "marketdata" / "india_bridge.py").is_file()
 
 
-def test_marketdata_stock_list_keeps_its_project_level_cache_location():
-    """Moving the adapter must not silently create a second cache under src/."""
-    from src.platform.marketdata.stock_list import CACHE_FILE
-
-    assert Path(CACHE_FILE).resolve().parent == SOURCE_ROOT.parent / "data"
+def test_china_market_adapters_stay_removed():
+    """India-only fork: the Chinese stock list, symbol rules and scrapers must not return."""
+    marketdata = SOURCE_ROOT / "platform" / "marketdata"
+    for name in ("stock_list.py", "cn_symbol.py"):
+        assert not (marketdata / name).exists()
+    for name in ("capital_flow_collector.py", "discovery_collector.py", "events_collector.py", "screenshot_collector.py"):
+        assert not (marketdata / "collectors" / name).exists()
 
 
 def test_removed_transition_facades_are_not_reintroduced():

@@ -71,7 +71,7 @@ class SendMessageBody(BaseModel):
 @router.get("/suggested-questions")
 def suggested_questions(
     symbol: str = Query(..., description="股票代码"),
-    market: str = Query("CN", description="市场"),
+    market: str = Query("IN", description="市场"),
     db: Session = Depends(get_db),
 ):
     """根据股票当前状态生成推荐问题（纯模板，不调 AI）。"""

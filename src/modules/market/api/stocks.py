@@ -17,7 +17,6 @@ from src.platform.persistence.models import (
     PriceAlertRule,
     PriceAlertHit,
 )
-from src.platform.marketdata.stock_list import search_stocks, refresh_stock_list
 from src.platform.marketdata.marketdata_client import md_quote_rows
 from src.platform.marketdata.models import MarketCode, MARKETS
 from src.platform.marketdata.india_bridge import display_symbol, parse_symbol
@@ -31,7 +30,7 @@ router = APIRouter()
 class StockCreate(BaseModel):
     symbol: str
     name: str
-    market: str = "CN"
+    market: str = "IN"
 
 
 class StockUpdate(BaseModel):
@@ -190,21 +189,8 @@ def get_market_status():
 def search(
     q: str = Query("", min_length=1), market: str = Query(""), db: Session = Depends(get_db)
 ):
-    """模糊搜索股票(代码/名称). India ("IN") searches the user's broker instrument list."""
-    market = market.strip().upper()
-    india = (
-        get_broker_manager().search_instruments(db, q) if market in ("", "IN") else []
-    )
-    if market == "IN":
-        return india
-    return india + search_stocks(q, market)
-
-
-@router.post("/refresh-list")
-def refresh_list():
-    """刷新股票列表缓存"""
-    stocks = refresh_stock_list()
-    return {"count": len(stocks)}
+    """Search NSE/BSE stocks and indices in the user's broker instrument list."""
+    return get_broker_manager().search_instruments(db, q)
 
 
 @router.get("", response_model=list[StockResponse])
@@ -394,7 +380,7 @@ async def trigger_stock_agent(
     wait: bool = False,
     force_refresh: bool = False,
     symbol: str = Query(""),
-    market: str = Query("CN"),
+    market: str = Query("IN"),
     name: str = Query(""),
     db: Session = Depends(get_db),
 ):
@@ -432,7 +418,7 @@ async def trigger_stock_agent(
         if not allow_unbound:
             raise HTTPException(400, "当 stock_id<=0 时，需设置 allow_unbound=true")
 
-        market = (market or "CN").strip().upper() or "CN"
+        market = (market or "IN").strip().upper() or "IN"
         name = (name or "").strip() or symbol
         db_stock = db.query(Stock).filter(
             Stock.symbol == symbol, Stock.market == market

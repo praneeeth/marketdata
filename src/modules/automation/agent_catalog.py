@@ -20,7 +20,6 @@ WORKFLOW_AGENT_NAMES: tuple[str, ...] = (
 
 CAPABILITY_AGENT_NAMES: tuple[str, ...] = (
     "news_digest",
-    "chart_analyst",
 )
 
 
@@ -113,19 +112,6 @@ AGENT_SEED_SPECS: tuple[AgentSeedSpec, ...] = (
             "since_hours": 12,
             "fallback_since_hours": 24,
         },
-    ),
-    AgentSeedSpec(
-        name="chart_analyst",
-        display_name="技术分析（能力）",
-        description="内部能力：详情页按需触发图像技术分析，不独立调度",
-        enabled=False,
-        schedule="",
-        execution_mode="single",
-        kind=AGENT_KIND_CAPABILITY,
-        visible=False,
-        lifecycle_status="deprecated",
-        replaced_by="intraday_monitor,daily_report,premarket_outlook",
-        display_order=120,
     ),
     AgentSeedSpec(
         name="tradingagents",

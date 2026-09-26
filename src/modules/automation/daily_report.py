@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import re
 import uuid
@@ -12,7 +13,6 @@ from src.modules.automation.research_output import (
 )
 from src.platform.compliance import Feature, is_feature_enabled
 from src.modules.research.analysis_history import save_analysis
-from src.platform.marketdata.cn_symbol import get_cn_prefix
 from src.modules.automation.suggestion_pool import save_suggestion
 from src.modules.research.context_builder import ContextBuilder
 from src.modules.research.context_store import (
@@ -41,17 +41,6 @@ DAILY_ACTION_MAP = {
 
 PROMPT_PATH = Path(__file__).parent.parent.parent.parent / "prompts" / "daily_report.txt"
 
-# A 股大盘指数的显式腾讯符号（与 akshare_collector.CN_INDICES 口径一致）
-_CN_INDEX_TENCENT_SYMBOLS = ["sh000001", "sz399001", "sz399006"]
-
-
-def get_market_data():
-    """惰性 import,避免包未装/循环 import 影响本模块加载。"""
-    from src.platform.marketdata.marketdata_client import get_market_data as _g
-
-    return _g()
-
-
 class DailyReportAgent(BaseAgent):
     """盘后日报 Agent"""
 
@@ -60,28 +49,10 @@ class DailyReportAgent(BaseAgent):
     description = "每日收盘后生成自选股日报，包含大盘概览、个股分析和明日关注"
 
     async def _fetch_index_for_market(self, market_code: MarketCode) -> list[IndexData]:
-        """按 market 取大盘指数。
+        """Headline Indian indices (NIFTY 50, NIFTY BANK, SENSEX) from the user's broker."""
+        from src.platform.marketdata.marketdata_client import md_india_indices
 
-        直接走 marketdata 新包(index_quotes)。
-        与旧 _get_cn_index 口径一致：仅 CN 出数，其余市场返回空 list。
-        """
-        if market_code != MarketCode.CN:
-            return []
-        items = get_market_data().index_quotes(_CN_INDEX_TENCENT_SYMBOLS)
-        return [
-            IndexData(
-                symbol=item["symbol"],
-                name=item["name"],
-                market=MarketCode.CN,
-                current_price=item["current_price"],
-                change_pct=item["change_pct"],
-                change_amount=item["change_amount"],
-                volume=item["volume"],
-                turnover=item["turnover"],
-                timestamp=datetime.now(),
-            )
-            for item in items
-        ]
+        return await asyncio.to_thread(md_india_indices)
 
     async def collect(self, context: AgentContext) -> dict:
         """采集大盘指数 + 自选股结构化数据包（行情/技术/资金/新闻/持仓）"""
@@ -423,21 +394,6 @@ class DailyReportAgent(BaseAgent):
             if not sym:
                 continue
             symbol_map[sym.upper()] = sym
-            if getattr(s, "market", None) == MarketCode.HK and sym.isdigit():
-                try:
-                    symbol_map[str(int(sym))] = sym  # 兼容去掉前导 0（如 00700 -> 700）
-                except ValueError:
-                    pass
-                symbol_map[f"HK{sym}"] = sym
-                symbol_map[f"{sym}.HK"] = sym
-            if (
-                getattr(s, "market", None) == MarketCode.CN
-                and sym.isdigit()
-                and len(sym) == 6
-            ):
-                prefix = get_cn_prefix(sym, upper=True)
-                symbol_map[f"{prefix}{sym}"] = sym
-                symbol_map[f"{sym}.{prefix}"] = sym
             if getattr(s, "name", ""):
                 name_map[s.name] = sym
 
@@ -524,21 +480,6 @@ class DailyReportAgent(BaseAgent):
             if not sym:
                 continue
             symbol_map[sym.upper()] = sym
-            if getattr(s, "market", None) == MarketCode.HK and sym.isdigit():
-                try:
-                    symbol_map[str(int(sym))] = sym
-                except ValueError:
-                    pass
-                symbol_map[f"HK{sym}"] = sym
-                symbol_map[f"{sym}.HK"] = sym
-            if (
-                getattr(s, "market", None) == MarketCode.CN
-                and sym.isdigit()
-                and len(sym) == 6
-            ):
-                prefix = get_cn_prefix(sym, upper=True)
-                symbol_map[f"{prefix}{sym}"] = sym
-                symbol_map[f"{sym}.{prefix}"] = sym
 
         for it in items:
             if not isinstance(it, dict):

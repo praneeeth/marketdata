@@ -54,7 +54,7 @@ def load_price_history(symbol: str, market, days: int = 250) -> list[PriceBar]:
     try:
         mc = market if isinstance(market, MarketCode) else MarketCode(str(market).upper())
     except Exception:
-        mc = MarketCode.CN
+        mc = MarketCode.IN
     try:
         klines = KlineCollector(mc).get_klines(symbol, days=days)
     except Exception as e:

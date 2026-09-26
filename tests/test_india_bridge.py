@@ -244,7 +244,7 @@ def test_md_quote_rows_routes_in_to_the_bridge(monkeypatch: pytest.MonkeyPatch) 
     assert stock.turnover == 0.0
 
 
-def test_klines_for_in_bypass_the_shared_cache(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_klines_come_from_the_bridge(monkeypatch: pytest.MonkeyPatch) -> None:
     from src.platform.marketdata.collectors import kline_collector as kc
 
     kite = FakeKite()
@@ -253,7 +253,6 @@ def test_klines_for_in_bypass_the_shared_cache(monkeypatch: pytest.MonkeyPatch) 
     k = kc.KlineCollector(MarketCode.IN)
     first = k.get_klines("INFY", days=3)
     assert [x.close for x in first] == [2.0, 2.0, 2.0]
-    assert not any(key.startswith("IN:") for key in kc._KLINE_CACHE)
     assert kc.get_index_klines("NIFTY 50", MarketCode.IN, days=3)
     assert kite.candle_calls == 2  # one fetch per symbol (INFY, NIFTY 50)
 

@@ -39,7 +39,7 @@ def _run_eval(monkeypatch, req, reply="结论: 适合\n理由:\n- 摊薄明显\n
 def test_add_position_eval_computes_diluted_cost(monkeypatch):
     """加仓 100@8 到 100@10 的持仓:摊薄后成本 9.0(↓10%),并带 AI 结论。"""
     req = insights.AddPositionEvalRequest(
-        symbol="600519", market="CN",
+        symbol="600519", market="IN",
         current_quantity=100, current_cost=10,
         add_quantity=100, add_price=8,
     )
@@ -54,7 +54,7 @@ def test_add_position_eval_computes_diluted_cost(monkeypatch):
 def test_build_position_when_empty(monkeypatch):
     """空仓时为建仓:成本=加仓价,摊薄为 0。"""
     req = insights.AddPositionEvalRequest(
-        symbol="600519", market="CN",
+        symbol="600519", market="IN",
         current_quantity=0, current_cost=0,
         add_quantity=100, add_price=8,
     )

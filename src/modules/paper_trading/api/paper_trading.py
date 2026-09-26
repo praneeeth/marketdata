@@ -52,7 +52,7 @@ class ToggleBody(BaseModel):
 
 class UpdateSettingsBody(BaseModel):
     excluded_markets: list[str] | None = None  # 兼容旧字段
-    market_allocations: dict[str, float] | None = None  # {"CN":0.5,...}，合计 ≤ 1
+    market_allocations: dict[str, float] | None = None  # {"IN": 1.0}; total <= 1
     initial_capital: float | None = None  # 总资金（>0 时按差额增/减资）
 
 
@@ -475,7 +475,7 @@ def update_settings(body: UpdateSettingsBody, db: Session = Depends(get_db)):
         # 同步派生 excluded_markets（比例 0 即排除），兼容旧读取
         acc.excluded_markets = [m for m in ALL_MARKETS if alloc.get(m, 0.0) <= 0]
     elif body.excluded_markets is not None:
-        valid = {"CN", "HK", "US"}
+        valid = {"IN"}
         acc.excluded_markets = [m for m in body.excluded_markets if m in valid]
 
     if body.initial_capital is not None and body.initial_capital > 0:

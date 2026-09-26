@@ -138,7 +138,7 @@ def calibrate_factor_weights(
 
 
 def calibrate_all_markets(*, db=None, **kwargs) -> dict[str, dict]:
-    """对所有市场(CN/HK/US)各跑一轮因子标定;供调度器每日 outcome 评估后调用。
+    """对所有市场(India only: IN)各跑一轮因子标定;供调度器每日 outcome 评估后调用。
 
     kwargs 透传给 calibrate_factor_weights(alpha/beta/clamp/min_samples/horizon/days)。
     """

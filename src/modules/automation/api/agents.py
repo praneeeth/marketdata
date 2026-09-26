@@ -616,7 +616,7 @@ def export_tradingagents_analysis_pdf(
 )
 def get_tradingagents_history_comparison(
     stock_symbol: str = Query(..., description="股票代码,如 300418"),
-    market: str = Query("CN", description="市场:CN/US/HK"),
+    market: str = Query("IN", description="市场:CN/US/HK"),
     days: int = Query(90, ge=7, le=365, description="回溯天数"),
 ):
     """某只股票的 TradingAgents 历史决策 vs 实际涨跌对比。
@@ -1075,7 +1075,7 @@ async def scan_intraday(analyze: bool = False, db: Session = Depends(get_db)):
 
     async def _build_result_item(quote):
         change_pct = quote.change_pct or 0
-        market = stock_market_map.get(quote.symbol, MarketCode.CN)
+        market = stock_market_map.get(quote.symbol, MarketCode.IN)
 
         # 获取持仓信息
         positions = portfolio.get_positions_for_stock(quote.symbol)
@@ -1220,7 +1220,7 @@ async def scan_intraday(analyze: bool = False, db: Session = Depends(get_db)):
                             expires_hours=expires_hours,
                             prompt_context=user_content,
                             ai_response=response,
-                            stock_market=item.get("market") or "CN",
+                            stock_market=item.get("market") or "IN",
                             meta={
                                 "source": "intraday_scan",
                                 "quote": {

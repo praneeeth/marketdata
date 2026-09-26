@@ -37,8 +37,8 @@ _ALL_CHAT_TOOLS = [
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "symbol": {"type": "string", "description": "股票代码，如 600519"},
-                    "market": {"type": "string", "description": "市场代码：CN/HK/US", "default": "CN"},
+                    "symbol": {"type": "string", "description": "NSE symbol such as INFY, or BSE:<code>"},
+                    "market": {"type": "string", "description": "Market: IN (NSE/BSE, the only market)", "default": "IN"},
                 },
                 "required": ["symbol"],
             },
@@ -53,7 +53,7 @@ _ALL_CHAT_TOOLS = [
                 "type": "object",
                 "properties": {
                     "symbol": {"type": "string", "description": "股票代码"},
-                    "market": {"type": "string", "description": "市场代码：CN/HK/US", "default": "CN"},
+                    "market": {"type": "string", "description": "Market: IN (NSE/BSE, the only market)", "default": "IN"},
                 },
                 "required": ["symbol"],
             },
@@ -68,7 +68,7 @@ _ALL_CHAT_TOOLS = [
                 "type": "object",
                 "properties": {
                     "symbol": {"type": "string", "description": "股票代码"},
-                    "market": {"type": "string", "description": "市场代码：CN/HK/US", "default": "CN"},
+                    "market": {"type": "string", "description": "Market: IN (NSE/BSE, the only market)", "default": "IN"},
                 },
                 "required": ["symbol"],
             },
@@ -148,7 +148,7 @@ async def fetch_realtime_context(symbol: str, market: str) -> str:
         from src.platform.marketdata.marketdata_client import md_quote_rows
         from src.platform.marketdata.models import MarketCode
 
-        code = MarketCode(market) if market in ("CN", "HK", "US") else MarketCode.CN
+        code = MarketCode.IN
         rows = await asyncio.to_thread(md_quote_rows, [symbol], code.value)
         if not rows:
             return ""
@@ -166,9 +166,9 @@ async def fetch_realtime_context(symbol: str, market: str) -> str:
 async def fetch_technical_context(symbol: str, market: str) -> str:
     """Return a compact technical summary; failures degrade to an empty context."""
     try:
-        from src.modules.market.data_collector import DataCollector
+        from src.platform.marketdata.collectors.kline_collector import KlineCollector
 
-        summary = await asyncio.to_thread(DataCollector().get_kline_summary, symbol, market)
+        summary = await asyncio.to_thread(KlineCollector().get_kline_summary, symbol)
         if not summary or summary.get("error"):
             return ""
         data = summary.get("summary", {})
@@ -188,15 +188,15 @@ async def execute_chat_tool(db: Session, name: str, arguments: dict) -> str:
         if name == "get_portfolio":
             return build_portfolio_context(db) or "用户暂无持仓。"
         if name == "get_stock_quote":
-            symbol, market = arguments.get("symbol", ""), arguments.get("market", "CN")
+            symbol, market = arguments.get("symbol", ""), arguments.get("market", "IN")
             return await fetch_realtime_context(symbol, market) or f"未能获取 {market}:{symbol} 的行情数据。"
         if name == "get_technical_analysis":
-            symbol, market = arguments.get("symbol", ""), arguments.get("market", "CN")
+            symbol, market = arguments.get("symbol", ""), arguments.get("market", "IN")
             return await fetch_technical_context(symbol, market) or f"未能获取 {market}:{symbol} 的技术面数据。"
         if name == "get_stock_suggestions":
             if not is_feature_enabled(Feature.SUGGESTION_POOL):
                 return "AI buy/sell suggestions are not available in research-only mode."
-            symbol, market = arguments.get("symbol", ""), arguments.get("market", "CN")
+            symbol, market = arguments.get("symbol", ""), arguments.get("market", "IN")
             return build_stock_context(db, symbol, market) or f"暂无 {market}:{symbol} 的 AI 建议。"
         if name == "get_watchlist":
             return build_watchlist_context(db)

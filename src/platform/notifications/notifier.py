@@ -67,40 +67,13 @@ def sanitize_for_telegram(content: str) -> str:
     return content.strip()
 
 
-# 渠道类型定义 (label + 表单字段)
+# Channel types (label + form fields). Chinese channels (DingTalk, WeCom, Lark/Feishu,
+# ServerChan, PushPlus, Bark) were removed (decision Q15); WhatsApp and email arrive in
+# Phase 6.
 CHANNEL_TYPES = {
     "telegram": {
         "label": "Telegram",
         "fields": ["bot_token", "chat_id", "proxy"],
-    },
-    "bark": {
-        "label": "Bark",
-        "fields": ["device_key", "server_url"],
-    },
-    "dingtalk": {
-        "label": "钉钉机器人",
-        "fields": [
-            "token",
-            "secret",
-            "phones",
-            "keyword",
-        ],  # keyword 选填：安全设置为“关键字”时自动附加
-    },
-    "wecom": {
-        "label": "企业微信机器人",
-        "fields": ["webhook_key"],
-    },
-    "lark": {
-        "label": "飞书机器人",
-        "fields": ["webhook_token"],
-    },
-    "serverchan": {
-        "label": "Server酱",
-        "fields": ["sendkey"],
-    },
-    "pushplus": {
-        "label": "PushPlus",
-        "fields": ["token", "topic"],
     },
     "discord": {
         "label": "Discord",
@@ -113,16 +86,16 @@ CHANNEL_TYPES = {
 }
 
 # 通过 Apprise 支持的渠道类型（无代理配置时）
-_APPRISE_TYPES = {"telegram", "bark", "dingtalk", "lark", "discord", "pushover"}
+_APPRISE_TYPES = {"telegram", "discord", "pushover"}
 
 # 自定义实现的渠道类型（带代理或特殊需求）
-_CUSTOM_IMPL_TYPES = {"wecom", "serverchan", "pushplus"}
+_CUSTOM_IMPL_TYPES: set[str] = set()
 
 # 支持 Markdown 的渠道（不需要 sanitize）
-_MARKDOWN_CHANNELS = {"wecom", "serverchan", "pushplus", "dingtalk", "lark", "discord"}
+_MARKDOWN_CHANNELS = {"discord"}
 
 # 不支持 Markdown 的渠道（需要 sanitize）
-_PLAIN_TEXT_CHANNELS = {"telegram", "bark", "pushover"}
+_PLAIN_TEXT_CHANNELS = {"telegram", "pushover"}
 
 # Per-channel body budgets (characters, including the disclaimer). Content is truncated
 # to fit before the disclaimer is appended, so channel-side truncation (e.g. Telegram's
@@ -131,7 +104,6 @@ CHANNEL_TEXT_BUDGETS = {
     "telegram": 3500,
     "discord": 1800,
     "pushover": 900,
-    "bark": 2000,
 }
 DEFAULT_TEXT_BUDGET = 4000
 
@@ -153,44 +125,6 @@ def build_apprise_url(channel_type: str, config: dict) -> str | None:
         if proxy:
             return None
         return f"tgram://{bot_token}/{chat_id}"
-
-    elif channel_type == "bark":
-        device_key = config.get("device_key", "")
-        server_url = config.get("server_url", "").strip("/")
-        if not device_key:
-            raise ValueError("Bark 需要 device_key")
-        if server_url:
-            host = server_url.replace("https://", "").replace("http://", "")
-            return f"bark://{host}/{device_key}/"
-        return f"bark://{device_key}/"
-
-    elif channel_type == "dingtalk":
-        # Apprise 钉钉格式：
-        # - 无加签：dingtalk://{access_token}/
-        # - 加签：  dingtalk://{secret}@{access_token}/
-        # - @手机号：在 URL 末尾追加 ?to=13800138000,13900139000
-        token = (config.get("token") or "").strip()
-        secret = (config.get("secret") or "").strip()
-        phones = (config.get("phones") or "").strip()
-        if not token:
-            raise ValueError("钉钉需要 token")
-        base = f"dingtalk://{secret}@{token}/" if secret else f"dingtalk://{token}/"
-        if phones:
-            # 仅保留数字和逗号
-            phone_list = [
-                re.sub(r"[^0-9]", "", p)
-                for p in phones.split(",")
-                if re.sub(r"[^0-9]", "", p)
-            ]
-            if phone_list:
-                base += f"?to={','.join(phone_list)}"
-        return base
-
-    elif channel_type == "lark":
-        webhook_token = config.get("webhook_token", "")
-        if not webhook_token:
-            raise ValueError("飞书需要 webhook_token")
-        return f"lark://{webhook_token}/"
 
     elif channel_type == "discord":
         webhook_id = config.get("webhook_id", "")
@@ -217,8 +151,6 @@ class NotifierManager:
         self._ap = apprise.Apprise()
         self._custom_channels: list[tuple[str, dict]] = []
         self._channel_count = 0
-        # 钉钉关键字（可选）：若群机器人启用“关键字”安全校验，则自动附加
-        self._dingtalk_keywords: set[str] = set()
         self._channel_types: set[str] = set()
         self.policy = policy
 
@@ -238,10 +170,6 @@ class NotifierManager:
                     logger.info(f"注册通知渠道: {channel_type}")
                 else:
                     logger.error(f"注册通知渠道失败: {channel_type} (URL 无效)")
-                if channel_type == "dingtalk":
-                    kw = (config.get("keyword") or "").strip()
-                    if kw:
-                        self._dingtalk_keywords.add(kw)
             else:
                 self._custom_channels.append((channel_type, config))
                 self._channel_count += 1
@@ -317,14 +245,6 @@ class NotifierManager:
 
         errors = []
 
-        # 若配置了钉钉关键字，自动追加在内容末尾以通过“关键字”校验
-        if self._dingtalk_keywords:
-            suffix = " " + " ".join(sorted(self._dingtalk_keywords))
-            if suffix.strip() not in plain_content:
-                plain_content = (plain_content + "\n" + suffix).strip()
-            if suffix.strip() not in content:
-                content = (content + "\n" + suffix).strip()
-
         retry_attempts = 0
         backoff = 0.0
         try:
@@ -395,12 +315,6 @@ class NotifierManager:
         """发送自定义渠道通知"""
         if ch_type == "telegram":
             await self._send_telegram(config, title, content)
-        elif ch_type == "wecom":
-            await self._send_wecom(config, title, content)
-        elif ch_type == "serverchan":
-            await self._send_serverchan(config, title, content)
-        elif ch_type == "pushplus":
-            await self._send_pushplus(config, title, content)
         else:
             logger.warning(f"未知的自定义渠道类型: {ch_type}")
 
@@ -472,60 +386,3 @@ class NotifierManager:
                 if not proxy:
                     raise RuntimeError(f"网络连接失败，建议配置代理: {e}")
             raise
-
-    async def _send_wecom(self, config: dict, title: str, content: str):
-        """企业微信机器人 Webhook"""
-        key = config.get("webhook_key", "")
-        if not key:
-            raise ValueError("企业微信需要 webhook_key")
-
-        url = f"https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key={key}"
-        text = f"## {title}\n\n{content}" if title else content
-        payload = {"msgtype": "markdown", "markdown": {"content": text}}
-
-        async with httpx.AsyncClient() as client:
-            resp = await client.post(url, json=payload, timeout=30)
-            data = resp.json()
-            if data.get("errcode") != 0:
-                raise RuntimeError(f"企业微信发送失败: {data.get('errmsg')}")
-            logger.info(f"企业微信通知发送成功: {title}")
-
-    async def _send_serverchan(self, config: dict, title: str, content: str):
-        """Server酱推送"""
-        sendkey = config.get("sendkey", "")
-        if not sendkey:
-            raise ValueError("Server酱需要 sendkey")
-
-        url = f"https://sctapi.ftqq.com/{sendkey}.send"
-        payload = {"title": title or "通知", "desp": content}
-
-        async with httpx.AsyncClient() as client:
-            resp = await client.post(url, json=payload, timeout=30)
-            data = resp.json()
-            if data.get("code") != 0:
-                raise RuntimeError(f"Server酱发送失败: {data.get('message')}")
-            logger.info(f"Server酱通知发送成功: {title}")
-
-    async def _send_pushplus(self, config: dict, title: str, content: str):
-        """PushPlus 推送"""
-        token = config.get("token", "")
-        if not token:
-            raise ValueError("PushPlus 需要 token")
-
-        url = "https://www.pushplus.plus/send"
-        payload = {
-            "token": token,
-            "title": title or "通知",
-            "content": content,
-            "template": "markdown",
-        }
-        topic = config.get("topic", "")
-        if topic:
-            payload["topic"] = topic
-
-        async with httpx.AsyncClient() as client:
-            resp = await client.post(url, json=payload, timeout=30)
-            data = resp.json()
-            if data.get("code") != 200:
-                raise RuntimeError(f"PushPlus 发送失败: {data.get('msg')}")
-            logger.info(f"PushPlus 通知发送成功: {title}")

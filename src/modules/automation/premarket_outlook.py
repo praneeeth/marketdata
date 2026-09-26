@@ -1,5 +1,6 @@
 """盘前分析 Agent - 开盘前展望今日走势"""
 
+import asyncio
 import logging
 import re
 import time
@@ -17,7 +18,6 @@ from src.modules.automation.research_output import (
 from src.platform.compliance import Feature, is_feature_enabled
 from src.modules.research.signals import SignalPackBuilder
 from src.modules.research.analysis_history import save_analysis, get_latest_analysis
-from src.platform.marketdata.cn_symbol import get_cn_prefix
 from src.modules.automation.suggestion_pool import save_suggestion
 from src.modules.research.context_builder import ContextBuilder
 from src.modules.research.context_store import (
@@ -81,22 +81,26 @@ class PremarketOutlookAgent(BaseAgent):
             len((yesterday_analysis.content if yesterday_analysis else "") or ""),
         )
 
-        # 2. 获取美股指数（隔夜表现）
+        # 2. Overnight global cues (US/Asia/Europe indices, crude, gold, USD/INR). Free,
+        # delayed, unofficial data for context only (owner decision 2026-09-25).
         us_indices = []
         try:
-            from src.platform.marketdata.marketdata_client import get_market_data
+            from src.platform.marketdata.global_cues_service import get_global_cues_service
 
-            items = get_market_data().index_quotes(["usDJI", "usIXIC", "usINX"])
-            for item in items:
+            service = get_global_cues_service()
+            cues = await asyncio.to_thread(service.cues) if service else []
+            for cue in cues:
+                if cue.last is None:
+                    continue
                 us_indices.append(
                     {
-                        "name": item.get("name") or item.get("symbol"),
-                        "current": item.get("current_price"),
-                        "change_pct": item.get("change_pct"),
+                        "name": f"{cue.name} ({cue.group})",
+                        "current": float(cue.last),
+                        "change_pct": float(cue.change_pct) if cue.change_pct is not None else None,
                     }
-                    )
+                )
         except Exception as e:
-            logger.warning("[%s] 获取美股指数失败: %s", trace_id, e)
+            logger.warning("[%s] global cues unavailable: %s", trace_id, e)
         logger.info("[%s] 隔夜指数采集完成: count=%s", trace_id, len(us_indices))
 
         # 3/4. SignalPack（技术面+持仓+新闻）
@@ -262,7 +266,7 @@ class PremarketOutlookAgent(BaseAgent):
 
         # 隔夜美股表现
         if data.get("us_indices"):
-            lines.append("## 隔夜美股表现")
+            lines.append("## Overnight global markets (delayed, unofficial; context only)")
             for idx in data["us_indices"]:
                 chg = safe_num(idx.get("change_pct"), 0)
                 current = safe_num(idx.get("current"), 0)
@@ -360,30 +364,6 @@ class PremarketOutlookAgent(BaseAgent):
             if tech.get("kline_pattern"):
                 lines.append(f"- 形态：{tech.get('kline_pattern')}")
 
-            # 资金流向（仅A股，若可用）
-            flow = (pack.capital_flow if pack else None) or {}
-            if (
-                getattr(stock, "market", None) == MarketCode.CN
-                and isinstance(flow, dict)
-                and flow
-                and not flow.get("error")
-                and flow.get("status")
-            ):
-                try:
-                    inflow = float(flow.get("main_net_inflow") or 0)
-                    inflow_pct = float(flow.get("main_net_inflow_pct") or 0)
-                    inflow_str = (
-                        f"{inflow / 1e8:+.2f}亿"
-                        if abs(inflow) >= 1e8
-                        else f"{inflow / 1e4:+.0f}万"
-                    )
-                    lines.append(
-                        f"- 资金：{flow.get('status')}，主力净流入{inflow_str}（{inflow_pct:+.1f}%）"
-                    )
-                    if flow.get("trend_5d") and flow.get("trend_5d") != "无数据":
-                        lines.append(f"- 5日资金：{flow.get('trend_5d')}")
-                except Exception:
-                    pass
 
             # 个股相关新闻（分层：实时 > 扩展 > 历史）
             stock_news = (
@@ -512,21 +492,6 @@ class PremarketOutlookAgent(BaseAgent):
             if not sym:
                 continue
             symbol_map[sym.upper()] = sym
-            if getattr(s, "market", None) == MarketCode.HK and sym.isdigit():
-                try:
-                    symbol_map[str(int(sym))] = sym
-                except ValueError:
-                    pass
-                symbol_map[f"HK{sym}"] = sym
-                symbol_map[f"{sym}.HK"] = sym
-            if (
-                getattr(s, "market", None) == MarketCode.CN
-                and sym.isdigit()
-                and len(sym) == 6
-            ):
-                prefix = get_cn_prefix(sym, upper=True)
-                symbol_map[f"{prefix}{sym}"] = sym
-                symbol_map[f"{sym}.{prefix}"] = sym
             if getattr(s, "name", ""):
                 name_map[s.name] = sym
 
@@ -605,21 +570,6 @@ class PremarketOutlookAgent(BaseAgent):
             if not sym:
                 continue
             symbol_map[sym.upper()] = sym
-            if getattr(s, "market", None) == MarketCode.HK and sym.isdigit():
-                try:
-                    symbol_map[str(int(sym))] = sym
-                except ValueError:
-                    pass
-                symbol_map[f"HK{sym}"] = sym
-                symbol_map[f"{sym}.HK"] = sym
-            if (
-                getattr(s, "market", None) == MarketCode.CN
-                and sym.isdigit()
-                and len(sym) == 6
-            ):
-                prefix = get_cn_prefix(sym, upper=True)
-                symbol_map[f"{prefix}{sym}"] = sym
-                symbol_map[f"{sym}.{prefix}"] = sym
 
         for it in items:
             if not isinstance(it, dict):

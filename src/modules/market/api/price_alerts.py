@@ -190,7 +190,7 @@ def list_today_hits(limit: int = 50, db: Session = Depends(get_db)):
                 "rule_name": (rule.name if rule else "") or "提醒",
                 "symbol": stock.symbol if stock else "",
                 "name": stock.name if stock else "",
-                "market": stock.market if stock else "CN",
+                "market": stock.market if stock else "IN",
                 "trigger_time": _format_datetime(h.trigger_time),
                 "snapshot": h.trigger_snapshot or {},
             }

@@ -83,7 +83,7 @@ def _to_market(market: str) -> MarketCode:
     try:
         return MarketCode(market)
     except Exception:
-        return MarketCode.CN
+        return MarketCode.IN
 
 
 def _is_trading_time(market: str) -> bool:
@@ -107,12 +107,12 @@ def _safe_float(v: Any) -> float | None:
 # 分市场资金配置（投资比例 → 子池现金）
 # ---------------------------------------------------------------------------
 
-ALL_MARKETS: tuple[str, ...] = ("CN", "HK", "US")
-DEFAULT_ALLOCATIONS: dict[str, float] = {"CN": 0.5, "HK": 0.3, "US": 0.2}
+ALL_MARKETS: tuple[str, ...] = ("IN",)
+DEFAULT_ALLOCATIONS: dict[str, float] = {"IN": 1.0}
 
 
 def normalize_allocations(raw: dict | None) -> dict[str, float]:
-    """补齐三市场、clamp 到 [0,1]，返回 {market: ratio}。"""
+    """Fill in every market, clamp to [0, 1]; returns {market: ratio}."""
     raw = raw or {}
     out: dict[str, float] = {}
     for m in ALL_MARKETS:
@@ -138,8 +138,8 @@ def allocations_from_excluded(excluded: list[str] | None) -> dict[str, float]:
     weights = {m: DEFAULT_ALLOCATIONS[m] for m in ALL_MARKETS if m not in excluded_set}
     total = sum(weights.values())
     if total <= 0:
-        # 全部被排除：兜底投 A 股
-        return {"CN": 1.0, "HK": 0.0, "US": 0.0}
+        # Everything excluded: fall back to India, the only market.
+        return {"IN": 1.0}
     return {m: round(weights.get(m, 0.0) / total, 6) for m in ALL_MARKETS}
 
 

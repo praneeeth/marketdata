@@ -2039,6 +2039,19 @@ def _m128_broker_connections(conn: Connection) -> None:
     )
 
 
+def _m129_india_only_cleanup(conn: Connection) -> None:
+    """India-only cleanup (Phase 2): the Chinese data-source table, Chinese notification
+    channels and the retired chart analyst agent."""
+    conn.execute(text("DROP TABLE IF EXISTS data_sources"))
+    if _has_table(conn, "notify_channels"):
+        conn.execute(text("""
+            UPDATE notify_channels SET enabled = 0
+            WHERE type IN ('wecom', 'dingtalk', 'lark', 'serverchan', 'pushplus', 'bark')
+        """))
+    if _has_table(conn, "agent_configs"):
+        conn.execute(text("DELETE FROM agent_configs WHERE name = 'chart_analyst'"))
+
+
 MIGRATIONS: tuple[Migration, ...] = (
     Migration(101, "agent_config_kind_and_visibility", _m101_agent_config_kind),
     Migration(102, "backfill_agent_kind_data", _m102_backfill_agent_kind),
@@ -2068,6 +2081,7 @@ MIGRATIONS: tuple[Migration, ...] = (
     Migration(126, "assistant_task_events", _m126_assistant_task_events),
     Migration(127, "compliance_tables", _m127_compliance_tables),
     Migration(128, "broker_connections", _m128_broker_connections),
+    Migration(129, "india_only_cleanup", _m129_india_only_cleanup),
 )
 
 

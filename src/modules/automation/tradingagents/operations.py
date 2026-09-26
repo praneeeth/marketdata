@@ -269,16 +269,8 @@ def backfill_tradingagents_suggestions(days: int = 7) -> dict:
                 else ""
             )
 
-            # 推断 market(分析记录里没存,从 stock_symbol 简单推断)
             symbol = r.stock_symbol
-            if symbol.isdigit() and len(symbol) == 6:
-                market = "CN"
-            elif symbol.isalpha():
-                market = "US"
-            elif symbol.isdigit() and len(symbol) == 5:
-                market = "HK"
-            else:
-                market = "CN"
+            market = "IN"  # India is the only market
 
             # 从 AnalysisHistory record 拿股票名(如果存在)
             stock_name = ""
@@ -332,12 +324,7 @@ def backfill_tradingagents_suggestions(days: int = 7) -> dict:
 # ============================================================================
 
 def _resolve_market(market: str) -> MarketCode:
-    code = (market or "CN").strip().upper()
-    if code == "US":
-        return MarketCode.US
-    if code == "HK":
-        return MarketCode.HK
-    return MarketCode.CN
+    return MarketCode.IN  # India is the only market
 
 
 def _classify_hit(action: str, ret_pct: float | None) -> bool | None:
@@ -382,7 +369,7 @@ def _find_close_after_n_trading_days(
 
 def build_history_comparison(
     stock_symbol: str,
-    market: str = "CN",
+    market: str = "IN",
     days: int = 90,
 ) -> dict:
     """构建某只股票 TradingAgents 历史决策对比数据。

@@ -1,16 +1,9 @@
-"""TradingAgents 数据上下文适配。
+"""TradingAgents data context adapters (India-only).
 
-本文件同时负责 A 股财务摘要、PortfolioContext、instrument_context 和标的元数据，
-把 PanWatch 的业务数据转换成 TradingAgents 可消费的结构化上下文。
-
-A 股财务数据采集 — 用 akshare 拉真实财务报表给 TradingAgents 分析师用。
-
-之前 PanWatch 没采集财报,fundamentals/balance/cashflow/income 工具都返回占位文本,
-LLM 没法做真正的基本面分析。本模块用 akshare 的 stock_financial_abstract 拉最近 2 期
-真实数据(归母净利润 / 营收 / ROE / 毛利率 / 资产负债率 / 经营现金流等),塞给
-对应工具。
-
-只支持 A 股(6 位数字)。失败时返回 None,toolkit_adapter 退回轻量 quote 数据。
+Converts PanWatch data into structures TradingAgents consumes: PortfolioContext, the
+instrument context and stock metadata. The financial-statement renderers take a
+normalised dict; the upstream akshare (A-share) fetcher was removed, and Indian
+fundamentals depend on open question Q8, so the toolkit falls back to quote data.
 """
 
 from __future__ import annotations
@@ -33,72 +26,6 @@ __all__ = [
     "render_income_statement",
     "to_tradingagents_portfolio",
 ]
-
-
-def fetch_financial_abstract(symbol: str) -> dict | None:
-    """拉一只 A 股的财务摘要,返回结构化字典。
-
-    Returns:
-        {
-            "periods": ["20260331", "20251231", ...],   # 最近 N 期
-            "indicators": {
-                "归母净利润": {"20260331": -6.56e8, "20251231": -8.78e9, ...},
-                ...
-            },
-            "categories": {
-                "盈利能力": {"毛利率": {...}, "净资产收益率(ROE)": {...}},
-                "成长能力": {...},
-                ...
-            },
-        }
-        或 None(akshare 失败 / 非 A 股 / 数据为空)
-    """
-    if not (symbol and len(symbol) == 6 and symbol.isdigit()):
-        return None
-    try:
-        import akshare as ak
-    except ImportError:
-        logger.warning("[TA fin] akshare 未安装,无法拉财报")
-        return None
-
-    try:
-        df = ak.stock_financial_abstract(symbol=symbol)
-    except Exception as e:
-        logger.warning(f"[TA fin] stock_financial_abstract({symbol}) 失败: {e}")
-        return None
-    if df is None or df.empty:
-        return None
-
-    # 列结构:[选项, 指标, 20260331, 20251231, ...] —— 取最近 N 期
-    period_cols = [c for c in df.columns if str(c).isdigit() and len(str(c)) == 8]
-    if not period_cols:
-        return None
-    recent_periods = period_cols[:6]  # 最多 6 期(1.5 年)
-
-    indicators: dict[str, dict[str, float | None]] = {}
-    categories: dict[str, dict[str, dict[str, float | None]]] = {}
-
-    for _, row in df.iterrows():
-        cat = str(row.get("选项") or "").strip()
-        name = str(row.get("指标") or "").strip()
-        if not name:
-            continue
-        values: dict[str, float | None] = {}
-        for p in recent_periods:
-            v = row.get(p)
-            try:
-                values[p] = float(v) if v is not None and str(v) not in ("nan", "NaN") else None
-            except (TypeError, ValueError):
-                values[p] = None
-        indicators[name] = values
-        if cat:
-            categories.setdefault(cat, {})[name] = values
-
-    return {
-        "periods": recent_periods,
-        "indicators": indicators,
-        "categories": categories,
-    }
 
 
 def _fmt_num(v: float | None) -> str:
@@ -134,7 +61,7 @@ def render_fundamentals_summary(data: dict) -> str:
     if not periods or not ind:
         return "[No financial data available]"
 
-    lines = ["[Real Financial Data from PanWatch (akshare)]"]
+    lines = ["[Reported financials]"]
     lines.append(f"Reporting periods: {' | '.join(_fmt_period(p) for p in periods)}")
     lines.append("")
 
@@ -157,7 +84,7 @@ def render_fundamentals_summary(data: dict) -> str:
 
     lines.append("")
     lines.append(
-        "Note: This is REAL data pulled from official A-share financial reports. "
+        "Note: This is REAL data from the company's reported financial statements. "
         "Use these numbers to ground your fundamental analysis (revenue trends, "
         "profitability, leverage). Do NOT invent additional numbers."
     )
@@ -170,7 +97,7 @@ def render_income_statement(data: dict) -> str:
     ind = data.get("indicators", {})
     if not periods or not ind:
         return "[No income statement data]"
-    lines = ["[Income Statement (real data from PanWatch / akshare)]"]
+    lines = ["[Income statement]"]
     lines.append(f"Periods: {' | '.join(_fmt_period(p) for p in periods)}")
     lines.append("")
     metrics = [
@@ -198,7 +125,7 @@ def render_balance_sheet(data: dict) -> str:
     ind = data.get("indicators", {})
     if not periods or not ind:
         return "[No balance sheet data]"
-    lines = ["[Balance Sheet (real data from PanWatch / akshare)]"]
+    lines = ["[Balance sheet]"]
     lines.append(f"Periods: {' | '.join(_fmt_period(p) for p in periods)}")
     lines.append("")
     metrics = [
@@ -224,7 +151,7 @@ def render_cashflow(data: dict) -> str:
     ind = data.get("indicators", {})
     if not periods or not ind:
         return "[No cash flow data]"
-    lines = ["[Cash Flow Statement (real data from PanWatch / akshare)]"]
+    lines = ["[Cash flow statement]"]
     lines.append(f"Periods: {' | '.join(_fmt_period(p) for p in periods)}")
     lines.append("")
     metrics = [
@@ -247,15 +174,15 @@ def render_cashflow(data: dict) -> str:
 def build_stock_metadata_context(
     stock_symbol: str,
     stock_name: str = "",
-    market: str = "CN",
+    market: str = "IN",
     current_price: float | None = None,
     industry: str = "",
 ) -> str:
-    """渲染标的元信息，避免模型从 A/HK ticker 反查并臆测公司。"""
+    """Stock metadata so the model never guesses the company from the ticker."""
     if not stock_symbol:
         return ""
 
-    market_label = {"CN": "中国 A 股", "HK": "港股", "US": "美股"}.get(market, market)
+    market_label = {"IN": "India (NSE/BSE)"}.get(market, market)
     lines = [
         "[Stock Metadata]",
         f"- Ticker: {stock_symbol}",
@@ -267,7 +194,7 @@ def build_stock_metadata_context(
     if current_price and current_price > 0:
         lines.append(f"- Current price: {current_price:.2f}")
     lines.append(
-        "- IMPORTANT: This is an A-share / HK / cross-market ticker. DO NOT guess the "
+        "- IMPORTANT: This is an Indian (NSE/BSE) ticker. DO NOT guess the "
         "company from the ticker code; always use the company name above."
     )
     return "\n".join(lines)

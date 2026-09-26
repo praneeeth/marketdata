@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 from pydantic import BaseModel
 
 from src.platform.persistence.database import get_db
-from src.platform.persistence.models import Stock, DataSource
+from src.platform.persistence.models import Stock
 from src.platform.marketdata.collectors.news_collector import NewsCollector, NewsItem
 
 router = APIRouter()
@@ -135,21 +135,6 @@ async def get_news(
 
 
 @router.get("/sources")
-def get_news_sources(db: Session = Depends(get_db)):
-    """获取已配置的新闻数据源列表"""
-    data_sources = (
-        db.query(DataSource)
-        .filter(DataSource.type == "news")
-        .order_by(DataSource.priority)
-        .all()
-    )
-
-    return [
-        {
-            "id": ds.provider,
-            "name": ds.name,
-            "enabled": ds.enabled,
-            "priority": ds.priority,
-        }
-        for ds in data_sources
-    ]
+def get_news_sources():
+    """Configured news sources. None until Indian news and filings sources land (Phase 4a)."""
+    return []

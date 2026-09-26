@@ -14,7 +14,6 @@ from src.modules.automation.research_output import (
 from src.platform.compliance import Feature, is_feature_enabled
 from src.platform.marketdata.collectors.news_collector import NewsCollector, NewsItem
 from src.modules.research.analysis_history import save_analysis
-from src.platform.marketdata.cn_symbol import get_cn_prefix
 from src.modules.automation.suggestion_pool import save_suggestion
 from src.modules.research.signals import SignalPackBuilder
 from src.modules.research.signals.structured_output import (
@@ -306,22 +305,6 @@ class NewsDigestAgent(BaseAgent):
                 continue
             symbol_map[sym.upper()] = sym
 
-            if getattr(s, "market", None) == MarketCode.HK and sym.isdigit():
-                try:
-                    symbol_map[str(int(sym))] = sym  # 兼容去掉前导 0（如 00700 -> 700）
-                except ValueError:
-                    pass
-                symbol_map[f"HK{sym}"] = sym
-                symbol_map[f"{sym}.HK"] = sym
-
-            if (
-                getattr(s, "market", None) == MarketCode.CN
-                and sym.isdigit()
-                and len(sym) == 6
-            ):
-                prefix = get_cn_prefix(sym, upper=True)
-                symbol_map[f"{prefix}{sym}"] = sym
-                symbol_map[f"{sym}.{prefix}"] = sym
 
             if getattr(s, "name", ""):
                 name_map[s.name] = sym
@@ -413,21 +396,6 @@ class NewsDigestAgent(BaseAgent):
             if not sym:
                 continue
             symbol_map[sym.upper()] = sym
-            if getattr(s, "market", None) == MarketCode.HK and sym.isdigit():
-                try:
-                    symbol_map[str(int(sym))] = sym
-                except ValueError:
-                    pass
-                symbol_map[f"HK{sym}"] = sym
-                symbol_map[f"{sym}.HK"] = sym
-            if (
-                getattr(s, "market", None) == MarketCode.CN
-                and sym.isdigit()
-                and len(sym) == 6
-            ):
-                prefix = get_cn_prefix(sym, upper=True)
-                symbol_map[f"{prefix}{sym}"] = sym
-                symbol_map[f"{sym}.{prefix}"] = sym
 
         for it in items:
             if not isinstance(it, dict):

@@ -79,7 +79,7 @@ class MarketStub:
     def __init__(self) -> None:
         from src.platform.marketdata.models import MarketCode
 
-        self.value = MarketCode.CN
+        self.value = MarketCode.IN
 
 
 # ── is_abnormal_move (自适应异动判定) ─────────────────────────────────────
@@ -135,7 +135,7 @@ def _build_intraday_prompt_with_atr(atr_pct):
     stock = StockData(
         symbol="000001",
         name="平安银行",
-        market=MarketCode.CN,
+        market=MarketCode.IN,
         current_price=20.0,
         change_pct=5.0,
         change_amount=1.0,

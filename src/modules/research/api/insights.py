@@ -33,7 +33,7 @@ router = APIRouter()
 
 class InsightItem(BaseModel):
     symbol: str = Field(..., description="股票代码")
-    market: str = Field(..., description="市场: CN/HK/US")
+    market: str = Field(..., description="Market: IN (NSE/BSE)")
 
 
 class InsightsBatchRequest(BaseModel):
@@ -124,7 +124,7 @@ def insights_batch(payload: InsightsBatchRequest):
 
 class AddPositionEvalRequest(BaseModel):
     symbol: str
-    market: str = "CN"
+    market: str = "IN"
     current_quantity: float = Field(0, ge=0, description="当前持仓股数(0=建仓)")
     current_cost: float = Field(0, ge=0, description="当前成本(单价)")
     add_quantity: float = Field(..., gt=0, description="加仓股数")
@@ -147,7 +147,7 @@ def _parse_verdict(text: str) -> str:
 async def _fetch_fundamental_context(symbol: str, market: str) -> str:
     """基本面摘要:PE / 换手率 / 市值 / 今日振幅(取自实时行情,失败返回空)。"""
     try:
-        mc = MarketCode(market) if market in ("CN", "HK", "US") else MarketCode.CN
+        mc = MarketCode.IN
         rows = await asyncio.to_thread(md_quote_rows, [symbol], mc.value)
         if not rows:
             return ""
@@ -318,7 +318,7 @@ async def _fetch_recent_announcements(symbol: str, name: str, limit: int = 5) ->
 
 class AnnouncementEvalRequest(BaseModel):
     symbol: str
-    market: str = "CN"
+    market: str = "IN"
     model_id: int | None = None
 
 

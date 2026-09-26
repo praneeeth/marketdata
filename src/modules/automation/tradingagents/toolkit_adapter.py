@@ -1,28 +1,21 @@
-"""把 PanWatch Provider 体系适配进 TradingAgents 数据流。
+"""Adapt PanWatch's India data into the TradingAgents data flow.
 
-TradingAgents 上游(0.2.x)默认通过 `tradingagents.dataflows.interface.route_to_vendor`
-把数据请求路由到 yfinance / alpha_vantage 等 vendor。**没有公开 toolkit 注入入口**。
+TradingAgents routes data requests through ``tradingagents.dataflows.interface.route_to_vendor``
+to vendors such as yfinance and has no public injection point, so we monkeypatch
+``route_to_vendor`` (and ``load_ohlcv``). Every ticker is an Indian (NSE/BSE) instrument:
+requests are served from the current task's PanWatch snapshot, i.e. the user's own
+broker data. Upstream vendors are reachable only in development
+(``ALLOW_UNOFFICIAL_DATA`` + a non-production ``APP_ENV``); production returns an explicit
+"data unavailable" note instead (plan item X8).
 
-我们的策略:**monkeypatch route_to_vendor**。当 LangGraph 节点调用 `get_stockstats_*`
-等方法时,我们的 patch 检测 symbol 是 A 股代码(6 位数字)就走 PanWatch Provider,
-否则放行到上游默认 vendor(yfinance 等)。
-
-这避免:
-- TradingAgents 用 yfinance 拉 A 股拉不到(A 股 yfinance 不全)
-- 重复请求外部 API(PanWatch 已有缓存的 quote/kline 直接复用)
-
-也保留:
-- US/HK 走上游 yfinance vendor 不变
-- 用户可关闭 patch 走原生路径
-
-注意:本模块对上游 TradingAgents API 有强依赖,如上游重构 route_to_vendor 接口
-需要同步更新。已通过 `tradingagents` 软依赖 + try/except 优雅降级。
+This depends on TradingAgents internals; a version bump must re-run the adapter tests.
 """
 
 from __future__ import annotations
 
 import contextvars
 import logging
+import os
 import re
 import threading
 from contextlib import contextmanager
@@ -50,9 +43,6 @@ _CANCEL_EVENT: contextvars.ContextVar[threading.Event | None] = contextvars.Cont
 # 所有上游 monkeypatch 和 PanWatch 数据注入都集中在本文件；其它模块只依赖这些入口。
 __all__ = [
     "TradingAgentsCancelled",
-    "hk_symbol_to_yfinance",
-    "is_a_share",
-    "is_hk_share",
     "is_panwatch_routable",
     "panwatch_data_context",
     "patch_route_to_vendor",
@@ -118,69 +108,9 @@ def _emit_toolkit_log(level: str, action: str, method_name: str, symbol: str, **
         getattr(logger, level)(f"[TA toolkit] {action} method={method_name} symbol={symbol} {extra}")
 
 
-def is_a_share(symbol: str) -> bool:
-    """A 股代码判定:6 位纯数字。"""
-    return bool(symbol) and len(symbol) == 6 and symbol.isdigit()
-
-
-def is_hk_share(symbol: str) -> bool:
-    """港股代码判定:5 位纯数字(00241/00700/...)。"""
-    return bool(symbol) and len(symbol) == 5 and symbol.isdigit()
-
-
 def is_panwatch_routable(symbol: str) -> bool:
-    """该 ticker 是否应该走 PanWatch 数据(而不是上游 yfinance)。
-
-    A 股(6 位数字)yfinance 拉不到,港股(5 位数字)yfinance 也要 .HK 后缀,
-    都需要 PanWatch 兜底。美股(字母 ticker)继续走 yfinance。
-    """
-    return is_a_share(symbol) or is_hk_share(symbol)
-
-
-def _looks_like_cn_keyword(symbol: str) -> bool:
-    """含中文字符 = 行业/主题中文检索词(如「汽车行业」)→ 走东财关键词新闻;
-    纯字母 ticker(美股 BABA/NVDA 等)不算 → 应透传上游 Yahoo 个股新闻。"""
-    return any("一" <= ch <= "鿿" for ch in str(symbol or ""))
-
-
-def hk_symbol_to_yfinance(symbol: str) -> str:
-    """港股 PanWatch 5 位代码 → yfinance 格式。
-
-    阿里健康 00241 → 0241.HK
-    腾讯 00700 → 0700.HK
-    yfinance 港股是 4 位数字 + .HK 后缀。
-    """
-    if not is_hk_share(symbol):
-        return symbol
-    # 去掉首位 0(00241 → 0241),保留 4 位
-    s = symbol.lstrip("0")
-    if len(s) > 4:
-        s = s[-4:]
-    return s.zfill(4) + ".HK"
-
-
-def _yfinance_response_has_data(text: str) -> bool:
-    """启发式判断 yfinance 返回是否包含真实数据。
-
-    yfinance 拿不到数据时返回类似:"No data found for symbol 'XXX' between ..."
-    或返回极短的空表头。
-    """
-    if not text:
-        return False
-    t = str(text).strip()
-    if len(t) < 50:
-        return False
-    low = t.lower()
-    if any(kw in low for kw in (
-        "no data found",
-        "no data available",
-        "no_data_available",
-        "no usable market data",
-        "symbol may be delisted",
-        "no information available",
-    )):
-        return False
-    return True
+    """Every ticker is an Indian (NSE/BSE) instrument served from the user's broker."""
+    return bool(symbol and str(symbol).strip())
 
 
 # 上游 tool 文件用 `from tradingagents.dataflows.interface import route_to_vendor`,
@@ -230,171 +160,115 @@ def _cached_symbol() -> str:
     return str(getattr(stock, "symbol", "") or "").strip()
 
 
+def _upstream_allowed() -> bool:
+    """Upstream vendors (Yahoo etc.) only in development, like the yfinance adapter (X8)."""
+    from marketdata.india.yfinance_dev import unofficial_data_allowed
+
+    return unofficial_data_allowed(os.environ)
+
+
+def _upstream_args(symbol: str, args: tuple[Any, ...]) -> list[Any]:
+    """Map the ticker argument to Yahoo's .NS/.BO form for development fallthrough."""
+    from marketdata.india.yfinance_dev import ticker_for
+    from src.platform.marketdata.india_bridge import parse_symbol
+
+    new_args = list(args)
+    try:
+        yahoo = ticker_for(parse_symbol(symbol))
+    except Exception:  # noqa: BLE001 - leave the argument unchanged if it can't be mapped
+        return new_args
+    for i, a in enumerate(new_args):
+        if isinstance(a, str) and a == symbol:
+            new_args[i] = yahoo
+            break
+    return new_args
+
+
 def _patched_route_to_vendor(method_name: str, *args, **kwargs):
-    """模块级无状态 patch:A 股走 PanWatch(读 _cache()),港股先试上游再兜底,其余放行。
+    """Serve TradingAgents' data calls from the user's broker data (India-only).
 
-    与上游 route_to_vendor(method, *args, **kwargs) 完全同签名。上游所有 toolkit
-    都用 positional 传 ticker:
-      route_to_vendor("get_fundamentals", ticker, curr_date)
-      route_to_vendor("get_news", ticker, start_date, end_date)
-      route_to_vendor("get_stock_data", symbol, ...)
-      route_to_vendor("get_global_news", curr_date, look_back_days, limit)  # 无 symbol
+    Same signature as upstream ``route_to_vendor(method, *args, **kwargs)``; tickers are
+    passed positionally (``get_news(ticker, start, end)``, ``get_stock_data(symbol, ...)``,
+    ``get_global_news(curr_date, ...)`` has none). Stateless: the symbol comes from the
+    call and the data from ``_cache()`` (the current task's context), so concurrent tasks
+    never mix.
 
-    无任何实例状态:symbol 来自调用参数,数据来自 _cache()(当前 context),
-    所以多个并发任务共享同一个 _patched 也不会串台。
+    Order: PanWatch snapshot (broker data) -> in development only, upstream vendors with the
+    ticker mapped to Yahoo's .NS/.BO -> otherwise an explicit "data unavailable" note.
+    Production never falls through to Yahoo (plan item X8).
     """
     _raise_if_cancelled()
-    # 不过滤纯数字：A/HK ticker 合法地由数字组成；仅跳过明确的日期参数。
     symbol = _extract_requested_symbol(args, kwargs)
-
-    # 没拿到 symbol 时(如 get_global_news),用 cache 里的标的兜底,
-    # 拦截"全局新闻"类调用避免拉到无关 Yahoo 鞋类/汽油新闻。
-    if not symbol:
-        cached_symbol = _cached_symbol()
-        if is_panwatch_routable(cached_symbol):
-            symbol = cached_symbol
-
-    # 工具请求了另一个 A/HK 标的时，禁止拿当前任务的快照冒充它。
-    # 这条边界比“尽量返回数据”更重要：错误标的数据会让后续 LLM 生成看似完整但完全错误的报告。
     cached_symbol = _cached_symbol()
-    snapshot_symbol_mismatch = bool(
-        symbol
-        and is_panwatch_routable(symbol)
-        and cached_symbol
-        and symbol != cached_symbol
-        and _cache()
-    )
-    if snapshot_symbol_mismatch and is_a_share(symbol):
-        message = _data_unavailable_message(
-            method_name,
-            symbol,
-            RuntimeError(f"PanWatch snapshot is for {cached_symbol}, not {symbol}"),
-        )
-        _emit_toolkit_log(
-            "warning",
-            "DEGRADE",
-            method_name,
-            symbol,
-            reason=f"snapshot symbol mismatch: cached={cached_symbol}",
-            extra_args=_args_summary(args),
-        )
-        return message
+    # Calls without a ticker (e.g. get_global_news) stay on the current stock instead of
+    # pulling unrelated global headlines.
+    if not symbol and cached_symbol:
+        symbol = cached_symbol
 
-    # A 股:yfinance/finnhub 拉不到,直接走 PanWatch
-    if is_a_share(symbol) and _cache():
+    if symbol and _cache():
+        if cached_symbol and symbol != cached_symbol:
+            # Never pass off this task's snapshot as another stock's data.
+            _emit_toolkit_log(
+                "warning", "DEGRADE", method_name, symbol,
+                reason=f"snapshot symbol mismatch: cached={cached_symbol}",
+                extra_args=_args_summary(args),
+            )
+            return _data_unavailable_message(
+                method_name,
+                symbol,
+                RuntimeError(f"PanWatch snapshot is for {cached_symbol}, not {symbol}"),
+            )
         try:
             result = _serve_from_panwatch(method_name, symbol, kwargs, args=args)
             _emit_toolkit_log(
                 "info", "HIT", method_name, symbol,
-                chars=len(result),
-                snippet=str(result)[:4000],
-                source="panwatch",
-                extra_args=_args_summary(args),
+                chars=len(result), snippet=str(result)[:4000],
+                source="panwatch", extra_args=_args_summary(args),
             )
             return result
         except NotImplementedError:
             _emit_toolkit_log(
                 "info", "MISS", method_name, symbol,
-                reason="PanWatch 未实现该 method,放行到上游",
+                reason="PanWatch does not implement this method",
             )
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - one tool's failure must not sink the run
             _emit_toolkit_log("warning", "ERROR", method_name, symbol, error=str(e)[:200])
             return f"[PanWatch error: {e}]"
 
-    # 港股:先把 ticker 转成 yfinance 格式(00241 → 0241.HK)试上游,
-    # yfinance 返回有数据就用,无数据(No data found / 极短返回)fallback 到 PanWatch。
-    if is_hk_share(symbol):
-        yf_symbol = hk_symbol_to_yfinance(symbol)
-        new_args = list(args)
-        # 替换第一个 positional ticker(如果它就是当前 symbol)
-        for i, a in enumerate(new_args):
-            if isinstance(a, str) and a == symbol:
-                new_args[i] = yf_symbol
-                break
-        try:
-            upstream_result = _real_route_to_vendor(method_name, *new_args, **kwargs)
-        except Exception as e:
-            if not _is_market_data_failure(e):
-                raise
-            upstream_result = ""
-            logger.warning(f"[TA toolkit] HK upstream {method_name}({yf_symbol}) 失败: {e}")
-        upstream_str = str(upstream_result) if upstream_result is not None else ""
-
-        if _yfinance_response_has_data(upstream_str):
-            # 走上游 vendor 拿到数据 = PASSTHROUGH,只是 source 标记转格式
-            _emit_toolkit_log(
-                "info", "PASSTHROUGH", method_name, symbol,
-                chars=len(upstream_str),
-                snippet=upstream_str[:4000],
-                source=f"upstream HK(→{yf_symbol})",
-                extra_args=_args_summary(args),
-            )
-            return upstream_result
-
-        # yfinance 没数据 → fallback 到 PanWatch = HIT(PanWatch 兜底提供数据)
-        if _cache() and not snapshot_symbol_mismatch:
-            try:
-                result = _serve_from_panwatch(method_name, symbol, kwargs, args=args)
-                _emit_toolkit_log(
-                    "info", "HIT", method_name, symbol,
-                    chars=len(result),
-                    snippet=str(result)[:4000],
-                    source="panwatch HK fallback",
-                    extra_args=_args_summary(args),
-                )
-                return result
-            except NotImplementedError:
-                pass
-            except Exception as e:
-                _emit_toolkit_log("warning", "ERROR", method_name, symbol, error=str(e)[:200])
-                return f"[PanWatch error: {e}]"
-        # 港股两边都没 = ERROR
+    if not _upstream_allowed():
         _emit_toolkit_log(
-            "warning", "ERROR", method_name, symbol,
-            chars=len(upstream_str), snippet=upstream_str[:4000],
-            source=f"upstream HK(→{yf_symbol}) + panwatch 均空",
-            error="HK no data from either source",
+            "info", "DEGRADE", method_name, symbol or "(none)",
+            reason="upstream vendors are disabled outside development",
+            extra_args=_args_summary(args),
         )
-        return upstream_result
+        return _data_unavailable_message(
+            method_name,
+            symbol,
+            RuntimeError("no broker data for this request; upstream vendors are disabled"),
+        )
 
-    # 行业/主题新闻:get_news 的 query 不是 ticker(中文行业词等) → 实时搜中文新闻(东方财富),
-    # 替代拉不到中文数据的上游 vendor。
-    if symbol and "news" in method_name.lower() and not is_panwatch_routable(symbol) and _looks_like_cn_keyword(symbol):
-        try:
-            result = _serve_keyword_news(symbol)
-            _emit_toolkit_log(
-                "info", "HIT", method_name, symbol,
-                chars=len(result), snippet=result[:4000],
-                source="panwatch keyword news", extra_args=_args_summary(args),
-            )
-            return result
-        except Exception as e:
-            _emit_toolkit_log("warning", "ERROR", method_name, symbol, error=str(e)[:200])
-            return f"[关键词新闻搜索失败「{symbol}」: {e}]"
-
-    # 美股 / 其他:直接走上游 vendor。
-    # 降级兜底:上游某些工具依赖外部 key/服务(FRED 无 key、polymarket SSL、未配置 vendor 等),
-    # 失败会抛异常拖垮整个深度分析。这里捕获并返回空 —— 单个工具缺数据 ≠ 整轮失败。
+    # Development only: upstream vendors, with the ticker mapped to Yahoo's .NS/.BO form.
+    # Upstream tools depend on external keys/services and can fail; a missing tool result
+    # must not fail the whole run.
     try:
-        upstream_result = _real_route_to_vendor(method_name, *args, **kwargs)
+        # Only the task's own stock is a ticker; other first arguments (e.g. the macro
+        # indicator "fed_funds_rate") must reach the vendor unchanged.
+        mapped = _upstream_args(symbol, args) if symbol and symbol == cached_symbol else list(args)
+        upstream_result = _real_route_to_vendor(method_name, *mapped, **kwargs)
     except Exception as e:
         if not _is_market_data_failure(e):
             raise
-        result = _data_unavailable_message(method_name, symbol, e)
-        logger.warning(f"[TA toolkit] 上游 {method_name} 数据不可用: {e}")
+        logger.warning(f"[TA toolkit] upstream {method_name} unavailable: {e}")
         _emit_toolkit_log(
             "warning", "DEGRADE", method_name, symbol or "(none)",
             error=str(e)[:200], extra_args=_args_summary(args),
         )
-        return result
+        return _data_unavailable_message(method_name, symbol, e)
     upstream_str = str(upstream_result) if upstream_result is not None else ""
-    action_label = "PASSTHROUGH" if not is_a_share(symbol) else "FALLTHROUGH"
     _emit_toolkit_log(
-        "info", action_label, method_name, symbol or "(none)",
-        chars=len(upstream_str),
-        snippet=upstream_str[:4000],
-        source="upstream",
-        extra_args=_args_summary(args),
+        "info", "PASSTHROUGH", method_name, symbol or "(none)",
+        chars=len(upstream_str), snippet=upstream_str[:4000],
+        source="upstream (development only)", extra_args=_args_summary(args),
     )
     return upstream_result
 
@@ -488,14 +362,10 @@ _MARKET_SNAPSHOT_IMPORT_SITES = (
 
 
 def _market_for_symbol(symbol: str):
-    """将 TradingAgents 的 ticker 映射到 PanWatch 市场。"""
+    """Map a TradingAgents ticker to a PanWatch market: India is the only one."""
     from src.platform.marketdata.models import MarketCode
 
-    if is_a_share(symbol):
-        return MarketCode.CN
-    if is_hk_share(symbol):
-        return MarketCode.HK
-    return MarketCode.US
+    return MarketCode.IN
 
 
 def _build_panwatch_ohlcv_df(symbol: str, curr_date: str):
@@ -746,18 +616,18 @@ def _stock_meta_header(symbol: str) -> str:
     quote = _cache().get("quote") or {}
 
     name = ""
-    market = "CN"
+    market = "IN"
     industry = ""
     if stock is not None:
         name = getattr(stock, "name", "") or ""
         market_obj = getattr(stock, "market", None)
-        market = getattr(market_obj, "value", str(market_obj or "CN"))
+        market = getattr(market_obj, "value", str(market_obj or "IN"))
     if not name and isinstance(quote, dict):
         name = quote.get("name") or ""
     if isinstance(quote, dict):
         industry = quote.get("industry") or ""
 
-    market_label = {"CN": "中国 A 股", "HK": "港股", "US": "美股"}.get(market, market)
+    market_label = {"IN": "India (NSE/BSE)"}.get(market, market)
     cur_price = _attr(quote, "current_price", "") or _attr(quote, "price", "")
     change_pct = _attr(quote, "change_pct", "")
 
@@ -775,7 +645,7 @@ def _stock_meta_header(symbol: str) -> str:
         except (TypeError, ValueError):
             pass
     lines.append(
-        "  IMPORTANT: This is an A-share / HK / cross-market ticker. DO NOT guess the company "
+        "  IMPORTANT: This is an Indian (NSE/BSE) ticker. DO NOT guess the company "
         "from the ticker code alone — use the name above."
     )
     return "\n".join(lines)
@@ -866,28 +736,6 @@ def _serve_from_panwatch(method_name: str, symbol: str, kwargs: dict, args: tupl
 
     # 未识别:让上游走默认 vendor
     raise NotImplementedError(f"no panwatch backing for {method_name}")
-
-
-def _serve_keyword_news(keyword: str) -> str:
-    """实时按行业/主题关键词搜中文新闻(东方财富搜索),格式化返回。
-
-    用于 get_news 的 query 是行业/主题词(非 ticker,如"汽车行业""新能源汽车")时,
-    替代拉不到中文数据的上游 vendor。md_news_by_keyword 本身同步,直接调用即可。
-    """
-    from src.platform.marketdata.marketdata_client import md_news_by_keyword
-
-    items = md_news_by_keyword(keyword)
-    if not items:
-        return (
-            f"[未搜到「{keyword}」相关行业/主题新闻。请基于个股新闻 + 元信息分析,"
-            "不要编造行业新闻。]"
-        )
-    lines = [f"[行业/主题新闻「{keyword}」(来自东方财富,共 {len(items)} 条)]"]
-    for it in items[:15]:
-        ts = getattr(it, "publish_time", "")
-        title = getattr(it, "title", "") or ""
-        lines.append(f"- [{ts}] {title}")
-    return "\n".join(lines)
 
 
 def _render_single_indicator(indicator: str, symbol: str) -> str:

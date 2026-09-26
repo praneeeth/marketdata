@@ -202,15 +202,11 @@ NEGATIVE_EVENT_KEYWORDS = (
 )
 
 MAX_UNHELD_ACTIVE_BY_MARKET = {
-    "CN": 30,
-    "HK": 20,
-    "US": 20,
+    "IN": 30,
 }
 
 MAX_HIGH_RISK_RATIO_BY_MARKET = {
-    "CN": 0.35,
-    "HK": 0.32,
-    "US": 0.30,
+    "IN": 0.35,
 }
 
 MAX_SINGLE_STRATEGY_SHARE = 0.42
@@ -231,9 +227,9 @@ def _safe_float(value) -> float | None:
 
 def _to_market(value: str | None) -> MarketCode:
     try:
-        return MarketCode((value or "CN").strip().upper())
+        return MarketCode((value or "IN").strip().upper())
     except Exception:
-        return MarketCode.CN
+        return MarketCode.IN
 
 
 def _parse_day(value: str | None) -> date | None:
@@ -399,7 +395,7 @@ def _build_market_regime_rows(
 ) -> dict[str, dict]:
     by_market: dict[str, list[EntryCandidate]] = {}
     for row in candidates:
-        mkt = (row.stock_market or "CN").strip().upper() or "CN"
+        mkt = (row.stock_market or "IN").strip().upper() or "IN"
         by_market.setdefault(mkt, []).append(row)
 
     out: dict[str, dict] = {}
@@ -612,7 +608,7 @@ def _normalize_news_metric(value: dict | None) -> dict:
 def _build_cross_section_features(candidates: list[EntryCandidate]) -> dict[int, dict]:
     by_market: dict[str, list[EntryCandidate]] = {}
     for c in candidates:
-        market = (c.stock_market or "CN").strip().upper() or "CN"
+        market = (c.stock_market or "IN").strip().upper() or "IN"
         by_market.setdefault(market, []).append(c)
 
     out: dict[int, dict] = {}
@@ -714,7 +710,7 @@ def _demote_signal(row: StrategySignalRun, *, reason: str) -> None:
 def _apply_portfolio_constraints(*, rows: list[StrategySignalRun]) -> dict:
     by_market: dict[str, list[StrategySignalRun]] = {}
     for r in rows:
-        m = (r.stock_market or "CN").strip().upper() or "CN"
+        m = (r.stock_market or "IN").strip().upper() or "IN"
         by_market.setdefault(m, []).append(r)
 
     demoted = 0
@@ -1009,7 +1005,7 @@ def _sync_factor_and_risk_snapshots(
     # Risk snapshot by snapshot_date + market
     by_market: dict[str, list[StrategySignalRun]] = {}
     for s in signals:
-        market = (s.stock_market or "CN").strip().upper() or "CN"
+        market = (s.stock_market or "IN").strip().upper() or "IN"
         by_market.setdefault(market, []).append(s)
 
     for market, rows in by_market.items():
@@ -1266,7 +1262,7 @@ def refresh_strategy_signals(
         touched_rows: list[StrategySignalRun] = []
 
         for c in candidates:
-            market = (c.stock_market or "CN").strip().upper() or "CN"
+            market = (c.stock_market or "IN").strip().upper() or "IN"
             weights = weight_cache.get(market)
             if weights is None:
                 weights = get_effective_weight_map(market=market, regime="default")
@@ -1625,7 +1621,7 @@ def evaluate_strategy_outcomes(
                 continue
             key = (
                 (s.stock_symbol or "").strip(),
-                (s.stock_market or "CN").strip().upper(),
+                (s.stock_market or "IN").strip().upper(),
             )
             if key not in kline_cache:
                 try:
@@ -1789,7 +1785,7 @@ def rebalance_strategy_weights(
             default_weight = float(c.get("default_weight", 1.0))
             all_metrics = by_all.get(code, {"sample_size": 0, "wins": 0, "avg_return_pct": 0.0})
             targets.append((code, "ALL", {"default_weight": default_weight, **all_metrics}))
-            for market in ("CN", "HK", "US"):
+            for market in ("IN",):
                 metrics = by_pair.get((code, market), {"sample_size": 0, "wins": 0, "avg_return_pct": 0.0})
                 targets.append((code, market, {"default_weight": default_weight, **metrics}))
 
@@ -2046,7 +2042,7 @@ def get_strategy_stats(*, days: int = 45) -> dict:
             w = int(wins or 0)
             by_market.append(
                 {
-                    "market": (market or "CN").strip().upper(),
+                    "market": (market or "IN").strip().upper(),
                     "total": t,
                     "wins": w,
                     "win_rate": round((w / t * 100.0), 2) if t else 0.0,

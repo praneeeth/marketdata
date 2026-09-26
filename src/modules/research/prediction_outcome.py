@@ -29,9 +29,9 @@ def _parse_day(value: str | None) -> date | None:
 
 def _to_market(value: str | None) -> MarketCode:
     try:
-        return MarketCode((value or "CN").strip().upper())
+        return MarketCode((value or "IN").strip().upper())
     except Exception:
-        return MarketCode.CN
+        return MarketCode.IN
 
 
 def _pick_close_on_or_before(klines: list, target: date) -> float | None:

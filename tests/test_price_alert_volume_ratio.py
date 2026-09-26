@@ -27,7 +27,7 @@ def test_volume_ratio_uses_quote_not_kline(monkeypatch):
         eng._eval_condition(
             {"type": "volume_ratio", "op": ">", "value": 2.0},
             quote,
-            MarketCode.CN,
+            MarketCode.IN,
             "600519",
         )
     )
@@ -53,7 +53,7 @@ def test_volume_ratio_falls_back_to_kline_when_quote_missing(monkeypatch):
         eng._eval_condition(
             {"type": "volume_ratio", "op": ">", "value": 2.0},
             quote,
-            MarketCode.US,
+            MarketCode.IN,
             "AAPL",
         )
     )

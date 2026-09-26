@@ -12,7 +12,6 @@ from src.modules.administration.api import (
     auth,
     channels,
     compliance,
-    datasources,
     health,
     logs,
     mcp,
@@ -29,7 +28,6 @@ from src.modules.automation.api import agents, suggestions, templates
 from src.modules.market.api import (
     brokers,
     global_markets,
-    discovery,
     klines,
     market,
     news,
@@ -73,8 +71,6 @@ app.add_middleware(
 
 # 认证路由（无需登录）
 app.include_router(auth.router, prefix="/api/auth", tags=["auth"])
-# 市场指数（公共数据，无需登录）
-app.include_router(market.router, prefix="/api/market", tags=["market"])
 # Global cues (world indices, crude, gold, USD/INR): public context data, no user data.
 app.include_router(global_markets.router, prefix="/api/market", tags=["market"])
 # Compliance status and disclaimer (status is public; /ack checks login itself)
@@ -84,6 +80,8 @@ app.include_router(brokers.callback_router, prefix="/api/brokers", tags=["broker
 
 # 需要登录的路由
 protected = [Depends(get_current_user)]
+# Indian indices come from the user's own broker connection, so they need login.
+app.include_router(market.router, prefix="/api/market", tags=["market"], dependencies=protected)
 app.include_router(
     stocks.router, prefix="/api/stocks", tags=["stocks"], dependencies=protected
 )
@@ -113,12 +111,6 @@ app.include_router(
 )
 app.include_router(
     channels.router, prefix="/api/channels", tags=["channels"], dependencies=protected
-)
-app.include_router(
-    datasources.router,
-    prefix="/api/datasources",
-    tags=["datasources"],
-    dependencies=protected,
 )
 app.include_router(
     settings.router, prefix="/api/settings", tags=["settings"], dependencies=protected
@@ -160,12 +152,6 @@ app.include_router(
     dependencies=[*protected, Depends(feature_gate(Feature.SUGGESTION_POOL))],
 )
 
-app.include_router(
-    discovery.router,
-    prefix="/api/discovery",
-    tags=["discovery"],
-    dependencies=protected,
-)
 app.include_router(
     price_alerts.router,
     prefix="/api/price-alerts",

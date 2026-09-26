@@ -28,49 +28,22 @@ ARG VERSION=dev
 
 WORKDIR /app
 
-# 安装系统依赖
-# - tzdata: 时区数据（zoneinfo 模块需要）
-# - 中文字体（K线截图需要）
-# - Playwright Chromium 依赖的系统库
+# System dependencies
+# - tzdata: zoneinfo time zones
+# - git: requirements.txt installs tradingagents from a git+https URL
+# - fonts-noto-cjk: reports/PDFs still contain Chinese text until the Phase 4 translation
+# - pango/cairo/gdk-pixbuf/ffi/fontconfig: WeasyPrint PDF export
 RUN apt-get update && apt-get install -y --no-install-recommends \
     tzdata \
-    # git: requirements.txt 中含 git+https 直链(tradingagents)
     git \
-    # 中文字体
     fonts-noto-cjk \
-    # Playwright Chromium 依赖
-    # (这些库缺失会导致 playwright 提示 Host system is missing dependencies)
-    libxcursor1 \
-    libgtk-3-0 \
+    libpango-1.0-0 \
     libpangocairo-1.0-0 \
+    libpangoft2-1.0-0 \
+    libcairo2 \
     libcairo-gobject2 \
     libgdk-pixbuf-2.0-0 \
-    libnss3 \
-    libnspr4 \
-    libatk1.0-0 \
-    libatk-bridge2.0-0 \
-    libcups2 \
-    libdrm2 \
-    libxkbcommon0 \
-    libxcomposite1 \
-    libxdamage1 \
-    libxfixes3 \
-    libxrandr2 \
-    libgbm1 \
-    libasound2 \
-    libpango-1.0-0 \
-    libcairo2 \
-    # 常见的 Chromium 运行时依赖（不同版本/发行版可能会缺）
-    libx11-6 \
-    libx11-xcb1 \
-    libxcb1 \
-    libxext6 \
-    libxi6 \
-    libxrender1 \
-    libxss1 \
-    libxtst6 \
-    libxshmfence1 \
-    libegl1 \
+    libffi-dev \
     libfontconfig1 \
     libglib2.0-0 \
     && rm -rf /var/lib/apt/lists/* \
@@ -84,9 +57,6 @@ COPY packages/ ./packages/
 
 # 安装 Python 依赖
 RUN pip install --no-cache-dir -r requirements.txt
-
-# 注意: Playwright 浏览器将在首次启动时自动安装到 data 目录
-# 这样可以减小镜像体积，并支持跨版本持久化
 
 # 复制后端代码
 COPY src/ ./src/

@@ -1,73 +1,62 @@
-"""股票外部链接生成工具：根据股票代码、市场和用户选择的平台生成行情页 URL。
+"""External quote-page links for a stock, on the platform the user chose in Settings.
 
-全局设置 key: stock_link_platform (默认 xueqiu)
+Setting key: ``stock_link_platform`` (default ``nse``). Symbols are India-only:
+``"INFY"`` means NSE, ``"BSE:500209"`` means BSE, as stored by the watchlist.
 """
 
 from __future__ import annotations
 
 import logging
+from urllib.parse import quote
 
 from src.platform.persistence.database import SessionLocal
 from src.platform.persistence.models import AppSettings
 
 logger = logging.getLogger(__name__)
 
-# 支持的平台 {code: 中文名}
 PLATFORMS = {
-    "xueqiu": "雪球",
+    "nse": "NSE India",
+    "tradingview": "TradingView",
+    "google": "Google Finance",
 }
 
-DEFAULT_PLATFORM = "xueqiu"
+DEFAULT_PLATFORM = "nse"
 SETTING_KEY = "stock_link_platform"
 
 
 def get_platform() -> str:
-    """从 AppSettings 读取当前配置的平台代码。"""
+    """The platform chosen in Settings; unknown or legacy values fall back to NSE."""
     db = SessionLocal()
     try:
         row = db.query(AppSettings).filter(AppSettings.key == SETTING_KEY).first()
-        return (row.value if row and row.value else DEFAULT_PLATFORM)
+        value = row.value if row and row.value else DEFAULT_PLATFORM
+        return value if value in PLATFORMS else DEFAULT_PLATFORM
     finally:
         db.close()
 
 
-def stock_url(symbol: str, market: str, platform: str = "") -> str:
-    """生成股票行情页 URL。
-
-    Args:
-        symbol: 股票代码，如 "002837", "AAPL", "00883"
-        market: 市场代码，如 "CN", "US", "HK"
-        platform: 平台代码，为空时从全局设置读取
-    """
-    if not platform:
-        platform = get_platform()
-
-    m = market.upper()
-
-    if platform == "xueqiu":
-        return _xueqiu_url(symbol, m)
-
-    # 兜底
-    return _xueqiu_url(symbol, m)
+def _split(symbol: str) -> tuple[str, str]:
+    """``"BSE:500209"`` -> ("BSE", "500209"); ``"INFY"`` -> ("NSE", "INFY")."""
+    text = symbol.strip().upper()
+    prefix, sep, rest = text.partition(":")
+    if sep and prefix in ("NSE", "BSE"):
+        return prefix, rest.strip()
+    return "NSE", text
 
 
-def stock_link_markdown(symbol: str, market: str, platform: str = "") -> str:
-    """生成 Markdown 格式的股票链接: [002837.CN](https://xueqiu.com/S/SZ002837)"""
-    code = f"{symbol}.{market}"
-    url = stock_url(symbol, market, platform)
-    return f"[{code}]({url})"
+def stock_url(symbol: str, market: str = "IN", platform: str = "") -> str:
+    """Quote-page URL for ``symbol``. ``market`` is kept for callers; India is the only one."""
+    exchange, code = _split(symbol)
+    platform = platform if platform in PLATFORMS else get_platform()
+    if platform == "tradingview":
+        return f"https://www.tradingview.com/symbols/{exchange}-{quote(code, safe='')}/"
+    if platform == "google" or exchange == "BSE":
+        # NSE's site has no BSE pages; Google Finance covers both (BOM = BSE).
+        suffix = "NSE" if exchange == "NSE" else "BOM"
+        return f"https://www.google.com/finance/quote/{quote(code, safe='')}:{suffix}"
+    return f"https://www.nseindia.com/get-quotes/equity?symbol={quote(code, safe='')}"
 
 
-# ---------------------------------------------------------------------------
-# 各平台 URL 生成
-# ---------------------------------------------------------------------------
-
-def _xueqiu_url(symbol: str, market: str) -> str:
-    if market == "US":
-        return f"https://xueqiu.com/S/{symbol}"
-    if market == "HK":
-        return f"https://xueqiu.com/S/{symbol}"
-    # CN A股
-    from src.platform.marketdata.cn_symbol import get_cn_prefix
-    prefix = get_cn_prefix(symbol, upper=True)
-    return f"https://xueqiu.com/S/{prefix}{symbol}"
+def stock_link_markdown(symbol: str, market: str = "IN", platform: str = "") -> str:
+    """Markdown link such as ``[INFY](https://www.nseindia.com/get-quotes/equity?symbol=INFY)``."""
+    return f"[{symbol}]({stock_url(symbol, market, platform)})"

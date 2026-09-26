@@ -38,7 +38,7 @@ def _to_market(market: str) -> MarketCode:
     try:
         return MarketCode(market)
     except Exception:
-        return MarketCode.CN
+        return MarketCode.IN
 
 
 def _is_trading_time(market: MarketCode) -> bool:

@@ -24,14 +24,11 @@ def classify_hint(category: str, error: str | None) -> str:
     """错误 → 中文 actionable 修复提示。覆盖自托管最常见的代理/鉴权/配置坑。"""
     e = (error or "").lower()
     if category == "datasource":
-        if "database is locked" in e:
-            return "SQLite 被锁:并发调度叠加慢代理所致,降低并发或加快/关闭代理。"
-        if any(k in e for k in (
-            "server disconnected", "timeout", "timed out", "connect", "proxy",
-            "ssl", "remote end closed", "read timed out", "connection reset",
-        )):
-            return "行情/新闻接口连接失败:所有请求走 http_proxy 设置的系统代理,检查该代理能否代出目标域名(国内接口需 CN 出口、Yahoo 需境外),或本机被 MITM 代理拦截需换可信出口。"
-        return "数据源不通:打开数据源配置页看详细日志,确认 provider 与接口可达。"
+        if "expired" in e or "not logged in" in e:
+            return "Broker session expired: log in again under Data sources (Kite and Upstox sessions end daily)."
+        if "could not be read" in e or "credentials_master_key" in e:
+            return "Stored broker keys can't be decrypted: check CREDENTIALS_MASTER_KEY, or enter the keys again."
+        return "Broker not connected: open Data sources, save your API keys and log in."
     if category == "ai":
         if any(k in e for k in ("401", "unauthorized", "invalid_api_key", "api key", "incorrect api key", "authentication")):
             return "AI 鉴权失败:API Key 不对或失效,检查服务商 api_key。"
@@ -79,20 +76,18 @@ def _status_for(success: bool, latency_ms: int) -> str:
     return "slow" if latency_ms > SLOW_MS else "ok"
 
 
-async def probe_datasource(source) -> dict:
-    """复用 collector manager.test_source。"""
-    from src.modules.market.data_collector import get_collector_manager
-
-    t0 = time.monotonic()
-    try:
-        result = await get_collector_manager().test_source(source)
-        latency = int(getattr(result, "duration_ms", None) or (time.monotonic() - t0) * 1000)
-        return _item("datasource", f"ds:{source.id}", source.name,
-                     _status_for(bool(result.success), latency), latency,
-                     None if result.success else (result.error or "测试未通过"))
-    except Exception as e:
-        return _item("datasource", f"ds:{source.id}", source.name, "fail",
-                     int((time.monotonic() - t0) * 1000), str(e))
+async def probe_broker(connection: dict) -> dict:
+    """A broker connection's stored status. No network call, so no broker rate limit is used."""
+    status = connection.get("status")
+    key = f"broker:{connection.get('provider')}"
+    name = connection.get("label") or connection.get("provider") or "broker"
+    if status == "connected":
+        return _item("datasource", key, name, "ok", 0)
+    error = {
+        "expired": "session expired",
+        "error": connection.get("last_error") or "login failed",
+    }.get(str(status), "not logged in")
+    return _item("datasource", key, name, "fail", 0, error)
 
 
 async def probe_ai_model(model, service) -> dict:
@@ -222,16 +217,18 @@ async def _guard(coro, fallback: dict) -> dict:
 
 def _enumerate(db, include_system: bool = True) -> list[dict]:
     """枚举所有待检项(身份 + ORM 引用),不探测。include_system 加 DB/磁盘/调度 系统基础项。"""
-    from src.platform.persistence.models import AIModel, AIService, DataSource, NotifyChannel
+    from src.modules.market.brokers import get_broker_manager
+    from src.platform.persistence.models import AIModel, AIService, NotifyChannel
 
     targets: list[dict] = []
     if include_system:
         targets.append({"category": "system", "key": "sys:db", "name": "数据库", "group": None, "_kind": "db"})
         targets.append({"category": "system", "key": "sys:disk", "name": "磁盘空间", "group": None, "_kind": "disk"})
         targets.append({"category": "system", "key": "sys:scheduler", "name": "调度器", "group": None, "_kind": "sched"})
-    for src in db.query(DataSource).filter(DataSource.enabled.is_(True)).all():
-        targets.append({"category": "datasource", "key": f"ds:{src.id}", "name": src.name,
-                        "group": None, "_kind": "ds", "_obj": src})
+    for conn in get_broker_manager().connections(db):
+        if conn.get("enabled"):
+            targets.append({"category": "datasource", "key": f"broker:{conn['provider']}",
+                            "name": conn["label"], "group": None, "_kind": "broker", "_obj": conn})
     for model in db.query(AIModel).all():
         service = db.query(AIService).filter(AIService.id == model.service_id).first()
         if not service:
@@ -257,8 +254,8 @@ def _probe_for(t: dict, notify_send: bool):
         return probe_disk()
     if kind == "sched":
         return probe_scheduler()
-    if kind == "ds":
-        return probe_datasource(t["_obj"])
+    if kind == "broker":
+        return probe_broker(t["_obj"])
     if kind == "ai":
         return probe_ai_model(t["_obj"], t["_service"])
     return probe_notify_channel(t["_obj"], send=notify_send)

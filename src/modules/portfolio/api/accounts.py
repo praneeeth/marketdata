@@ -18,78 +18,10 @@ from src.platform.marketdata.models import MarketCode
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
-# 汇率缓存
-_hkd_rate_cache: dict = {"rate": 0.92, "ts": 0}  # 港币默认汇率 0.92
-_usd_rate_cache: dict = {"rate": 7.25, "ts": 0}  # 美元默认汇率 7.25
-EXCHANGE_RATE_TTL = 3600  # 1 小时缓存
 
 
-def get_hkd_cny_rate() -> float:
-    """获取港币兑人民币汇率"""
-    global _hkd_rate_cache
-
-    # 检查缓存
-    if time.time() - _hkd_rate_cache["ts"] < EXCHANGE_RATE_TTL:
-        return _hkd_rate_cache["rate"]
-
-    # 从新浪财经获取汇率
-    try:
-        resp = httpx.get(
-            "https://hq.sinajs.cn/list=fx_shkdcny",
-            timeout=5,
-            headers={
-                "User-Agent": "Mozilla/5.0",
-                "Referer": "https://finance.sina.com.cn/"
-            }
-        )
-        # 格式: var hq_str_fx_shkdcny="时间,汇率,..."
-        text = resp.text
-        if "=" in text and "," in text:
-            data = text.split('"')[1]
-            parts = data.split(",")
-            if len(parts) > 1:
-                rate = float(parts[1])
-                _hkd_rate_cache = {"rate": rate, "ts": time.time()}
-                logger.info(f"更新港币汇率: {rate}")
-                return rate
-    except Exception as e:
-        logger.warning(f"获取港币汇率失败，使用缓存: {e}")
-
-    return _hkd_rate_cache["rate"]
 
 
-def get_usd_cny_rate() -> float:
-    """获取美元兑人民币汇率"""
-    global _usd_rate_cache
-
-    # 检查缓存
-    if time.time() - _usd_rate_cache["ts"] < EXCHANGE_RATE_TTL:
-        return _usd_rate_cache["rate"]
-
-    # 从新浪财经获取汇率
-    try:
-        resp = httpx.get(
-            "https://hq.sinajs.cn/list=fx_susdcny",
-            timeout=5,
-            headers={
-                "User-Agent": "Mozilla/5.0",
-                "Referer": "https://finance.sina.com.cn/"
-            }
-        )
-        # 格式: var hq_str_fx_susdcny="时间,汇率,..."
-        text = resp.text
-        if "=" in text and "," in text:
-            data = text.split('"')[1]
-            parts = data.split(",")
-            if len(parts) > 1:
-                rate = float(parts[1])
-                _usd_rate_cache = {"rate": rate, "ts": time.time()}
-                logger.info(f"更新美元汇率: {rate}")
-                return rate
-    except Exception as e:
-        logger.warning(f"获取美元汇率失败，使用缓存: {e}")
-
-    return _usd_rate_cache["rate"]
 
 
 # ========== Pydantic Models ==========
@@ -432,10 +364,6 @@ def get_portfolio_summary(
     # 获取实时行情（可选）
     quotes = _fetch_quotes_for_stocks(stocks) if include_quotes else {}
 
-    # 获取汇率
-    hkd_rate = get_hkd_cny_rate()
-    usd_rate = get_usd_cny_rate()
-
     # 计算各账户持仓
     account_summaries = []
     grand_total_market_value = 0
@@ -463,38 +391,26 @@ def get_portfolio_summary(
             change_pct = quote["change_pct"] if quote else None
             prev_close = quote.get("prev_close") if quote else None
 
-            # 根据市场确定汇率
-            is_foreign = stock.market in ("HK", "US")
-            if stock.market == "HK":
-                rate = hkd_rate
-            elif stock.market == "US":
-                rate = usd_rate
-            else:
-                rate = 1.0
-
             market_value = None
-            market_value_cny = None
             pnl = None
             pnl_pct = None
             daily_pnl = None
             daily_pnl_pct = None
 
             if current_price is not None and prev_close and prev_close > 0:
-                daily_pnl = (current_price - prev_close) * pos.quantity * rate
+                daily_pnl = (current_price - prev_close) * pos.quantity
                 daily_pnl_pct = (current_price - prev_close) / prev_close * 100
                 acc_daily_pnl += daily_pnl
 
-            cost = pos.cost_price * pos.quantity
-            cost_cny = cost * rate  # 假设成本价也是原币种
-            acc_cost += cost_cny
+            cost = pos.cost_price * pos.quantity  # all positions are in INR
+            acc_cost += cost
 
             if current_price is not None:
-                market_value = current_price * pos.quantity  # 原币种市值
-                market_value_cny = market_value * rate  # 人民币市值
-                pnl = market_value_cny - cost_cny
-                pnl_pct = (pnl / cost_cny * 100) if cost_cny > 0 else 0
+                market_value = current_price * pos.quantity
+                pnl = market_value - cost
+                pnl_pct = (pnl / cost * 100) if cost > 0 else 0
 
-                acc_market_value += market_value_cny
+                acc_market_value += market_value
 
             positions_data.append({
                 "id": pos.id,
@@ -508,15 +424,12 @@ def get_portfolio_summary(
                 "sort_order": pos.sort_order or 0,
                 "trading_style": pos.trading_style,
                 "current_price": current_price,
-                "current_price_cny": round(current_price * rate, 2) if current_price else None,
                 "change_pct": change_pct,
                 "market_value": round(market_value, 2) if market_value else None,
-                "market_value_cny": round(market_value_cny, 2) if market_value_cny else None,
                 "pnl": round(pnl, 2) if pnl else None,
                 "pnl_pct": round(pnl_pct, 2) if pnl_pct else None,
                 "daily_pnl": round(daily_pnl, 2) if daily_pnl is not None else None,
                 "daily_pnl_pct": round(daily_pnl_pct, 2) if daily_pnl_pct is not None else None,
-                "exchange_rate": rate if is_foreign else None,
             })
 
         if include_quotes:
@@ -574,10 +487,6 @@ def get_portfolio_summary(
             "total_daily_pnl": round(grand_daily_pnl, 2),
             "available_funds": round(grand_available_funds, 2),
             "total_assets": round(grand_total_assets, 2),
-        },
-        "exchange_rates": {
-            "HKD_CNY": hkd_rate,
-            "USD_CNY": usd_rate,
         },
         "quotes": quotes_dict,  # 可选：返回行情数据
     }
@@ -637,7 +546,6 @@ def _gather_holdings(db: Session) -> list[dict]:
     stocks = db.query(Stock).filter(Stock.id.in_(stock_ids)).all() if stock_ids else []
     stock_map = {s.id: s for s in stocks}
     quotes = _fetch_quotes_for_stocks(stocks) if stocks else {}
-    hkd, usd = get_hkd_cny_rate(), get_usd_cny_rate()
 
     out: list[dict] = []
     seen: dict[tuple[str, str], dict] = {}
@@ -646,27 +554,26 @@ def _gather_holdings(db: Session) -> list[dict]:
             stock = stock_map.get(pos.stock_id)
             if not stock:
                 continue
-            rate = hkd if stock.market == "HK" else usd if stock.market == "US" else 1.0
             quote = quotes.get(stock.symbol)
             price = quote.get("current_price") if quote else None
-            cost_cny = pos.cost_price * pos.quantity * rate
-            mv_cny = (price * pos.quantity * rate) if price else cost_cny
-            pnl_cny = (mv_cny - cost_cny) if price else 0.0
+            cost_inr = pos.cost_price * pos.quantity
+            mv_inr = (price * pos.quantity) if price else cost_inr
+            pnl_inr = (mv_inr - cost_inr) if price else 0.0
             key = (stock.market, stock.symbol)
             if key in seen:  # 多账户同一标的合并
                 h = seen[key]
                 h["quantity"] += pos.quantity
-                h["market_value"] += mv_cny
-                h["unrealized_pnl"] += pnl_cny
+                h["market_value"] += mv_inr
+                h["unrealized_pnl"] += pnl_inr
             else:
                 h = {
                     "symbol": stock.symbol,
                     "market": stock.market,
                     "name": stock.name,
                     "quantity": pos.quantity,
-                    "fx": rate,
-                    "market_value": mv_cny,
-                    "unrealized_pnl": pnl_cny,
+                    "fx": 1.0,
+                    "market_value": mv_inr,
+                    "unrealized_pnl": pnl_inr,
                     "strategy_code": pos.trading_style or "",
                 }
                 seen[key] = h
@@ -756,7 +663,7 @@ def portfolio_todos(db: Session = Depends(get_db)):
             {
                 "type": "alert_expiring",
                 "symbol": stock.symbol if stock else "",
-                "market": stock.market if stock else "CN",
+                "market": stock.market if stock else "IN",
                 "message": f"{(r.name or '提醒')} 即将到期",
             }
         )

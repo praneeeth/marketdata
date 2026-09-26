@@ -45,7 +45,7 @@ def _format_datetime(dt) -> str:
 
 def _to_market(market: str) -> str:
     m = (market or "ALL").strip().upper()
-    return m if m in ("ALL", "CN", "HK", "US") else "ALL"
+    return m if m in ("ALL", "IN") else "ALL"
 
 
 def _action_priority(item: dict) -> int:
@@ -62,7 +62,7 @@ def _action_priority(item: dict) -> int:
 def _group_signals(items: list[dict]) -> list[dict]:
     grouped: dict[str, dict] = {}
     for row in items or []:
-        key = f"{row.get('stock_market') or 'CN'}:{row.get('stock_symbol') or ''}"
+        key = f"{row.get('stock_market') or 'IN'}:{row.get('stock_symbol') or ''}"
         if ":" == key[-1]:
             continue
         prev = grouped.get(key)
@@ -145,7 +145,7 @@ def _load_latest_insights(db: Session) -> list[dict]:
 
 @router.get("/overview")
 def get_dashboard_overview(
-    market: str = Query("ALL", description="市场过滤: ALL/CN/HK/US"),
+    market: str = Query("ALL", description="Market filter: ALL or IN"),
     action_limit: int = Query(6, ge=3, le=20),
     risk_limit: int = Query(6, ge=3, le=20),
     days: int = Query(45, ge=7, le=365),
@@ -235,13 +235,8 @@ def get_dashboard_overview(
     by_market: dict[str, dict] = {}
     invested_cost = 0.0
     for pos, stock in positions:
-        market_code = (stock.market or "CN").strip().upper() or "CN"
-        fx = 1.0
-        if market_code == "HK":
-            fx = 0.92
-        elif market_code == "US":
-            fx = 7.25
-        cost = float(pos.cost_price or 0.0) * float(pos.quantity or 0) * fx
+        market_code = (stock.market or "IN").strip().upper() or "IN"
+        cost = float(pos.cost_price or 0.0) * float(pos.quantity or 0)  # INR
         invested_cost += cost
         bucket = by_market.setdefault(
             market_code,
@@ -403,7 +398,7 @@ class CurateCandidate(BaseModel):
     type: str
     symbol: str = ""
     name: str = ""
-    market: str = "CN"
+    market: str = "IN"
     signal: str = ""
     change_pct: float | None = None
 

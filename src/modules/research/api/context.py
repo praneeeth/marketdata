@@ -77,7 +77,7 @@ class AgentPredictionOutcomeResponse(BaseModel):
 @router.get("/snapshots/{symbol}", response_model=list[StockContextSnapshotResponse])
 def list_stock_context_snapshots(
     symbol: str,
-    market: str = "CN",
+    market: str = "IN",
     context_type: str | None = None,
     days: int = Query(default=30, ge=1, le=365),
     limit: int = Query(default=30, ge=1, le=200),

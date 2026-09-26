@@ -133,7 +133,7 @@ def _start_refresh_job(**kwargs) -> tuple[bool, dict]:
 class CandidateFeedbackIn(BaseModel):
     snapshot_date: str = ""
     stock_symbol: str
-    stock_market: str = "CN"
+    stock_market: str = "IN"
     useful: bool = True
     candidate_source: str = "watchlist"
     strategy_tags: list[str] = Field(default_factory=list)
@@ -142,7 +142,7 @@ class CandidateFeedbackIn(BaseModel):
 
 @router.get("/entry-candidates")
 def get_entry_candidates(
-    market: str = Query("", description="市场代码: CN/HK/US"),
+    market: str = Query("", description="Market: IN (NSE/BSE)"),
     status: str = Query("active", description="状态: active/inactive/all"),
     min_score: float = Query(0, ge=0, le=100),
     limit: int = Query(20, ge=1, le=500),
@@ -221,7 +221,7 @@ def get_strategy_catalog(enabled_only: bool = Query(True, description="仅返回
 
 @router.get("/strategy-signals")
 def get_strategy_signal_list(
-    market: str = Query("", description="市场代码: CN/HK/US"),
+    market: str = Query("", description="Market: IN (NSE/BSE)"),
     status: str = Query("all", description="状态: active/inactive/all"),
     min_score: float = Query(0, ge=0, le=100),
     limit: int = Query(50, ge=1, le=500),
@@ -253,7 +253,7 @@ def get_strategy_signal_list(
 @router.get("/strategy-regimes")
 def get_strategy_regimes(
     snapshot_date: str = Query("", description="快照日期 YYYY-MM-DD"),
-    market: str = Query("", description="市场过滤: CN/HK/US"),
+    market: str = Query("", description="Market filter: IN (NSE/BSE)"),
     limit: int = Query(100, ge=1, le=1000),
 ):
     return list_market_regime_snapshots(
@@ -266,7 +266,7 @@ def get_strategy_regimes(
 @router.get("/strategy-risk-snapshots")
 def get_strategy_risk_snapshots(
     snapshot_date: str = Query("", description="快照日期 YYYY-MM-DD"),
-    market: str = Query("", description="市场过滤: CN/HK/US"),
+    market: str = Query("", description="Market filter: IN (NSE/BSE)"),
     limit: int = Query(100, ge=1, le=1000),
 ):
     return list_portfolio_risk_snapshots(

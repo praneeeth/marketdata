@@ -37,7 +37,7 @@ from src.modules.automation.tradingagents.decision import (
     map_state_to_result,
 )
 from src.modules.automation.tradingagents.toolkit_adapter import (
-    is_a_share,
+    is_panwatch_routable,
     panwatch_data_context,
     patch_route_to_vendor,
 )
@@ -303,14 +303,13 @@ class TestCostTracker(unittest.TestCase):
 
 
 class TestToolkitAdapter(unittest.TestCase):
-    def test_is_a_share_six_digits(self):
-        """A 股识别 — 6 位纯数字才算"""
-        self.assertTrue(is_a_share("600519"))
-        self.assertTrue(is_a_share("000001"))
-        self.assertFalse(is_a_share("AAPL"))
-        self.assertFalse(is_a_share("00700"))  # 港股 5 位
-        self.assertFalse(is_a_share("12345"))   # 5 位
-        self.assertFalse(is_a_share(""))
+    def test_every_ticker_is_served_from_the_broker(self):
+        """India-only: any real ticker routes to PanWatch (the user's broker data)."""
+        self.assertTrue(is_panwatch_routable("INFY"))
+        self.assertTrue(is_panwatch_routable("BSE:500209"))
+        self.assertTrue(is_panwatch_routable("NIFTY 50"))
+        self.assertFalse(is_panwatch_routable(""))
+        self.assertFalse(is_panwatch_routable("   "))
 
     def test_panwatch_data_context_isolation(self):
         """数据上下文 — 进入/退出时不污染外部(基于 ContextVar)"""
@@ -563,7 +562,7 @@ class TestPortfolioContext(unittest.TestCase):
                         stock_id=1,
                         symbol="600519",
                         name="贵州茅台",
-                        market=MarketCode.CN,
+                        market=MarketCode.IN,
                         cost_price=1280.0,
                         quantity=100,
                         trading_style="long",
@@ -574,7 +573,7 @@ class TestPortfolioContext(unittest.TestCase):
                         stock_id=2,
                         symbol="AAPL",
                         name="Apple",
-                        market=MarketCode.US,
+                        market=MarketCode.IN,
                         cost_price=200.0,
                         quantity=5,
                     ),
@@ -620,7 +619,7 @@ class TestPortfolioContext(unittest.TestCase):
                     stock_id=1,
                     symbol="AAPL",
                     name="Apple",
-                    market=MarketCode.US,
+                    market=MarketCode.IN,
                     cost_price=200.0,
                     quantity=-5,
                 )],
@@ -739,52 +738,36 @@ class TestPortfolioContext(unittest.TestCase):
 
 
 class TestAgentCollect(unittest.IsolatedAsyncioTestCase):
-    async def test_collect_from_marketdata_package(self):
-        """collect() — 走 marketdata 包(quote→dict / capital_flow→list)"""
-        from datetime import datetime as _dt
-
-        from src.modules.automation.tradingagents import agent as agent_module
-        from marketdata import Bar, CapitalFlow, EventItem, Quote
+    async def test_collect_uses_the_users_broker_data(self):
+        """collect(): quote and daily candles from the India bridge; no China-only sources."""
+        from src.modules.automation.tradingagents import agent as agent_module  # noqa: F401
+        from src.platform.marketdata import india_bridge
+        from src.platform.marketdata.india_bridge import DailyBar
 
         agent = TradingAgentsAgent()
-
         stock = MagicMock()
-        stock.symbol = "600519"
-        stock.name = "贵州茅台"
+        stock.symbol = "INFY"
+        stock.name = "Infosys"
         stock.market = MagicMock()
-        stock.market.value = "CN"
-
+        stock.market.value = "IN"
         context = MagicMock()
         context.watchlist = [stock]
 
-        fake_quote = Quote(symbol="600519", market="CN", current_price=1332.95, name="贵州茅台")
-        fake_bar = Bar(date="2026-05-15", open=1300.0, close=1332.95, high=1340.0, low=1290.0, volume=1000.0)
-        fake_flow = CapitalFlow(symbol="600519", name="贵州茅台", main_net_inflow=1000000.0)
-        fake_event = EventItem(
-            source="em", external_id="1", event_type="announcement", title="测试公告",
-            publish_time=_dt.now(), symbols=["600519"], importance=1, url="",
-        )
+        bars = [DailyBar(date="2026-09-22", open=1400.0, close=1412.95, high=1420.0, low=1395.0, volume=1000.0)]
+        fake_bridge = MagicMock()
+        fake_bridge.quote_rows = MagicMock(return_value=[{"symbol": "INFY", "current_price": 1412.95}])
+        fake_bridge.daily_bars = MagicMock(return_value=bars)
 
-        fake_md = MagicMock()
-        fake_md.quotes = MagicMock(return_value=[fake_quote])
-        fake_md.klines = MagicMock(return_value=[fake_bar])
-        fake_md.capital_flow = MagicMock(return_value=fake_flow)
-        fake_md.events = MagicMock(return_value=[fake_event])
-
-        with patch.object(agent_module, "get_market_data", lambda: fake_md):
+        with patch.object(india_bridge, "get_india_bridge", lambda: fake_bridge):
             data = await agent.collect(context)
 
         self.assertEqual(data["stock"], stock)
-        self.assertIsInstance(data["quote"], dict)
-        self.assertEqual(data["quote"]["current_price"], 1332.95)
-        self.assertIsInstance(data["capital_flow"], list)
-        self.assertEqual(len(data["capital_flow"]), 1)
-        self.assertEqual(data["capital_flow"][0], fake_flow)
-        self.assertIsInstance(data["klines"], list)
-        self.assertEqual(data["klines"], [fake_bar])
-        fake_md.klines.assert_called_once_with("600519", market="CN", days=750)
-        self.assertIsInstance(data["events"], list)
-        self.assertEqual(data["events"], [fake_event])
+        self.assertEqual(data["quote"]["current_price"], 1412.95)
+        self.assertEqual([k.close for k in data["klines"]], [1412.95])
+        fake_bridge.daily_bars.assert_called_once_with("INFY", 750)
+        self.assertEqual(data["capital_flow"], [])
+        self.assertEqual(data["events"], [])
+        self.assertIsNone(data["financial"])
         self.assertIn("fetched_at", data)
 
 

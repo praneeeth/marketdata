@@ -724,7 +724,7 @@ class AssistantService:
                 "summary": f"将调用 {pending.tool_name}。",
             }
 
-        market = str(arguments.get("market") or "CN").upper()
+        market = str(arguments.get("market") or "IN").upper()
         symbol = str(arguments.get("symbol") or "").upper()
         direction = "≥" if arguments.get("direction") == "above" else "≤"
         target_price = arguments.get("target_price")

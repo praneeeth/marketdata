@@ -12,7 +12,7 @@ router = APIRouter()
 
 class KlineItem(BaseModel):
     symbol: str = Field(..., description="股票代码")
-    market: str = Field(..., description="市场: CN/HK/US")
+    market: str = Field(..., description="Market: IN (NSE/BSE)")
     days: int | None = Field(default=60, description="K线天数")
     interval: str | None = Field(default="1d", description="周期: 1d/1w/1m")
 
@@ -23,7 +23,7 @@ class KlineBatchRequest(BaseModel):
 
 class KlineSummaryItem(BaseModel):
     symbol: str = Field(..., description="股票代码")
-    market: str = Field(..., description="市场: CN/HK/US")
+    market: str = Field(..., description="Market: IN (NSE/BSE)")
 
 
 class KlineSummaryBatchRequest(BaseModel):
@@ -101,7 +101,7 @@ def _aggregate_klines(klines, interval: str) -> list:
 
 
 @router.get("/{symbol}")
-def get_klines(symbol: str, market: str = "CN", days: int = 60, interval: str = "1d"):
+def get_klines(symbol: str, market: str = "IN", days: int = 60, interval: str = "1d"):
     """获取单只股票K线数据"""
     market_code = _parse_market(market)
     collector = KlineCollector(market_code)
@@ -144,7 +144,7 @@ def get_klines_batch(payload: KlineBatchRequest):
 
 
 @router.get("/{symbol}/summary")
-def get_kline_summary(symbol: str, market: str = "CN"):
+def get_kline_summary(symbol: str, market: str = "IN"):
     """获取单只股票K线摘要"""
     market_code = _parse_market(market)
     collector = KlineCollector(market_code)

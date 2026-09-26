@@ -5,40 +5,38 @@ from zoneinfo import ZoneInfo
 
 
 class MarketCode(str, Enum):
-    CN = "CN"  # A股
-    HK = "HK"  # 港股
-    US = "US"  # 美股
-    IN = "IN"  # India: NSE/BSE via the user's broker (India fork, Phase 2)
+    """India-only fork: NSE/BSE is the only market (owner decision 2026-09-25)."""
+
+    IN = "IN"
 
 
 @dataclass
 class TradingSession:
-    """一个交易时段"""
+    """One trading session."""
     start: time
     end: time
 
 
 @dataclass
 class MarketDef:
-    """市场定义"""
+    """A market definition."""
     code: MarketCode
     name: str
     timezone: str
     sessions: list[TradingSession]
-    symbol_pattern: str  # 正则，用于校验股票代码格式
+    symbol_pattern: str  # regex that valid symbols match
 
     def get_tz(self) -> ZoneInfo:
         return ZoneInfo(self.timezone)
 
     def is_trading_time(self, dt: datetime | None = None) -> bool:
-        """判断给定时间是否在交易时段内"""
+        """Whether ``dt`` (default: now) falls inside a trading session."""
         if dt is None:
             dt = datetime.now(self.get_tz())
         else:
             dt = dt.astimezone(self.get_tz())
 
-        # 非交易日(周末 / A股法定节假日)一律不交易。
-        # 延迟导入:trading_calendar 依赖本模块的 MarketCode/MARKETS。
+        # Closed on non-trading days. Imported lazily to avoid an import cycle.
         from src.platform.scheduling.trading_calendar import is_trading_day
 
         if not is_trading_day(self.code, dt.date()):
@@ -51,37 +49,7 @@ class MarketDef:
         )
 
 
-# 预定义市场
 MARKETS: dict[MarketCode, MarketDef] = {
-    MarketCode.CN: MarketDef(
-        code=MarketCode.CN,
-        name="A股",
-        timezone="Asia/Shanghai",
-        sessions=[
-            TradingSession(time(9, 30), time(11, 30)),
-            TradingSession(time(13, 0), time(15, 0)),
-        ],
-        symbol_pattern=r"^[036]\d{5}$",
-    ),
-    MarketCode.HK: MarketDef(
-        code=MarketCode.HK,
-        name="港股",
-        timezone="Asia/Hong_Kong",
-        sessions=[
-            TradingSession(time(9, 30), time(12, 0)),
-            TradingSession(time(13, 0), time(16, 0)),
-        ],
-        symbol_pattern=r"^\d{5}$",
-    ),
-    MarketCode.US: MarketDef(
-        code=MarketCode.US,
-        name="美股",
-        timezone="America/New_York",
-        sessions=[
-            TradingSession(time(9, 30), time(16, 0)),
-        ],
-        symbol_pattern=r"^[A-Z]{1,5}$",
-    ),
     # Normal session only; pre-open, special sessions and the NSE holiday calendar
     # arrive in Phase 3. Until then only weekends are treated as closed.
     MarketCode.IN: MarketDef(

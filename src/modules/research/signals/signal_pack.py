@@ -71,43 +71,9 @@ class SignalPackBuilder:
     def _source_policy(
         source_type: str, *, default_providers: list[str]
     ) -> tuple[list[tuple[str, dict]], bool]:
-        """Return (providers, disabled).
-
-        - If DB has no sources of this type: use defaults.
-        - If DB has sources but all are disabled: disabled=True.
-        - If some enabled: return them ordered by priority.
-        """
-
-        try:
-            from src.platform.persistence.database import SessionLocal
-            from src.platform.persistence.models import DataSource
-
-            db = SessionLocal()
-            try:
-                total = (
-                    db.query(DataSource.id)
-                    .filter(DataSource.type == source_type)
-                    .count()
-                )
-                if total == 0:
-                    return [(p, {}) for p in default_providers], False
-                enabled = (
-                    db.query(DataSource)
-                    .filter(DataSource.type == source_type, DataSource.enabled == True)
-                    .order_by(DataSource.priority)
-                    .all()
-                )
-                if not enabled:
-                    return [], True
-                return [
-                    ((r.provider or "").strip(), (r.config or {}))
-                    for r in enabled
-                    if (r.provider or "").strip()
-                ], False
-            finally:
-                db.close()
-        except Exception:
-            return [(p, {}) for p in default_providers], False
+        """Return (providers, disabled). The upstream per-type data-source table was
+        removed with the Chinese vendors, so the defaults always apply."""
+        return [(p, {}) for p in default_providers], False
 
     @staticmethod
     def _now_iso() -> str:
@@ -140,18 +106,12 @@ class SignalPackBuilder:
         computed_at = self._now_iso()
         symbol_set = {s for s, _, _ in symbols}
 
+        # Quotes and K-lines come from the user's broker via the India bridge.
         quote_providers, quote_disabled = self._source_policy(
-            "quote", default_providers=["tencent"]
+            "quote", default_providers=["broker"]
         )
         kline_providers, kline_disabled = self._source_policy(
-            "kline", default_providers=["tencent"]
-        )
-        flow_providers, flow_disabled = self._source_policy(
-            "capital_flow", default_providers=["eastmoney"]
-        )
-
-        events_providers, events_disabled = self._source_policy(
-            "events", default_providers=["eastmoney"]
+            "kline", default_providers=["broker"]
         )
 
         # 1) Quotes (batch per market)
@@ -173,7 +133,7 @@ class SignalPackBuilder:
                         if not remaining:
                             break
                         try:
-                            if provider != "tencent":
+                            if provider != "broker":
                                 logger.info(
                                     f"SignalPack quote 未支持 provider={provider}，跳过"
                                 )
@@ -223,7 +183,7 @@ class SignalPackBuilder:
                         last_err = None
                         for provider, cfg in kline_providers:
                             try:
-                                if provider == "tencent":
+                                if provider == "broker":
                                     collector = KlineCollector(market)
                                 else:
                                     logger.info(
@@ -281,118 +241,18 @@ class SignalPackBuilder:
                         }
                     )
 
-        # 4) Capital flow (CN only)
+        # 4) Capital flow: the upstream feature was China-only (Eastmoney) and was removed.
+        # Indian FII/DII flows depend on the sourcing decision in open question Q8.
         flow_map: dict[str, dict] = {}
-        if include_capital_flow:
-            cn_symbols = [sym for sym, market, _ in symbols if market == MarketCode.CN]
-            if cn_symbols:
-                if flow_disabled:
-                    for sym in cn_symbols:
-                        key = (MarketCode.CN, sym)
-                        self._flow_cache[key] = {"error": "资金流向数据源已禁用"}
-                        self._flow_source_cache[key] = "disabled"
-                        flow_map[sym] = self._flow_cache[key]
-                else:
-                    try:
-                        from src.platform.marketdata.collectors.capital_flow_collector import (
-                            CapitalFlowCollector,
-                        )
 
-                        collector = CapitalFlowCollector(MarketCode.CN)
-                        for sym in cn_symbols:
-                            key = (MarketCode.CN, sym)
-                            if key in self._flow_cache:
-                                flow_map[sym] = self._flow_cache[key]
-                                if key not in self._flow_source_cache:
-                                    self._flow_source_cache[key] = "cache"
-                                continue
-
-                            last_err = None
-                            for provider, cfg in flow_providers:
-                                try:
-                                    if provider != "eastmoney":
-                                        logger.info(
-                                            f"SignalPack capital_flow 未支持 provider={provider}，跳过"
-                                        )
-                                        continue
-                                    self._flow_cache[key] = (
-                                        collector.get_capital_flow_summary(sym)
-                                    )
-                                    self._flow_source_cache[key] = provider
-                                    last_err = None
-                                    break
-                                except Exception as e:
-                                    last_err = e
-                                    continue
-
-                            if key not in self._flow_cache:
-                                self._flow_cache[key] = {
-                                    "error": str(last_err)
-                                    if last_err
-                                    else "获取资金流向失败"
-                                }
-                                self._flow_source_cache.setdefault(key, "unavailable")
-                            flow_map[sym] = self._flow_cache[key]
-                    except Exception as e:
-                        logger.warning(f"SignalPack capital_flow 采集失败: {e}")
-
-        # 5) Events
+        # 5) Events: Indian corporate announcements arrive with Phase 4a (open question Q8);
+        # the upstream Chinese (Eastmoney) announcements source was removed.
         events_by_symbol: dict[str, list[dict]] = {}
         events_key = (",".join(sorted(symbol_set)), int(events_days))
         if include_events:
             if events_key not in self._events_cache:
-                if events_disabled:
-                    self._events_cache[events_key] = []
-                    self._events_source_cache[events_key] = "disabled"
-                else:
-                    last_err = None
-                    used_provider = ""
-                    for provider, cfg in events_providers:
-                        if provider != "eastmoney":
-                            logger.info(
-                                f"SignalPack events 未支持 provider={provider}，跳过"
-                            )
-                            continue
-                        try:
-                            from src.platform.marketdata.collectors.events_collector import EventsCollector
-
-                            collector = EventsCollector.from_database()
-                            items = await collector.fetch_all(
-                                symbols=sorted(symbol_set),
-                                since_days=int(events_days),
-                            )
-
-                            packed: list[dict] = []
-                            for it in items:
-                                packed.append(
-                                    {
-                                        "source": it.source,
-                                        "external_id": it.external_id,
-                                        "event_type": it.event_type,
-                                        "title": it.title,
-                                        "time": it.publish_time.strftime(
-                                            "%Y-%m-%d %H:%M"
-                                        ),
-                                        "importance": it.importance,
-                                        "url": it.url,
-                                        "symbols": it.symbols,
-                                    }
-                                )
-
-                            self._events_cache[events_key] = packed
-                            used_provider = provider
-                            self._events_source_cache[events_key] = used_provider
-                            last_err = None
-                            break
-                        except Exception as e:
-                            last_err = e
-                            continue
-
-                    if events_key not in self._events_cache:
-                        logger.warning(f"SignalPack events 采集失败: {last_err}")
-                        self._events_cache[events_key] = []
-                        self._events_source_cache[events_key] = "unavailable"
-
+                self._events_cache[events_key] = []
+                self._events_source_cache[events_key] = "unavailable"
             for it in self._events_cache.get(events_key, []):
                 for sym in it.get("symbols") or []:
                     if sym not in symbol_set:
@@ -441,10 +301,6 @@ class SignalPackBuilder:
             if include_events:
                 if not events_by_symbol.get(sym):
                     missing.append("events")
-            if include_capital_flow and market == MarketCode.CN:
-                flow = flow_map.get(sym) or {}
-                if not flow or flow.get("error"):
-                    missing.append("capital_flow")
 
             packs[sym] = SignalPack(
                 symbol=sym,
@@ -463,9 +319,7 @@ class SignalPackBuilder:
                 )
                 if include_news
                 else None,
-                capital_flow=flow_map.get(sym)
-                if (include_capital_flow and market == MarketCode.CN)
-                else None,
+                capital_flow=None,
                 events=EventsSnapshot(
                     days=int(events_days), items=events_by_symbol.get(sym, [])[:5]
                 )
@@ -477,11 +331,7 @@ class SignalPackBuilder:
                     if include_technical
                     else "skipped",
                     "news": "db" if include_news else "skipped",
-                    "capital_flow": self._flow_source_cache.get(
-                        (MarketCode.CN, sym), "unknown"
-                    )
-                    if (include_capital_flow and market == MarketCode.CN)
-                    else "skipped",
+                    "capital_flow": "skipped",
                     "events": self._events_source_cache.get(events_key, "unknown")
                     if include_events
                     else "skipped",

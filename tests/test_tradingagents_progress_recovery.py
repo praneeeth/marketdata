@@ -324,47 +324,42 @@ def test_progress_handler_maps_upstream_researcher_aliases():
 
 
 def test_one_market_source_failure_does_not_zero_other_sources():
+    """A failing quote source must not blank the candles or technical indicators."""
     import asyncio
 
     from src.modules.automation.tradingagents.agent import TradingAgentsAgent
-    from src.modules.automation.tradingagents import agent as agent_module
 
     async def _run():
         agent = TradingAgentsAgent(collection_timeout_seconds=5)
-        stock = MagicMock(symbol="AAPL", name="Apple")
-        stock.market.value = "US"
+        stock = MagicMock(symbol="INFY", name="Infosys")
+        stock.market.value = "IN"
         context = MagicMock()
         context.watchlist = [stock]
-        context._trace_id = "man-tradingagents-AAPL-123"
-
-        market_data = MagicMock()
-        market_data.quotes.side_effect = RuntimeError("Yahoo 429")
-        market_data.klines.return_value = ["bar"]
-        market_data.capital_flow.return_value = "flow"
-        market_data.events.return_value = ["event"]
+        context._trace_id = "man-tradingagents-INFY-123"
 
         collector = MagicMock()
+        collector.return_value.get_klines.return_value = ["bar"]
         collector.return_value.get_technical_indicators.return_value = {"rsi": 52}
         with (
-            patch.object(agent_module, "get_market_data", return_value=market_data),
             patch(
-                "src.platform.marketdata.collectors.kline_collector.KlineCollector",
-                collector,
+                "src.platform.marketdata.marketdata_client.md_quote_rows",
+                side_effect=RuntimeError("broker 429"),
             ),
+            patch("src.platform.marketdata.collectors.kline_collector.KlineCollector", collector),
         ):
             result = await agent.collect(context)
 
         assert result["quote"] == {}
         assert result["klines"] == ["bar"]
-        assert result["capital_flow"] == ["flow"]
-        assert result["events"] == ["event"]
+        assert result["capital_flow"] == []  # China-only source removed
+        assert result["events"] == []
         assert result["technical"] == {"rsi": 52}
 
     asyncio.run(_run())
 
 
 def test_empty_required_market_source_is_visible_as_error(monkeypatch):
-    """行情源返回空列表时，进度不能伪装成 source_end。"""
+    """An empty required source (candles) is reported as source_error, not source_end."""
     import asyncio
 
     from src.modules.automation.tradingagents import agent as agent_module
@@ -382,19 +377,18 @@ def test_empty_required_market_source_is_visible_as_error(monkeypatch):
 
     async def _run():
         agent = TradingAgentsAgent(collection_timeout_seconds=5)
-        stock = MagicMock(symbol="300624", name="万兴科技")
-        stock.market.value = "CN"
+        stock = MagicMock(symbol="INFY", name="Infosys")
+        stock.market.value = "IN"
         context = MagicMock()
         context.watchlist = [stock]
-        context._trace_id = "man-tradingagents-300624-empty"
+        context._trace_id = "man-tradingagents-INFY-empty"
 
-        market_data = MagicMock()
-        market_data.quotes.return_value = []
-        market_data.klines.return_value = []
-        market_data.capital_flow.return_value = None
-        market_data.events.return_value = []
         monkeypatch.setattr(agent_module, "PanWatchProgressHandler", _Handler)
-        monkeypatch.setattr(agent_module, "get_market_data", lambda: market_data)
+        monkeypatch.setattr("src.platform.marketdata.marketdata_client.md_quote_rows", lambda *a, **k: [])
+        monkeypatch.setattr(
+            "src.platform.marketdata.collectors.kline_collector.KlineCollector.get_klines",
+            lambda self, symbol, days=60: [],
+        )
         monkeypatch.setattr(
             "src.platform.marketdata.collectors.kline_collector.KlineCollector.get_technical_indicators",
             lambda self, symbol, klines=None: {},

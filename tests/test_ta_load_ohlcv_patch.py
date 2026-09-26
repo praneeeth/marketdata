@@ -120,7 +120,7 @@ def test_cancelled_ta_context_does_not_fetch_another_symbol(monkeypatch):
 
 
 def test_load_ohlcv_routes_a_share_to_panwatch(monkeypatch):
-    """A股调用走 PanWatch,不触发原生 yfinance load_ohlcv。"""
+    """Every ticker's candles come from PanWatch (the broker), never native yfinance."""
     monkeypatch.setattr(KlineCollector, "get_klines", lambda self, symbol, days=60: _sample_klines(10))
     real_calls = {"n": 0}
 
@@ -132,50 +132,6 @@ def test_load_ohlcv_routes_a_share_to_panwatch(monkeypatch):
     df = ta._panwatch_load_ohlcv("601238", "2026-06-18")
     assert not df.empty
     assert real_calls["n"] == 0, "A股不应回落到 yfinance"
-
-
-def test_load_ohlcv_passthrough_for_us(monkeypatch):
-    """美股放行原生 load_ohlcv(yfinance),不被 PanWatch 接管。"""
-    sentinel = pd.DataFrame({"Date": [pd.to_datetime("2026-01-01")], "Close": [1.0]})
-    monkeypatch.setattr(ta, "_real_load_ohlcv", lambda symbol, curr_date, *a, **k: sentinel)
-    out = ta._panwatch_load_ohlcv("AAPL", "2026-06-18")
-    assert out is sentinel
-
-
-def test_load_ohlcv_us_rate_limit_falls_back_to_marketdata(monkeypatch):
-    """Yahoo 限流时，美股必须使用 MarketData 返回的真实 K 线，而不是中断。"""
-    from yfinance.exceptions import YFRateLimitError
-
-    calls = []
-
-    def rate_limited(*args, **kwargs):
-        raise YFRateLimitError()
-
-    def marketdata_klines(self, symbol, days=60):
-        calls.append((self.market.value, symbol, days))
-        return _sample_klines(10)
-
-    monkeypatch.setattr(ta, "_real_load_ohlcv", rate_limited)
-    monkeypatch.setattr(KlineCollector, "get_klines", marketdata_klines)
-
-    out = ta._panwatch_load_ohlcv("AAPL", "2026-06-18")
-
-    assert len(out) == 10
-    assert calls == [("US", "AAPL", 750)]
-
-
-def test_load_ohlcv_us_service_error_falls_back_to_marketdata(monkeypatch):
-    """Yahoo 503 这类可用性错误也必须走 MarketData，不得中断分析。"""
-    monkeypatch.setattr(
-        ta,
-        "_real_load_ohlcv",
-        lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError("503 Server Error: Service Unavailable")),
-    )
-    monkeypatch.setattr(KlineCollector, "get_klines", lambda self, symbol, days=60: _sample_klines(10))
-
-    out = ta._panwatch_load_ohlcv("AAPL", "2026-06-18")
-
-    assert len(out) == 10
 
 
 def test_verified_snapshot_returns_unavailable_message_when_all_sources_fail(monkeypatch):
@@ -284,12 +240,14 @@ def test_route_to_vendor_rejects_cached_snapshot_for_different_numeric_symbol(mo
 
 def test_route_to_vendor_marks_expected_upstream_outage_as_data_unavailable(monkeypatch):
     """已知外部数据不可用应给 LLM 明确信号，而不是吞成空字符串。"""
+    monkeypatch.setenv("APP_ENV", "development")
+    monkeypatch.setenv("ALLOW_UNOFFICIAL_DATA", "true")
 
     def boom(method_name, *a, **k):
         raise RuntimeError("FRED_API_KEY environment variable is not set")
 
     monkeypatch.setattr(ta, "_real_route_to_vendor", boom)
-    # get_macro_indicators:首参是指标名(非 A股/港股) → 走上游 passthrough → 明确数据不可用
+    # Development only: the macro tool reaches the upstream vendor, whose outage becomes DATA_UNAVAILABLE.
     out = ta._patched_route_to_vendor("get_macro_indicators", "fed_funds_rate", "2026-06-18", 30)
     assert "DATA_UNAVAILABLE" in out
     assert "FRED_API_KEY" in out
@@ -297,6 +255,8 @@ def test_route_to_vendor_marks_expected_upstream_outage_as_data_unavailable(monk
 
 def test_route_to_vendor_propagates_programming_errors(monkeypatch):
     """调用契约/实现错误不能伪装成数据缺失，否则会掩盖升级回归。"""
+    monkeypatch.setenv("APP_ENV", "development")
+    monkeypatch.setenv("ALLOW_UNOFFICIAL_DATA", "true")
 
     def boom(method_name, *a, **k):
         raise TypeError("unexpected keyword argument 'vendor'")
@@ -310,6 +270,8 @@ def test_route_to_vendor_propagates_programming_errors(monkeypatch):
 
 def test_route_to_vendor_does_not_misclassify_generic_not_set_error(monkeypatch):
     """只有数据源配置缺失才可降级，内部状态未设置仍应暴露。"""
+    monkeypatch.setenv("APP_ENV", "development")
+    monkeypatch.setenv("ALLOW_UNOFFICIAL_DATA", "true")
 
     def boom(method_name, *a, **k):
         raise RuntimeError("internal state not set")
@@ -319,3 +281,28 @@ def test_route_to_vendor_does_not_misclassify_generic_not_set_error(monkeypatch)
     import pytest
     with pytest.raises(RuntimeError, match="internal state not set"):
         ta._patched_route_to_vendor("get_macro_indicators", "fed_funds_rate", "2026-06-18", 30)
+
+
+def test_route_to_vendor_never_calls_upstream_in_production(monkeypatch):
+    """Plan X8: outside development nothing falls through to Yahoo or other vendors."""
+    monkeypatch.setenv("APP_ENV", "production")
+    monkeypatch.setenv("ALLOW_UNOFFICIAL_DATA", "true")
+    calls = []
+    monkeypatch.setattr(ta, "_real_route_to_vendor", lambda *a, **k: calls.append(a) or "data")
+    out = ta._patched_route_to_vendor("get_macro_indicators", "fed_funds_rate", "2026-06-18", 30)
+    assert "DATA_UNAVAILABLE" in out
+    assert calls == []
+
+
+def test_route_to_vendor_maps_only_the_tasks_stock_in_development(monkeypatch):
+    """Dev fallthrough maps the task's ticker to Yahoo's .NS form, but not other arguments."""
+    monkeypatch.setenv("APP_ENV", "development")
+    monkeypatch.setenv("ALLOW_UNOFFICIAL_DATA", "true")
+    seen = []
+    monkeypatch.setattr(ta, "_real_route_to_vendor", lambda method, *a, **k: seen.append((method, a)) or "ok")
+    monkeypatch.setattr(ta, "_cached_symbol", lambda: "INFY")
+    monkeypatch.setattr(ta, "_cache", lambda: {})
+    ta._patched_route_to_vendor("get_insider_transactions", "INFY", "2026-06-18")
+    ta._patched_route_to_vendor("get_macro_indicators", "fed_funds_rate", "2026-06-18", 30)
+    assert seen[0] == ("get_insider_transactions", ("INFY.NS", "2026-06-18"))
+    assert seen[1] == ("get_macro_indicators", ("fed_funds_rate", "2026-06-18", 30))

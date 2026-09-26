@@ -8,13 +8,13 @@ it until a licensed feed replaces it (owner decision, PLAN decision log 2026-09-
 from __future__ import annotations
 
 import asyncio
-import os
-import threading
 from decimal import Decimal
 from typing import Any
 
 from fastapi import APIRouter
-from marketdata.global_cues import GlobalCue, GlobalCuesService, YahooGlobalCues
+from marketdata.global_cues import GlobalCue
+
+from src.platform.marketdata.global_cues_service import get_global_cues_service
 
 router = APIRouter()
 
@@ -23,21 +23,6 @@ QUALITY_LABEL = {
     "official_delayed": "Official, delayed",
     "unofficial_delayed": "Delayed / unofficial",
 }
-
-_service: GlobalCuesService | None = None
-_service_lock = threading.Lock()
-
-
-def get_global_cues_service() -> GlobalCuesService | None:
-    """The configured service, or ``None`` when ``GLOBAL_CUES_SOURCE=off``."""
-    global _service
-    source = os.environ.get("GLOBAL_CUES_SOURCE", "yahoo").strip().lower()
-    if source == "off":
-        return None
-    with _service_lock:
-        if _service is None:
-            _service = GlobalCuesService(YahooGlobalCues())
-        return _service
 
 
 def _num(value: Decimal | None) -> float | None:

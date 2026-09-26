@@ -41,11 +41,11 @@ def _setup():
     )
     Base.metadata.create_all(engine)
     session = sessionmaker(bind=engine)()
-    session.add(Stock(symbol="600519", name="贵州茅台", market="CN"))
+    session.add(Stock(symbol="600519", name="贵州茅台", market="IN"))
     session.commit()
     repository = AssistantRepository(session)
     conversation = repository.create_conversation(
-        stock_symbol="600519", stock_market="CN", initial_context=None
+        stock_symbol="600519", stock_market="IN", initial_context=None
     )
     task = repository.create_task(
         conversation_id=conversation.id, user_message_id=None, context={}
@@ -68,7 +68,7 @@ def _proposed_price_alert(call_id: str) -> ModelTurn:
                 name="create_price_alert",
                 arguments={
                     "symbol": "600519",
-                    "market": "CN",
+                    "market": "IN",
                     "direction": "above",
                     "target_price": 1800,
                     "cooldown_minutes": 30,
@@ -141,7 +141,7 @@ def test_rejected_price_alert_never_writes_a_rule():
 
 def test_multiple_price_alert_approvals_execute_one_card_at_a_time():
     engine, session, service, task = _setup()
-    session.add(Stock(symbol="601238", name="广汽集团", market="CN"))
+    session.add(Stock(symbol="601238", name="广汽集团", market="IN"))
     session.commit()
     request = _request(task.id)
     paused = asyncio.run(
@@ -155,7 +155,7 @@ def test_multiple_price_alert_approvals_execute_one_card_at_a_time():
                                 name="create_price_alert",
                                 arguments={
                                     "symbol": "600519",
-                                    "market": "CN",
+                                    "market": "IN",
                                     "direction": "above",
                                     "target_price": 1800,
                                 },
@@ -165,7 +165,7 @@ def test_multiple_price_alert_approvals_execute_one_card_at_a_time():
                                 name="create_price_alert",
                                 arguments={
                                     "symbol": "601238",
-                                    "market": "CN",
+                                    "market": "IN",
                                     "direction": "below",
                                     "target_price": 10,
                                 },

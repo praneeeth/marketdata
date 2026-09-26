@@ -235,6 +235,7 @@ export default function StockDetailPage() {
             }
             sources={sources}
             loading={research.loading}
+            levelsLoading={summary.loading}
             error={research.error}
             onRetry={research.reload}
             emptyAction={

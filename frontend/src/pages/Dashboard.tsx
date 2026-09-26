@@ -32,7 +32,7 @@ import DiagnosticsShareCard from '@/components/DiagnosticsShareCard'
 import DigestShareCard from '@/components/DigestShareCard'
 import { useCompliance } from '@/hooks/use-compliance'
 import GlobalMarketsPanel from '@/components/GlobalMarketsPanel'
-import { directionClass, formatIST, formatPct } from '@/lib/format'
+import { directionClass, formatIST, formatNumber, formatPct } from '@/lib/format'
 import { ErrorState, errorMessage } from '@/components/common/states'
 import { Change } from '@/components/common/Change'
 
@@ -411,7 +411,7 @@ export default function DashboardPage() {
               <div className="min-w-0">
                 <div className="truncate text-[11px] text-muted-foreground">{ix.name}</div>
                 <div className="font-mono text-[15px] text-foreground">
-                  {ix.current_price != null ? ix.current_price.toFixed(2) : '--'}
+                  {ix.current_price != null ? formatNumber(ix.current_price) : '—'}
                 </div>
               </div>
               <span className={`shrink-0 rounded px-1 py-0.5 font-mono text-[10px] ${pctChipCls(ix.change_pct)}`}>

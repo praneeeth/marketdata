@@ -85,6 +85,7 @@ export default function ResearchSummary({
   lastClose,
   sources = [],
   loading = false,
+  levelsLoading = false,
   error,
   onRetry,
   emptyAction,
@@ -96,6 +97,7 @@ export default function ResearchSummary({
   lastClose?: number | null
   sources?: SourceItem[]
   loading?: boolean
+  levelsLoading?: boolean
   error?: string
   onRetry?: () => void
   emptyAction?: ReactNode
@@ -159,7 +161,9 @@ export default function ResearchSummary({
 
         <Section title="Key levels" icon={<Ruler className="h-4 w-4" />}>
           <div className="space-y-2">
-            {levels !== undefined && (
+            {levelsLoading ? (
+              <LoadingState rows={2} label="Loading levels…" className="p-0" />
+            ) : levels !== undefined && (
               <>
                 <LevelRow label="Support" values={support} lastClose={lastClose} />
                 <LevelRow label="Resistance" values={resistance} lastClose={lastClose} />
